@@ -36,6 +36,24 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
+## Features added in 1.2
+* **Lock hours** (Schedule page): close whole categories (games, launchers, social, media, sites) on chosen days between two
+  times. Add freely; removing needs the RELEASE phrase + wait. Outside the hours you can play - and VOIDLOCK watches it.
+* **Focus points + rewards** (Rewards page): every day with no (or very little) play earns points; 7 clean days = bonus.
+  Spend them on movies, long videos or a timed **play pass** (1.5 h = 100 points, 2 h = 140) that lifts lock hours (never
+  day locks or sessions). The play pass can only be used on **Fridays** (Settings -> Focus points). Days when the guard
+  was not watching earn nothing.
+* **Study Timer** (Yeolpumta-style): tap a subject to start its stopwatch, daily plan (to-do), tests per subject per day,
+  manual time, D-day countdown, daily goal, confetti and a mascot.
+* **Websites**: Application Control -> Add website. Blocked through the Windows hosts file, which needs the
+  **administrator guard** (Settings; Windows asks once). Without it the status honestly says NEEDS ADMIN.
+* **Personal message + soft sound** when a program is closed: your target field and the days left to the exam (default
+  10 Tir 1406; change in Settings).
+* **Weekly report**: attempts per day and per hour, weakest hours, most-tried games. **Year overview**: hours and tests per
+  month (Jalali months in Persian) and a study calendar.
+* **Themes**: Void, Candy (light), Ocean. **Languages**: English / Persian.
+* Emergency: `VoidLock.exe --clean-hosts` (as administrator) removes the website block immediately.
+
 ## Auto-update from GitHub
 1. Put the project in a **public** GitHub repo (the `.github/workflows/release.yml` file builds the exe for you).
 2. To publish a version: raise `__version__` in `voidlock/__init__.py` (e.g. "1.2.0"), commit, push, then

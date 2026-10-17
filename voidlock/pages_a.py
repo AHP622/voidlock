@@ -2,18 +2,19 @@
 import os
 import sys
 import time
-from datetime import datetime
+from datetime import date, datetime
 
 from PySide6.QtCore import QFileInfo, QPoint, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QFont, QPainter, QPen
 from PySide6.QtWidgets import (QFileDialog, QFileIconProvider, QFrame, QHBoxLayout, QLineEdit, QScrollArea,
                                QVBoxLayout, QWidget)
 
-from . import i18n
+from . import i18n, rules, study as studymod
 from .guard import is_protected
 from .overlays import Modal
 from .store import CATEGORIES, fmt_hm, streak_days, today_focus_sec, uid
 from .theme import T, font, qc
+from .mascot import Mascot
 from .viz import EmptyState, IconTile, LockIcon, RingTimer, Skeleton
 from .widgets import (AA, AC, Button, Card, Chip, Divider, Pill, ProgressBar, Segmented, Toggle, clear_layout,
                       label, reveal, set_label_color, tween)
@@ -50,6 +51,18 @@ class Page(QWidget):
         pass
 
 
+def _site_gate(ctx, app):
+    """Websites are blocked through the hosts file, which needs administrator rights. Be honest about it."""
+    if app.get("kind") != "site":
+        return None
+    g = ctx.session.gstat
+    if g.get("alive") and not g.get("elevated"):
+        return "NEEDS ADMIN", T.amber, "Website blocking needs the administrator guard. Enable it in Settings."
+    if g.get("alive") and g.get("sites_error"):
+        return "ERROR", T.red, g["sites_error"]
+    return None
+
+
 def app_status(ctx, app):
     """Honest per-app enforcement status derived from the guard's own report."""
     lk = ctx.store.lock_for(app["exe"])
@@ -59,9 +72,26 @@ def app_status(ctx, app):
             return "NOT ENFORCED", T.red, "The guard process is not running, so this lock is NOT being enforced."
         if ((g.get("per_app") or {}).get(app["exe"].lower()) or {}).get("denied"):
             return "DENIED", T.red, "Windows refused to terminate this process. Run the guard as administrator."
+        gate = _site_gate(ctx, app)
+        if gate:
+            return gate
         until = i18n.fmt_when(datetime.fromtimestamp(lk["until"]))
         left = i18n.fmt_remaining(lk["until"] - time.time())
         return f"LOCKED · {left}", T.cyan, f"Locked until {until}. Blocked at all times, even without a session."
+    wins = [w for w in ctx.store.windows if w.get("enabled", True)]
+    if wins and app.get("category"):
+        now = datetime.now()
+        passon = studymod.pass_until(ctx.store) > time.time()
+        if app["category"] in rules.blocked_categories(wins, now, passon):
+            g = ctx.session.gstat
+            if not g.get("alive") and time.time() - ctx.guard.launched_at >= 6:
+                return "NOT ENFORCED", T.red, "The guard process is not running, so lock hours are NOT enforced."
+            gate = _site_gate(ctx, app)
+            if gate:
+                return gate
+            end = max(rules.window_end(w, now) for w in rules.active_windows(wins, now))
+            return f"HOURS · {i18n.digits(end.strftime('%H:%M'))}", T.cyan, \
+                f"Closed automatically during lock hours (until {i18n.fmt_when(end)})."
     if not app.get("enabled"):
         return "ALLOWED", T.text3, "No block rule for this app."
     s = ctx.session
@@ -74,6 +104,9 @@ def app_status(ctx, app):
         return "NOT ENFORCED", T.red, "The guard process is not running, so this app is NOT blocked."
     if prot["level"] == "starting":
         return "STARTING", T.violet, "Guard is starting."
+    gate = _site_gate(ctx, app)
+    if gate:
+        return gate
     per = (s.gstat.get("per_app") or {}).get(app["exe"].lower(), {})
     if per.get("denied"):
         return "DENIED", T.red, ("Windows refused to terminate this process. It was probably started with "
@@ -105,7 +138,7 @@ class QuickTile(Card):
         self.setWindowOpacity(1.0)
         for w in (self.title_l, self.min_l, self.sub_l):
             w.setEnabled(en)
-        self.setStyleSheet("" if en else "QLabel{color:#3A4559;}")
+        self.setStyleSheet("" if en else f"QLabel{{color:{T.text3};}}")
 
     def mouseReleaseEvent(self, e):
         if self._enabled and self.rect().contains(e.position().toPoint()):
@@ -194,8 +227,11 @@ class OverviewPage(Page):
         self.kv_killed = self._kv("Blocked this session")
         self.kv_rules = self._kv("Rules armed")
         self.kv_locks = self._kv("Day locks")
-        for kv in (self.kv_guard, self.kv_killed, self.kv_rules, self.kv_locks):
+        self.kv_points = self._kv("Focus points")
+        for kv in (self.kv_guard, self.kv_killed, self.kv_rules, self.kv_locks, self.kv_points):
             self.prot_card.lay.addLayout(kv[0])
+        self.hours_l = label("", 12, QFont.Weight.DemiBold, T.cyan, wrap=True)
+        self.prot_card.lay.addWidget(self.hours_l)
         self.b_retry = Button("Restart guard", "soft", "refresh", height=36)
         self.b_admin = Button("Run guard as administrator", "violet", "shield-check", height=36)
         self.prot_card.lay.addWidget(self.b_retry)
@@ -203,7 +239,11 @@ class OverviewPage(Page):
         col.addWidget(self.prot_card)
 
         self.today_card = Card(pad=20)
-        self.today_card.lay.addWidget(label("TODAY", 11, QFont.Weight.Bold, T.text3, spacing=2.4))
+        th = QHBoxLayout()
+        th.addWidget(label("TODAY", 11, QFont.Weight.Bold, T.text3, spacing=2.4), 1)
+        self.mascot = Mascot(76)
+        th.addWidget(self.mascot)
+        self.today_card.lay.addLayout(th)
         self.today_big = label("0m", 28, QFont.Weight.DemiBold, mono=True)
         self.today_sub = label("", 12, color=T.text2)
         self.today_bar = ProgressBar(height=8)
@@ -330,13 +370,21 @@ class OverviewPage(Page):
         self.b_admin.setVisible(prot["level"] == "partial")
         # today
         goal = st.settings["daily_goal_min"]
-        sec = today_focus_sec(st.history) + (int(s.planned - s.remaining) if s.active else 0)
+        sec = c.study.day_sec(date.today(), True) + (int(s.planned - s.remaining) if s.active else 0)
         self.today_big.setText(fmt_hm(sec))
         self.today_bar.set_value(sec / 60 / max(1, goal))
         self.today_sub.setText(f"of {fmt_hm(goal * 60)} daily goal · {min(100, int(sec / 60 / max(1, goal) * 100))}%")
-        n = streak_days(st.history)
+        n = c.study.streak(600)
         self.streak_l.setText(f"{n}-day focus streak" if n else "Focus 10+ minutes to start a streak")
         set_label_color(self.streak_l, T.amber if n else T.text3)
+        self.kv_points[1].setText(str(c.points.balance))
+        set_label_color(self.kv_points[1], T.amber)
+        ht = c.hours_state()
+        self.hours_l.setText(ht)
+        self.hours_l.setVisible(bool(ht))
+        goal_hit = sec >= goal * 60
+        run = s.state == "running" or bool(c.study.active())
+        self.mascot.set_state("happy" if goal_hit else ("study" if run else "idle"))
         self._refresh_rules()
 
     def _refresh_rules(self):
@@ -387,7 +435,8 @@ class AddAppForm(QWidget):
         row.addWidget(self.browse)
         lay.addLayout(row)
         lay.addWidget(label("CATEGORY", 10, QFont.Weight.Bold, T.text3, spacing=2))
-        self.cat = Segmented(CATEGORIES, 0)
+        self.cats = [c for c in CATEGORIES if c != "Sites"]
+        self.cat = Segmented(self.cats, 0)
         lay.addWidget(self.cat)
         self.err = label("", 12, color=T.red, wrap=True)
         lay.addWidget(self.err)
@@ -405,7 +454,7 @@ class AddAppForm(QWidget):
                 self.name.setText(os.path.splitext(os.path.basename(f))[0])
 
     def category(self):
-        return CATEGORIES[self.cat.current()]
+        return self.cats[self.cat.current()]
 
 
 class AppRow(QFrame):
@@ -422,7 +471,7 @@ class AppRow(QFrame):
         pix = None
         if app.get("path") and os.path.exists(app["path"]):
             pix = QFileIconProvider().icon(QFileInfo(app["path"])).pixmap(48, 48)
-        lay.addWidget(IconTile(app["name"], color, 42, pixmap=pix))
+        lay.addWidget(IconTile(app["name"], color, 42, pixmap=pix, icon="globe" if app.get("kind") == "site" else None))
         col = QVBoxLayout()
         col.setSpacing(1)
         col.addStretch(1)
@@ -521,6 +570,8 @@ class AppsPage(Page):
         top.setSpacing(12)
         top.addWidget(self.search, 1)
         self.b_add = Button("Add application", "primary", "plus", height=44)
+        self.b_site = Button("Add website", "violet", "globe", height=44)
+        top.addWidget(self.b_site)
         top.addWidget(self.b_add)
         self.body.addLayout(top)
         tip = Card(pad=14, accent=T.cyan)
@@ -569,6 +620,18 @@ class AppsPage(Page):
         srow.addWidget(self.b_all_on)
         srow.addWidget(self.b_all_off)
         self.body.addLayout(srow)
+        self.admin_card = Card(pad=14, accent=T.violet)
+        ar = QHBoxLayout()
+        ar.setSpacing(12)
+        ar.addWidget(IconTile(color=T.violet, size=30, icon="shield-check"))
+        ar.addWidget(label("Website blocking needs the administrator guard (Windows asks for permission once). "
+                           "Until then the websites below are NOT blocked.", 12, color=T.text2, wrap=True), 1)
+        self.b_admin = Button("Enable", "violet", "shield-check", height=36)
+        ar.addWidget(self.b_admin)
+        self.admin_card.lay.addLayout(ar)
+        self.admin_card.hide()
+        self.b_admin.clicked.connect(ctx.enable_admin_guard)
+        self.body.addWidget(self.admin_card)
         # banner for scan errors
         self.banner = Card(pad=12, accent=T.amber)
         self.banner_l = label("", 12, color=T.amber, wrap=True)
@@ -593,6 +656,7 @@ class AppsPage(Page):
         self.search.textChanged.connect(lambda _t: self.apply_filter())
         self.empty.action.connect(self.clear_filters)
         self.b_add.clicked.connect(self.add_flow)
+        self.b_site.clicked.connect(self.add_site)
         self.b_all_on.clicked.connect(lambda: self.bulk(True))
         self.b_all_off.clicked.connect(lambda: self.bulk(False))
         self.b_lock_all.clicked.connect(lambda: ctx.lock_flow(self.visible_apps()))
@@ -630,7 +694,20 @@ class AppsPage(Page):
         QTimer.singleShot(20, lambda: [reveal(r, 30 * i, dy=10, ms=300) for i, r in enumerate(list(self.rows.values())[:9])
                                        if r.isVisible()])
 
+    def add_site(self):
+        a = self.ctx.site_flow()
+        if not a:
+            return
+        row = AppRow(self.ctx, a, self)
+        self.list_box.insertWidget(0, row)
+        self.rows[a["id"]] = row
+        self.apply_filter()
+        reveal(row, 0, dy=10, ms=300)
+
     def refresh(self):
+        g = self.ctx.session.gstat
+        has_sites = any(a.get("kind") == "site" and a.get("enabled") for a in self.ctx.store.apps)
+        self.admin_card.setVisible(has_sites and not (g.get("alive") and g.get("elevated")))
         err = self.ctx.scan_error
         self.banner.setVisible(bool(err))
         if err:

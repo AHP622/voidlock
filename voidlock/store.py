@@ -10,7 +10,8 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 SCHEMA = 3
-DATA_FILES = ["settings.json", "apps.json", "history.json", "schedule.json", "presets.json"]
+DATA_FILES = ["settings.json", "apps.json", "history.json", "schedule.json", "presets.json", "study.json"]
+BACKUP_ONLY = ["points.json"]      # backed up for crash recovery, never restored/imported by the user
 MAX_BACKUPS = 15
 
 
@@ -47,7 +48,7 @@ def write_json(path, data):
     os.replace(tmp, path)
 
 
-CATEGORIES = ["Games", "Launchers", "Social", "Media", "Browsers", "Other"]
+CATEGORIES = ["Games", "Launchers", "Social", "Media", "Browsers", "Sites", "Other"]
 
 # exe names are matched case-insensitively against running process names
 DEFAULT_APPS = [
@@ -81,6 +82,17 @@ DEFAULT_SETTINGS = {
     "reduce_motion": "auto",     # auto | on | off
     "week_start": 5,             # 0=Mon ... 5=Sat, 6=Sun
     "language": "en",            # en | fa
+    "theme": "void",             # void | candy | ocean
+    "sound": "soft",             # off | soft | bell
+    "target_field": "",          # shown in the message when a blocked program is closed
+    "exam_date": [1406, 4, 10],  # Jalali [year, month, day]
+    "custom_message": "",
+    "play_tracking": True,       # watch games during unlocked hours (needed for focus points)
+    "points_per_day": 5,
+    "streak_bonus": 10,          # extra points at every 7 clean days in a row
+    "game_friday_only": True,    # the play pass (1.5-2 h of gaming) can only be used on Fridays
+    "play_tolerance_min": 5,     # minutes of play that still count as a "clean" day
+    "daily_tests_goal": 50,
     "update_repo": "",           # GitHub "owner/repo" that publishes releases
     "update_check": True,
     "update_auto_install": True,
@@ -127,6 +139,16 @@ class Store:
         self.p_locks = self.home / "locks.json"       # multi-day locks (UI + guard)
         self.p_locks_guard = self.home / "locks_guard.json"
         self.p_release = self.home / "release.json"   # UI -> guard: release request
+        self.p_windows = self.home / "windows.json"   # lock hours (UI adds, guard keeps a copy)
+        self.p_windows_guard = self.home / "windows_guard.json"
+        self.p_points = self.home / "points.json"     # focus points ledger, tickets, rewards (UI)
+        self.p_pass = self.home / "pass.json"         # active play pass (UI -> guard)
+        self.p_play = self.home / "play.json"         # play time per day (guard -> UI)
+        self.p_attempts = self.home / "attempts.json" # blocked launch attempts (guard -> UI)
+        self.p_events = self.home / "events.json"     # "program was closed" events (guard -> UI)
+        self.p_study = self.home / "study.json"       # subjects, study entries, tests, to-dos (UI)
+        self.p_admin_flag = self.home / "admin_guard.flag"
+        self.p_ui_alive = self.home / "ui_alive.json"
         self.p_recover = self.home / "RECOVER"
         self.p_log = self.home / "guard.log"
         self.backup_dir = self.home / "backups"
@@ -134,6 +156,7 @@ class Store:
         self.load_error = None
         self.settings = dict(DEFAULT_SETTINGS)
         self.apps, self.history, self.schedule, self.presets, self.locks = [], [], [], [], []
+        self.windows, self.study = [], {}
         if not service:
             self._import_legacy_if_first_run()
         self.load()
@@ -188,7 +211,10 @@ class Store:
             if not self.service:
                 write_json(self.p_presets, pre)
         self.presets = pre
+        st = self._read(self.p_study, dict)
+        self.study = st if st else {}
         self.refresh_locks()
+        self.refresh_windows()
 
     @staticmethod
     def _default_app(n, e, c, en):
@@ -232,7 +258,7 @@ class Store:
     # ---- backups
     def _digest(self, folder):
         h = hashlib.sha1()
-        for f in DATA_FILES:
+        for f in DATA_FILES + BACKUP_ONLY:
             p = Path(folder) / f
             if p.exists():
                 h.update(f.encode()); h.update(p.read_bytes())
@@ -254,7 +280,7 @@ class Store:
                 return None
             d = self.backup_dir / (time.strftime("%Y%m%d-%H%M%S") + "-" + reason)
             d.mkdir(parents=True, exist_ok=True)
-            for f in DATA_FILES:
+            for f in DATA_FILES + BACKUP_ONLY:
                 if (self.home / f).exists():
                     shutil.copy2(self.home / f, d / f)
             for old in self.list_backups()[MAX_BACKUPS:]:
@@ -276,7 +302,7 @@ class Store:
 
     def export_all(self):
         return {"voidlock_export": SCHEMA, "settings": self.settings, "apps": self.apps,
-                "history": self.history, "schedule": self.schedule, "presets": self.presets}
+                "history": self.history, "schedule": self.schedule, "presets": self.presets, "study": self.study}
 
     def import_all(self, data):
         """Replaces data from an export. Locks are never imported (they cannot be removed this way)."""
@@ -293,7 +319,9 @@ class Store:
             self.schedule = data["schedule"]
         if isinstance(data.get("presets"), list) and data["presets"]:
             self.presets = data["presets"]
-        for f in (self.save_settings, self.save_apps, self.save_history, self.save_schedule, self.save_presets):
+        if isinstance(data.get("study"), dict):
+            self.study = data["study"]
+        for f in (self.save_study, self.save_settings, self.save_apps, self.save_history, self.save_schedule, self.save_presets):
             f()
         return True
 
@@ -309,6 +337,21 @@ class Store:
     def lock_for(self, exe, now=None):
         exe = exe.lower()
         return next((l for l in self.active_locks(now) if l["exe"].lower() == exe), None)
+
+    def refresh_windows(self):
+        data = read_json(self.p_windows, {})
+        self.windows = data.get("windows", []) if isinstance(data, dict) else []
+
+    def add_window(self, w):
+        """Lock hours can be added freely; removing/shortening them goes through the release flow."""
+        self.refresh_windows()
+        w = dict(w)
+        w.setdefault("id", uid())
+        w.setdefault("enabled", True)
+        w.setdefault("created", time.time())
+        self.windows.append(w)
+        write_json(self.p_windows, {"version": 1, "windows": self.windows})
+        return w
 
     def add_lock(self, exe, name, until):
         """Create or EXTEND a lock. A lock can never be shortened from here."""
@@ -336,6 +379,9 @@ class Store:
 
     def save_presets(self):
         write_json(self.p_presets, self.presets)
+
+    def save_study(self):
+        write_json(self.p_study, self.study)
 
     # ---- apps
     def enabled_apps(self):
@@ -369,7 +415,7 @@ class Store:
 
     def reset_all(self):
         self.snapshot("before-reset", force=True)
-        for p in (self.p_settings, self.p_apps, self.p_history, self.p_schedule, self.p_presets):
+        for p in (self.p_settings, self.p_apps, self.p_history, self.p_schedule, self.p_presets, self.p_study):
             try:
                 p.unlink()
             except OSError:

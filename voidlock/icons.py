@@ -2,6 +2,8 @@
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QBrush
 
+from .theme import T
+
 NB = Qt.BrushStyle.NoBrush
 
 
@@ -77,7 +79,7 @@ def _sliders(p, c):
     for y, x in ((7, 9), (12, 15), (17, 8)):
         _ln(p, 4, y, 20, y)
         p.save()
-        _fill(p, QColor("#0E121A"))
+        _fill(p, QColor(T.panel))
         _circ(p, x, y, 2.4)
         p.restore()
 
@@ -210,7 +212,54 @@ def _terminal(p, c):
     _ln(p, 12.5, 15, 16.5, 15)
 
 
+def _star(p, c):
+    pts = []
+    import math
+    for i in range(10):
+        r = 9 if i % 2 == 0 else 4
+        a = -math.pi / 2 + i * math.pi / 5
+        pts.append(QPointF(12 + r * math.cos(a), 12.6 + r * math.sin(a)))
+    p.drawPolygon(pts)
+
+
+def _book(p, c):
+    p.drawPath(_path([("M", 4, 5), ("C", 8, 4, 10, 5, 12, 7), ("C", 14, 5, 16, 4, 20, 5), ("L", 20, 19),
+                      ("C", 16, 18, 14, 19, 12, 21), ("C", 10, 19, 8, 18, 4, 19), ("Z",)]))
+    _ln(p, 12, 7, 12, 21)
+
+
+def _globe(p, c):
+    _circ(p, 12, 12, 8.5)
+    _ln(p, 3.5, 12, 20.5, 12)
+    p.drawArc(QRectF(7.5, 3.5, 9, 17), 90 * 16, 180 * 16)
+    p.drawArc(QRectF(7.5, 3.5, 9, 17), 270 * 16, 180 * 16)
+
+
+def _gift(p, c):
+    _rr(p, 4, 10, 16, 10, 2)
+    _rr(p, 3, 7, 18, 3.5, 1.2)
+    _ln(p, 12, 7, 12, 20)
+    p.drawPath(_path([("M", 12, 7), ("C", 9, 3, 6, 5, 8, 7)]))
+    p.drawPath(_path([("M", 12, 7), ("C", 15, 3, 18, 5, 16, 7)]))
+
+
+def _chev_l(p, c):
+    p.drawPolyline([QPointF(14.5, 6), QPointF(8.5, 12), QPointF(14.5, 18)])
+
+
+def _chev_r(p, c):
+    p.drawPolyline([QPointF(9.5, 6), QPointF(15.5, 12), QPointF(9.5, 18)])
+
+
+def _clockface(p, c):
+    _circ(p, 12, 12, 8.5)
+    _ln(p, 12, 12, 12, 7.5)
+    _ln(p, 12, 12, 15.5, 14)
+
+
 ICONS = {
+    "star": _star, "book": _book, "globe": _globe, "gift": _gift, "chev-l": _chev_l, "chev-r": _chev_r,
+    "stopwatch": _clockface,
     "overview": _overview, "apps": _shield, "shield-check": _shield_check, "sessions": _timer,
     "schedule": _calendar, "analytics": _chart, "settings": _sliders, "play": _play,
     "pause": _pause, "stop": _stop, "plus": _plus, "minus": _minus, "search": _search,

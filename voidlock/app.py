@@ -3,7 +3,7 @@
 import ctypes
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from PySide6.QtCore import QPoint, QRectF, QSize, Qt, QTimer
 from PySide6.QtGui import QFont, QKeySequence, QLinearGradient, QPainter, QPen, QShortcut
@@ -11,22 +11,26 @@ from PySide6.QtWidgets import (QAbstractButton, QFrame, QHBoxLayout, QLineEdit, 
                                QVBoxLayout, QWidget)
 
 from . import __version__
-from . import updater
+from . import messages, rules, sounds, updater
 from .core import Scanner, SessionController, UpdateWorker
 from . import i18n
 from .guard import GuardClient, child_env, emergency_recover, is_protected, persist_protection
 from .i18n import tr
 from .icons import paint_icon
 from .overlays import Modal, ToastHost, typed_body
+from .mascot import BlockPopup, Confetti
 from .pages_a import AppsPage, OverviewPage
 from .pages_b import AnalyticsPage, SchedulePage, SessionsPage, SettingsPage
-from .store import Store, fmt_clock
+from .pages_c import RewardsPage, StudyPage
+from .study import Points, StudyLog
+from .store import Store, fmt_clock, read_json, write_json
 from .theme import Motion, T, font, qc, system_reduced_motion
 from .viz import LockIcon
 from .widgets import AA, AC, AnimWidget, Button, Stepper, Ticker, Toggle, label, reveal, tween
 
-NAV = [("overview", "Overview", "overview"), ("apps", "Application Control", "apps"),
-       ("sessions", "Study Sessions", "sessions"), ("schedule", "Schedule", "schedule"),
+NAV = [("overview", "Overview", "overview"), ("study", "Study Timer", "stopwatch"),
+       ("apps", "Application Control", "apps"), ("sessions", "Study Sessions", "sessions"),
+       ("schedule", "Schedule", "schedule"), ("rewards", "Rewards", "star"),
        ("analytics", "Analytics", "analytics"), ("settings", "Settings", "settings")]
 
 
@@ -305,6 +309,13 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1040, 680)
         self.store, self.guard = store, guard
         self.session = SessionController(store, guard)
+        self.study = StudyLog(store)
+        self.study.restore()
+        self.points = Points(store)
+        self._last_event_t = time.time()
+        self._popups = []
+        self._last_hb = 0.0
+        self._last_points = 0.0
         self.running, self.scan_ready, self.scan_error = set(), False, None
         s = store.settings
         self.plan = {"minutes": s["default_minutes"], "subject": s.get("last_subject", ""), "strict": s["strict_default"]}
@@ -333,13 +344,15 @@ class MainWindow(QMainWindow):
         self.stack = FadeStack()
         right.addWidget(self.stack, 1)
         self.pages = {}
-        for key, cls in (("overview", OverviewPage), ("apps", AppsPage), ("sessions", SessionsPage),
-                         ("schedule", SchedulePage), ("analytics", AnalyticsPage), ("settings", SettingsPage)):
+        for key, cls in (("overview", OverviewPage), ("study", StudyPage), ("apps", AppsPage),
+                         ("sessions", SessionsPage), ("schedule", SchedulePage), ("rewards", RewardsPage),
+                         ("analytics", AnalyticsPage), ("settings", SettingsPage)):
             pg = cls(self)
             self.pages[key] = pg
             self.stack.addWidget(pg)
         self.keys = list(self.pages)
         self.toasts = ToastHost(self.root)
+        self.confetti = Confetti(self.root)
         self.session.notify.connect(self.toast)
         self.session.changed.connect(self._on_changed)
         self.session.finished.connect(self._on_finished)
@@ -360,8 +373,9 @@ class MainWindow(QMainWindow):
         self.goto("overview", animate=False)
         self._second()
         QTimer.singleShot(7000, lambda: self.check_updates(False))
-        if self.store.active_locks():      # refresh sign-in start + watchdog (the exe may have moved/rebuilt)
-            QTimer.singleShot(2500, lambda: persist_protection(True, self.store))
+        if self.store.active_locks() or self.store.windows or self.store.settings.get("play_tracking", True):
+            QTimer.singleShot(2500, lambda: persist_protection(True, self.store))   # exe may have moved/rebuilt
+        QTimer.singleShot(3500, self.process_points)
 
     # ------------------------------------------------------------ window chrome
     def toggle_max(self):
@@ -376,6 +390,7 @@ class MainWindow(QMainWindow):
         super().resizeEvent(e)
         if hasattr(self, "toasts"):
             self.toasts.setGeometry(self.root.rect())
+            self.confetti.setGeometry(self.root.rect())
 
     def nativeEvent(self, eventType, message):
         """Edge resizing for the frameless window on Windows (WM_NCHITTEST)."""
@@ -413,6 +428,7 @@ class MainWindow(QMainWindow):
             if not ok:
                 e.ignore()
                 return
+        self.study.heartbeat()
         self.scanner.stop()
         self.store.snapshot("exit")
         super().closeEvent(e)
@@ -450,7 +466,22 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------ periodic
     def _second(self):
         self.store.refresh_locks()
+        self.store.refresh_windows()
         self.session.tick()
+        now = time.time()
+        if now - self._last_hb > 2:
+            self._last_hb = now
+            write_json(self.store.p_ui_alive, {"t": now})
+            if self.study.active() and int(now) % 10 < 2:
+                self.study.heartbeat(now)
+        self._poll_events()
+        if now - self._last_points > 3600:
+            self._last_points = now
+            self.process_points()
+        if self.current_key() in ("study", "rewards"):
+            self.pages[self.current_key()].refresh()
+        if self.study.active():
+            self._check_goal()
         now = datetime.now()
         self.topbar.clock.setText(i18n.fmt_clock_line(now))
         if now.second % 15 == 0 or self._first:
@@ -458,7 +489,7 @@ class MainWindow(QMainWindow):
 
     def _on_changed(self):
         prot = self.session.protection()
-        pulse = prot["level"] in ("enforcing", "starting", "locks")
+        pulse = prot["level"] in ("enforcing", "starting", "locks", "hours")
         self.topbar.pill.set(prot["title"], prot["color"], pulse, prot["detail"])
         sb = self.sidebar
         sb.m_state.setText(prot["title"])
@@ -472,6 +503,7 @@ class MainWindow(QMainWindow):
         st = rec["status"]
         if st == "completed":
             self.toast(f"Session complete · {rec['planned_min']} min of focus saved.", "success")
+            self.celebrate("done")
         if self.current_key() == "analytics":
             self.pages["analytics"].refresh()
 
@@ -635,6 +667,177 @@ class MainWindow(QMainWindow):
     def elevate_guard(self):
         ok, msg = self.guard.start_elevated()
         self.toast("Requested administrator guard." if ok else msg, "info" if ok else "warn")
+
+    # ------------------------------------------------------------ joy: sounds, confetti, popups, points
+    def play_sound(self, kind):
+        sounds.play(kind, self.store.settings.get("sound", "soft"))
+
+    def celebrate(self, kind="reward"):
+        self.confetti.burst()
+        self.play_sound("reward" if kind == "reward" else "done")
+
+    def _poll_events(self):
+        try:
+            ev = (read_json(self.store.p_events, {}) or {}).get("list", [])
+        except Exception:
+            return
+        for e in ev:
+            if e.get("t", 0) > self._last_event_t:
+                self._last_event_t = e["t"]
+                title, body = messages.block_message(self.store.settings, e.get("name", ""), e.get("why", "session"))
+                self._popups = [p for p in self._popups if p.isVisible()]
+                self._popups.append(BlockPopup(title, body))
+                if self.current_key() in ("overview", "apps"):
+                    self.pages[self.current_key()].refresh()
+
+    def process_points(self):
+        res = self.points.process_days()
+        gained = sum(p for _d, _k, p in res)
+        if gained > 0:
+            days = sum(1 for _d, k, _p in res if k == "clean")
+            self.toast(f"+{gained} focus points for {days} clean day(s)!", "success")
+            self.celebrate("reward")
+        elif any(k == "played" for _d, k, _p in res):
+            self.toast("A day with play: no points for it. Tomorrow is a new chance.", "info")
+        if self.current_key() == "rewards":
+            self.pages["rewards"].refresh()
+
+    def after_study_change(self):
+        self._check_goal()
+        if self.current_key() == "overview":
+            self.pages["overview"].refresh()
+
+    def _check_goal(self):
+        goal = self.store.settings["daily_goal_min"] * 60
+        today = date.today().isoformat()
+        if self.study.day_sec(date.today()) >= goal and self.store.study.get("goal_hit") != today:
+            self.store.study["goal_hit"] = today
+            self.store.save_study()
+            self.toast("Daily goal reached - amazing work!", "success")
+            self.celebrate("done")
+
+    def hours_state(self):
+        """Human text about lock hours right now (for the Overview / Schedule), or ''."""
+        wins = [w for w in self.store.windows if w.get("enabled", True)]
+        if not wins:
+            return ""
+        now = datetime.now()
+        act = rules.active_windows(wins, now)
+        if act:
+            cats = sorted({c for w in act for c in w.get("categories", [])})
+            end = max(rules.window_end(w, now) for w in act)
+            return f"Lock hours: {', '.join(i18n.tr(c) for c in cats)} locked until {i18n.fmt_when(end)}"
+        nxt = rules.next_change(wins, now)
+        return f"Play time: lock hours start {i18n.fmt_when(nxt)}" if nxt else "Play time: no lock hours ahead"
+
+    # ------------------------------------------------------------ lock hours, websites, administrator guard
+    def window_flow(self):
+        from .pages_b import WindowForm
+        form = WindowForm()
+        m = self.new_modal().build("Add lock hours", "Choose the days and times when these apps are closed automatically.",
+                                  form, "Add", validator=form.valid, icon="clock", width=540)
+        form.changed.connect(m.revalidate)
+        if not m.exec_modal():
+            return False
+        w = self.store.add_window(form.values())
+        persist_protection(True, self.store)
+        self.guard.attempts = 0
+        self.guard.ensure()
+        self.session.changed.emit()
+        self.toast("Lock hours added. They can only be removed with the release phrase.", "success")
+        return w
+
+    def release_window_flow(self, w):
+        cool = int(self.store.settings.get("long_cooldown", 600))
+        if self._typed_modal("Remove lock hours?", f"“{w.get('name') or 'Lock hours'}” will stop protecting you. "
+                             f"Removing a commitment should take effort - take the time to be sure.",
+                             "Remove lock hours", "RELEASE", cool, "lock"):
+            self.guard.release(windows=[w["id"]])
+            self.session.changed.emit()
+            self.toast("Lock hours removed.", "warn")
+            return True
+        return False
+
+    def site_flow(self):
+        from . import hosts as hostsmod
+        from PySide6.QtWidgets import QLineEdit as _LE
+        from .widgets import Chip
+        body = QWidget()
+        lay = QVBoxLayout(body)
+        lay.setContentsMargins(0, 4, 0, 0)
+        lay.setSpacing(10)
+        ed = _LE()
+        ed.setPlaceholderText("Website, e.g. youtube.com")
+        lay.addWidget(ed)
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        row2 = QHBoxLayout()
+        row2.setSpacing(8)
+        for i, (nm, dom) in enumerate(hostsmod.PRESETS):
+            c = Chip(nm)
+            c.clicked.connect(lambda _=False, d=dom, n=nm: (ed.setText(d), ed.setProperty("nm", n)))
+            (row if i < 5 else row2).addWidget(c)
+        row.addStretch(1)
+        row2.addStretch(1)
+        lay.addLayout(row)
+        lay.addLayout(row2)
+        err = label("", 12, color=T.red, wrap=True)
+        lay.addWidget(err)
+
+        def valid():
+            d = hostsmod.normalize(ed.text())
+            err.setText("")
+            if not ed.text().strip():
+                return False
+            if not d:
+                err.setText("That does not look like a website address.")
+                return False
+            if self.store.find_exe(d):
+                err.setText("This website is already in the list.")
+                return False
+            return True
+        m = self.new_modal().build("Add website", "The site is blocked in every browser while a session runs, during lock "
+                                  "hours, or while locked. Administrator permission is needed once.", body, "Add",
+                                  validator=valid, icon="globe", width=560)
+        ed.textChanged.connect(lambda _t: m.revalidate())
+        if not m.exec_modal():
+            return None
+        d = hostsmod.normalize(ed.text())
+        name = ed.property("nm") if (ed.property("nm") and d in [x for _n, x in hostsmod.PRESETS]) else d
+        from .store import uid
+        a = {"id": uid(), "name": name, "exe": d, "category": "Sites", "kind": "site", "enabled": True,
+             "custom": True, "path": ""}
+        self.store.apps.append(a)
+        self.store.save_apps()
+        self.session.sync_rules()
+        self.toast(f"{name} added and blocked." + ("" if self.guard.status().get("elevated") else " Enable the administrator guard to enforce it."), "success")
+        return a
+
+    def enable_admin_guard(self):
+        if not self.confirm("Enable the administrator guard?", "Windows will ask for permission once. After that the guard "
+                            "starts with administrator rights at sign-in. This is what lets VOIDLOCK block websites and "
+                            "close programs that run as administrator.", "Continue", False, "shield-check"):
+            return
+        ok, msg = self.guard.install_admin()
+        if not ok:
+            return self.toast(msg or "Could not start the elevated setup.", "error")
+        self.toast("Setting up… accept the Windows prompt. The status updates in a few seconds.", "info")
+
+    def disable_admin_guard(self):
+        if self.confirm("Remove the administrator guard?", "Website blocking stops working until you enable it again.",
+                        "Remove", True, "warn"):
+            from .guard import GuardClient as _G
+            import subprocess
+            self.store.p_admin_flag.unlink(missing_ok=True)
+            self.toast("Removed. If Windows asks, accept it to delete the task.", "info")
+            self.guard.stop()
+            try:
+                import ctypes
+                base = self.guard._cmd()
+                params = " ".join(f'"{c}"' for c in [a for a in base[1:] if a != "--guard"] + ["--remove-admin-guard"])
+                ctypes.windll.shell32.ShellExecuteW(None, "runas", base[0], params, None, 0)
+            except Exception:
+                pass
 
     # ------------------------------------------------------------ updates (GitHub releases)
     def _set_update_status(self, text):

@@ -138,7 +138,7 @@ class Modal(QWidget):
 
     def paintEvent(self, e):
         p = QPainter(self)
-        p.fillRect(self.rect(), qc("#02040A", 0.72 * self._k))
+        p.fillRect(self.rect(), qc(T.scrim, 0.72 * self._k))
 
     def mousePressEvent(self, e):
         e.accept()  # scrim swallows clicks

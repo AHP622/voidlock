@@ -130,7 +130,7 @@ class RingTimer(AnimWidget):
             if done:
                 grad.setColorAt(0, QColor(T.green)); grad.setColorAt(1, QColor(T.green))
             elif paused:
-                grad.setColorAt(0, QColor(T.amber)); grad.setColorAt(1, QColor("#F59E0B"))
+                grad.setColorAt(0, QColor(T.amber)); grad.setColorAt(1, QColor(T.amber))
             else:
                 dim = 1.0 if self.state != "idle" else 0.55
                 grad.setColorAt(0.0, qc(T.cyan, dim))
@@ -265,13 +265,16 @@ class BarChart(AnimWidget):
         self.setMinimumHeight(220)
         self.setMouseTracking(True)
         self.labels, self.values, self.goal = [], [], 0
+        self.divisor = 60.0
+        self.fmt = None
         self._t0 = None
         self._t = 0.0
         self._hover = -1
         self._today = -1
 
-    def set_data(self, labels, values_sec, goal_min, today_index=-1):
+    def set_data(self, labels, values_sec, goal_min, today_index=-1, divisor=60.0, fmt=None):
         self.labels, self.values, self.goal = labels, values_sec, goal_min
+        self.divisor, self.fmt = divisor, fmt
         self._today = today_index
         self._t0 = None
         self.update()
@@ -314,7 +317,7 @@ class BarChart(AnimWidget):
         p = QPainter(self)
         p.setRenderHint(AA)
         plot, slot = self._geom()
-        mins = [v / 60 for v in self.values]
+        mins = [v / self.divisor for v in self.values]
         top_v = max([self.goal, max(mins or [0]), 30]) * 1.15
         # grid
         p.setFont(font(11, mono=True))
@@ -372,7 +375,8 @@ class BarChart(AnimWidget):
         if 0 <= self._hover < len(mins):
             i = self._hover
             from .i18n import tr
-            txt = f"{self.labels[i]}  ·  {tr(fmt_hm(self.values[i]))}" if self.values[i] else f"{self.labels[i]}  ·  {tr('no focus')}"
+            val = (self.fmt(self.values[i]) if self.fmt else tr(fmt_hm(self.values[i])))
+            txt = f"{self.labels[i]}  ·  {val}" if self.values[i] else f"{self.labels[i]}  ·  {tr('no focus')}"
             p.setFont(font(12, QFont.Weight.DemiBold))
             tw = p.fontMetrics().horizontalAdvance(txt) + 20
             cx = plot.left() + slot * ((n - 1 - i) if rtl else i) + slot / 2

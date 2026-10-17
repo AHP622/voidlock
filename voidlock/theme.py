@@ -5,25 +5,29 @@ import sys
 from PySide6.QtGui import QColor, QFont
 
 
+THEMES = {
+    "void": dict(bg="#080A0F", panel="#0E121A", panel2="#131925", raised="#1A2232", border="#1F2837",
+                 border_hi="#2D3A50", text="#E8EEF7", text2="#9AA8BF", text3="#5E6D86", cyan="#00E5FF",
+                 cyan_dim="#0891A8", cyan_end="#14B8D4", violet="#8B5CF6", violet_end="#6D3FE0",
+                 green="#34D399", amber="#FBBF24", red="#F43F5E", on_accent="#04141A", scrim="#02040A",
+                 light=False),
+    "candy": dict(bg="#FFF5FA", panel="#FFFFFF", panel2="#FFF0F7", raised="#FFE3F0", border="#F6D2E4",
+                  border_hi="#EDB4D2", text="#3A2A4D", text2="#6C5784", text3="#A18FB8", cyan="#FF4F9A",
+                  cyan_dim="#D93A80", cyan_end="#FF8A5C", violet="#7C5CFF", violet_end="#5B3FE0",
+                  green="#0EA371", amber="#E08A00", red="#E5384F", on_accent="#FFFFFF", scrim="#3A2A4D",
+                  light=True),
+    "ocean": dict(bg="#06121A", panel="#0B1D29", panel2="#102838", raised="#16364B", border="#17384C",
+                  border_hi="#25506B", text="#E6F6FF", text2="#8DB4C9", text3="#527A91", cyan="#2DD4BF",
+                  cyan_dim="#14A090", cyan_end="#38BDF8", violet="#60A5FA", violet_end="#3B82F6",
+                  green="#4ADE80", amber="#FACC15", red="#FB7185", on_accent="#03201C", scrim="#020B12",
+                  light=False),
+}
+THEME_NAMES = {"void": "Void", "candy": "Candy", "ocean": "Ocean"}
+
+
 class T:
-    # surfaces
-    bg = "#080A0F"
-    panel = "#0E121A"
-    panel2 = "#131925"
-    raised = "#1A2232"
-    border = "#1F2837"
-    border_hi = "#2D3A50"
-    # text
-    text = "#E8EEF7"
-    text2 = "#9AA8BF"
-    text3 = "#5E6D86"
-    # accents
-    cyan = "#00E5FF"
-    cyan_dim = "#0891A8"
-    violet = "#8B5CF6"
-    green = "#34D399"
-    amber = "#FBBF24"
-    red = "#F43F5E"
+    # filled by apply_theme() - defaults are the "void" theme
+    locals().update(THEMES["void"])
     # geometry
     r_lg = 16
     r_md = 12
@@ -32,11 +36,23 @@ class T:
                "Helvetica Neue", "DejaVu Sans", "Arial"]
     mono_font = ["Cascadia Mono", "Consolas", "JetBrains Mono", "DejaVu Sans Mono",
                  "Courier New"]
-
     CATEGORY = {
-        "Games": "#8B5CF6", "Launchers": "#00E5FF", "Social": "#38BDF8",
-        "Media": "#F43F5E", "Browsers": "#FBBF24", "Other": "#94A3B8",
+        "Games": "#8B5CF6", "Launchers": "#00E5FF", "Social": "#38BDF8", "Media": "#F43F5E",
+        "Browsers": "#FBBF24", "Sites": "#34D399", "Other": "#94A3B8",
     }
+
+
+def apply_theme(name):
+    """Switch all colour tokens. Must be called before any widget is created."""
+    th = THEMES.get(name, THEMES["void"])
+    for k, v in th.items():
+        setattr(T, k, v)
+    if th["light"]:
+        T.CATEGORY.update({"Games": "#7C5CFF", "Launchers": "#E0408A", "Social": "#1E88E5", "Media": "#E5384F",
+                           "Browsers": "#D98200", "Sites": "#0EA371", "Other": "#7B8794"})
+    else:
+        T.CATEGORY.update({"Games": "#8B5CF6", "Launchers": T.cyan, "Social": "#38BDF8", "Media": "#F43F5E",
+                           "Browsers": "#FBBF24", "Sites": "#34D399", "Other": "#94A3B8"})
 
 
 def qc(hex_color, alpha=1.0):

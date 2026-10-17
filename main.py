@@ -15,6 +15,9 @@ def main():
     ap.add_argument("--version", action="store_true")
     ap.add_argument("--after", type=int, default=0)       # wait for this PID to exit (used by restart)
     ap.add_argument("--release-locks", action="store_true")
+    ap.add_argument("--install-admin-guard", action="store_true")
+    ap.add_argument("--remove-admin-guard", action="store_true")
+    ap.add_argument("--clean-hosts", action="store_true")
     args, _ = ap.parse_known_args()
 
     if args.version:
@@ -27,6 +30,18 @@ def main():
     if args.guard:
         from voidlock.guard import run_guard
         run_guard(args.home)
+        return 0
+    if args.install_admin_guard or args.remove_admin_guard or args.clean_hosts:
+        from voidlock.guard import admin_guard_install, admin_guard_remove
+        from voidlock.hosts import write_hosts
+        from voidlock.store import Store
+        store = Store(args.home)
+        if args.clean_hosts:
+            print(write_hosts([]))
+        elif args.install_admin_guard:
+            print(admin_guard_install(store))
+        else:
+            print(admin_guard_remove(store))
         return 0
     if args.release_locks:
         import time
@@ -69,7 +84,8 @@ def main():
     store = Store(args.home)                     # language must be known before any widget is built
     i18n.set_language(store.settings.get("language", "en"))
     from voidlock.app import MainWindow
-    from voidlock.theme import T, font, stylesheet
+    from voidlock.theme import T, apply_theme, font, stylesheet
+    apply_theme(store.settings.get("theme", "void"))
 
     import os
     if sys.platform == "win32":  # lets the taskbar show our icon instead of python's

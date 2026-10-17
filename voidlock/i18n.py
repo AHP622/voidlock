@@ -124,6 +124,44 @@ def to_jalali(dt):
     return jy, jm, jd
 
 
+EN_JMONTHS = ["Farvardin", "Ordibehesht", "Khordad", "Tir", "Mordad", "Shahrivar", "Mehr", "Aban", "Azar", "Dey",
+              "Bahman", "Esfand"]
+
+
+def from_jalali(jy, jm, jd):
+    """Jalali -> (gy, gm, gd)."""
+    jy += 1595
+    days = -355668 + (365 * jy) + ((jy // 33) * 8) + (((jy % 33) + 3) // 4) + jd + \
+        ((jm - 1) * 31 if jm < 7 else ((jm - 7) * 30) + 186)
+    gy = 400 * (days // 146097)
+    days %= 146097
+    if days > 36524:
+        days -= 1
+        gy += 100 * (days // 36524)
+        days %= 36524
+        if days >= 365:
+            days += 1
+    gy += 4 * (days // 1461)
+    days %= 1461
+    if days > 365:
+        gy += (days - 1) // 365
+        days = (days - 1) % 365
+    gd = days + 1
+    leap = (gy % 4 == 0 and gy % 100 != 0) or gy % 400 == 0
+    sal = [0, 31, 29 if leap else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    gm = 0
+    while gm < 13 and gd > sal[gm]:
+        gd -= sal[gm]
+        gm += 1
+    return gy, gm, gd
+
+
+def jalali_str(jy, jm, jd):
+    if is_fa():
+        return digits(f"{jd} {FA_MONTHS[jm - 1]} {jy}")
+    return f"{jd} {EN_JMONTHS[jm - 1]} {jy} (Jalali)"
+
+
 FA_MONTHS = ["فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور", "مهر", "آبان", "آذر", "دی",
              "بهمن", "اسفند"]
 FA_DAYS = ["دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه", "یکشنبه"]        # Mon..Sun

@@ -277,15 +277,15 @@ class Button(QAbstractButton):
                 p.drawRoundedRect(r.adjusted(-3, -3, 3, 3), rad + 3, rad + 3)
             g = QLinearGradient(r.topLeft(), r.bottomRight())
             g.setColorAt(0, QColor(T.cyan).lighter(100 + int(10 * h)))
-            g.setColorAt(1, QColor("#14B8D4").lighter(100 + int(8 * h)))
+            g.setColorAt(1, QColor(T.cyan_end).lighter(100 + int(8 * h)))
             p.setBrush(g if en else qc(T.border_hi))
             p.setPen(Qt.PenStyle.NoPen)
             p.drawRoundedRect(r, rad, rad)
-            txt = "#04141A" if en else T.text3
+            txt = T.on_accent if en else T.text3
         elif v == "violet":
             g = QLinearGradient(r.topLeft(), r.bottomRight())
             g.setColorAt(0, QColor(T.violet).lighter(100 + int(14 * h)))
-            g.setColorAt(1, QColor("#6D3FE0").lighter(100 + int(10 * h)))
+            g.setColorAt(1, QColor(T.violet_end).lighter(100 + int(10 * h)))
             p.setBrush(g if en else qc(T.border_hi))
             p.setPen(Qt.PenStyle.NoPen)
             p.drawRoundedRect(r, rad, rad)
@@ -501,7 +501,8 @@ class Pill(QWidget):
                 right -= 16
             else:
                 left += 16
-        p.setPen(qc(self._c))
+        tc = QColor(self._c).darker(135) if T.light else qc(self._c)
+        p.setPen(tc)
         p.setFont(self.font())
         p.drawText(QRectF(left, 0, right - left, r.height()), AC, self._t)
 

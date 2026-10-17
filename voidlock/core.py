@@ -65,7 +65,7 @@ class SessionController(QObject):
 
     # ---- helpers
     def blocked_list(self):
-        return [{"exe": a["exe"], "name": a["name"]} for a in self.store.enabled_apps()]
+        return [{"exe": a["exe"], "name": a["name"], "kind": a.get("kind", "app")} for a in self.store.enabled_apps()]
 
     def _write(self, state):
         write_json(self.store.p_session, {
@@ -165,7 +165,8 @@ class SessionController(QObject):
                 self.changed.emit()
                 return
         # guard watchdog: needed for a running session with rules, or for any active day lock
-        need = (self.state == "running" and bool(self.store.enabled_apps())) or bool(self.store.active_locks())
+        need = (self.state == "running" and bool(self.store.enabled_apps())) or bool(self.store.active_locks()) \
+            or bool(self.store.windows) or bool(self.store.settings.get("play_tracking", True))
         if need and not self.gstat["alive"] and now - self.guard.launched_at > 6:
             if self.guard.attempts >= 4 and now - self.guard.launched_at > 300:
                 self.guard.attempts = 0
@@ -255,6 +256,20 @@ class SessionController(QObject):
                             "detail": "Starting the enforcement guard..."}
                 return {"level": "failed", "title": "NOT ENFORCING", "color": T.red, "locked": False,
                         "detail": "Locks are set but the guard is not running. Locked apps are NOT blocked."}
+            wins = [w for w in self.store.windows if w.get("enabled", True)]
+            if wins:
+                from . import rules
+                from datetime import datetime
+                active_now = rules.active_windows(wins, datetime.now())
+                if active_now and not (g.get("alive") and g.get("windows", 0) > 0):
+                    if starting:
+                        return {"level": "starting", "title": "STARTING", "color": T.violet, "locked": False,
+                                "detail": "Starting the enforcement guard..."}
+                    return {"level": "failed", "title": "NOT ENFORCING", "color": T.red, "locked": False,
+                            "detail": "Lock hours are active but the guard is not running. Games are NOT blocked."}
+                if active_now:
+                    return {"level": "hours", "title": "LOCK HOURS", "color": T.cyan, "locked": True,
+                            "detail": "Lock hours are active. Blocked categories are closed automatically."}
             return {"level": "standby", "title": "STANDBY", "color": T.text2, "locked": False,
                     "detail": "No active session. Nothing is being blocked."}
         if st == "paused":
