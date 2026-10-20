@@ -14,7 +14,7 @@ from . import __version__
 from . import messages, rules, sounds, updater
 from .core import Scanner, SessionController, UpdateWorker
 from . import i18n
-from .guard import GuardClient, child_env, emergency_recover, is_protected, persist_protection
+from .guard import GuardClient, admin_task_outdated, child_env, emergency_recover, is_protected, persist_protection
 from .i18n import tr
 from .icons import paint_icon
 from .overlays import Modal, ToastHost, typed_body
@@ -376,6 +376,7 @@ class MainWindow(QMainWindow):
         self.goto("overview", animate=False)
         self._second()
         QTimer.singleShot(7000, lambda: self.check_updates(False))
+        QTimer.singleShot(9000, self._check_admin_task)
         if self.store.active_locks() or self.store.windows or self.store.settings.get("play_tracking", True):
             QTimer.singleShot(2500, lambda: persist_protection(True, self.store))   # exe may have moved/rebuilt
         QTimer.singleShot(3500, self.process_points)
@@ -667,6 +668,10 @@ class MainWindow(QMainWindow):
             self.toast("Could not start guard: " + self.guard.launch_error, "error")
         else:
             self.toast("Restarting the enforcement guard…", "info")
+
+    def _check_admin_task(self):
+        if admin_task_outdated(self.store):
+            self.toast("The administrator guard points to an older version. Enable it again in Settings, once.", "warn")
 
     def elevate_guard(self):
         ok, msg = self.guard.start_elevated()

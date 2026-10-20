@@ -224,6 +224,21 @@ def admin_guard_install(store):
         return False, str(e)
 
 
+def admin_task_outdated(store):
+    """True when the administrator task still points to an older copy of the app (after an update)."""
+    if sys.platform != "win32" or not store.p_admin_flag.exists():
+        return False
+    try:
+        r = subprocess.run(["schtasks", "/Query", "/TN", ADMIN_TASK, "/V", "/FO", "LIST"],
+                           capture_output=True, text=True, creationflags=0x08000000)
+        if r.returncode != 0:
+            return True
+        exe = command_line(store)[0].lower()
+        return exe not in r.stdout.lower()
+    except Exception:
+        return False
+
+
 def admin_guard_remove(store):
     if sys.platform != "win32":
         return False
@@ -650,8 +665,16 @@ class GuardClient:
 
     def ensure(self):
         """Start the guard if it is not running. Returns True if a launch was made."""
-        if self.status()["alive"]:
-            return False
+        st = self.status()
+        if st["alive"]:
+            # A guard without administrator rights is running although the admin guard is enabled (for
+            # example it was started before the admin task existed). It can not block websites, so swap it.
+            wrong_rights = (sys.platform == "win32" and self.store.p_admin_flag.exists()
+                            and not st.get("elevated") and time.time() - self.launched_at > 120)
+            if not wrong_rights:
+                return False
+            self.stop()
+            time.sleep(1.0)
         if self.store.p_admin_flag.exists() and sys.platform == "win32":
             try:
                 r = subprocess.run(["schtasks", "/Run", "/TN", ADMIN_TASK], capture_output=True,
