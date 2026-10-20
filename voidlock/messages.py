@@ -16,6 +16,18 @@ def days_left(settings, today=None):
     return (exam_date(settings) - (today or date.today())).days
 
 
+def _fa_quotes(text):
+    """Turns ASCII double quotes in the user's own text into « » pairs."""
+    out, opened = [], False
+    for ch in text:
+        if ch == '"':
+            out.append("»" if opened else "«")
+            opened = not opened
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
 def block_message(settings, name, why="session", today=None):
     """Returns (title, body) in the user's language."""
     fa = settings.get("language") == "fa"
@@ -27,14 +39,14 @@ def block_message(settings, name, why="session", today=None):
     if fa:
         reasons = {"lock": "قفل چندروزه فعاله.", "window": "الان ساعت قفل بازیه.",
                    "session": "الان وقت تمرکزه."}
-        lines = [f"«{name}» بسته شد. {reasons.get(why, '')}".strip()]
+        lines = [f"«\u2067{name}\u2069» بسته شد. {reasons.get(why, '')}".strip()]
         if field:
             lines.append(f"هدفت: {field}")
         if n > 0:
-            lines.append(i18n.digits(f"{n} روز تا کنکور ({when})"))
+            lines.append(i18n.digits(f"{n} روز تا کنکور (\u2067{when}\u2069)"))
         elif n == 0:
             lines.append("امروز روز کنکوره! موفق باشی.")
-        lines.append(custom or "بعداً با خیال راحت می‌تونی بازی کنی؛ الان برای اون چیزی که می‌خوای تلاش کن.")
+        lines.append(_fa_quotes(custom) if custom else "بعداً با خیال راحت می‌تونی بازی کنی؛ الان برای اون چیزی که می‌خوای تلاش کن.")
         return "VOIDLOCK", "\n".join(lines)
     reasons = {"lock": "A multi-day lock is active.", "window": "It is lock hours right now.",
                "session": "It is focus time."}

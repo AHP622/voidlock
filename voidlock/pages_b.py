@@ -88,6 +88,7 @@ class SessionsPage(Page):
         self.cfg.lay.addLayout(drow)
         self.slider = QSlider(Qt.Orientation.Horizontal)
         self.slider.setRange(1, 48)
+        self.slider.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
         self.slider.setToolTip("Drag to choose a length (5-minute steps)")
         self.cfg.lay.addWidget(self.slider)
         self.cfg.lay.addWidget(Divider())
