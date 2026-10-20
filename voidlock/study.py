@@ -12,7 +12,12 @@ DEFAULT_SUBJECTS = [("Math", "#8B5CF6"), ("Physics", "#00C2FF"), ("Chemistry", "
 
 
 def dkey(d):
-    return (d if isinstance(d, date) else d.date()).isoformat() if not isinstance(d, str) else d
+    """'YYYY-MM-DD' for a date, a datetime (its date part - the old code returned the full timestamp) or a string."""
+    if isinstance(d, str):
+        return d[:10]
+    if isinstance(d, datetime):
+        return d.date().isoformat()
+    return d.isoformat()
 
 
 # ============================================================ study log
@@ -406,7 +411,8 @@ class Points:
 
     def game_day_ok(self, when=None):
         """Play passes can only be used on Fridays (setting 'game_friday_only', on by default)."""
-        when = when or date.today()
+        if when is None:
+            when = datetime.fromtimestamp(self.store.trusted_now()).date()      # PC clock changes do not count
         return when.weekday() == 4 or not self.store.settings.get("game_friday_only", True)
 
     def claim(self, reward_id, when=None):
@@ -442,7 +448,7 @@ def pass_until(store):
 
 
 def start_pass(store, minutes, now=None):
-    now = now or time.time()
+    now = now or store.trusted_now()
     until = max(now, pass_until(store)) + minutes * 60
     write_json(store.p_pass, {"until": until, "minutes": minutes, "started": now})
     return until

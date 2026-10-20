@@ -69,20 +69,80 @@ def online_time():
 
 
 class TrustedClock:
-    def __init__(self):
+    """PC clock corrected by internet time. The lookup runs in a background thread: an offline PC used to
+    freeze the whole guard for up to 15 s (no blocking, stale heartbeat, a second guard being started)."""
+
+    def __init__(self, fetch=None):
         self.offset = 0.0
-        self.last = 0.0
         self.online = False
+        self._fetch = fetch or online_time
+        self._next = 0.0
+        self._busy = False
+
+    def _work(self):
+        try:
+            on = self._fetch()
+        except Exception:
+            on = None
+        t = time.time()
+        if on:
+            self.offset = on - t
+            self.online = True
+            self._next = t + 600
+        else:
+            self._next = t + 120          # offline: try again sooner, keep the last known offset
+        self._busy = False
 
     def now(self):
         t = time.time()
-        if t - self.last > 600 or self.last == 0:
-            self.last = t
-            on = online_time()
-            if on:
-                self.offset = on - t
-                self.online = True
+        if t >= self._next and not self._busy:
+            self._busy = True
+            threading.Thread(target=self._work, daemon=True).start()
         return t + self.offset
+
+
+_LOCK_HANDLE = []        # keeps the guard's lock file open for the life of the process
+
+
+def acquire_guard_lock(home):
+    """Exclusive lock held by the running guard (released by the OS when the process dies). Returns True when
+    this process is the only guard. Two guards used to be possible when the UI, the watchdog and the sign-in
+    entry started one at the same moment."""
+    try:
+        path = Path(home) / "guard.lock"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(str(path), os.O_RDWR | os.O_CREAT, 0o600)
+    except OSError:
+        return True                      # cannot even create it: do not lock the user out of enforcement
+    try:
+        if sys.platform == "win32":
+            import msvcrt
+            if os.fstat(fd).st_size == 0:
+                os.write(fd, b"1")
+            os.lseek(fd, 0, 0)
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        os.close(fd)
+        return False
+    except Exception:
+        os.close(fd)
+        return True
+    _LOCK_HANDLE.append(fd)
+    return True
+
+
+def _is_guard_process(pid):
+    """True unless we can positively tell that `pid` is NOT a VOIDLOCK guard (a recycled PID)."""
+    try:
+        cmd = psutil.Process(pid).cmdline()
+    except psutil.NoSuchProcess:
+        return False
+    except Exception:                    # AccessDenied: an elevated guard - cannot be read, cannot be stopped either
+        return True
+    return "--guard" in cmd
 
 
 # ------------------------------------------------------------------ autostart (Windows)
@@ -321,10 +381,17 @@ def _show_box(title, body):
 def run_guard(home=None, interval=1.0):
     store = Store(home, service=True)
     pid = os.getpid()
-    old = read_json(store.p_status, {})
+    for _try in range(15):               # a guard that is being replaced needs a moment to let go
+        if acquire_guard_lock(store.home):
+            break
+        time.sleep(0.2)
+    else:
+        return                           # another guard is already running
+    old = read_json(store.p_status, {}) or {}
     if old.get("pid") and old["pid"] != pid and psutil.pid_exists(old["pid"]) \
-            and time.time() - old.get("heartbeat", 0) < HEARTBEAT_STALE:
-        return
+            and time.time() - old.get("heartbeat", 0) < HEARTBEAT_STALE and _is_guard_process(old["pid"]) \
+            and not _LOCK_HANDLE:
+        return                           # (only reached when the lock file could not be used)
     started = time.time()
     clock = TrustedClock()
     per_app, denied, errors = {}, set(), []
@@ -483,7 +550,7 @@ def run_guard(home=None, interval=1.0):
                 per_app.clear(); denied.clear(); errors.clear()
             ends = float(st.get("ends_at", 0) or 0)
             started_at = float(st.get("started_at", now) or now)
-            if state == "running" and (ends <= now or now - started_at > MAX_SESSION_SEC):
+            if state == "running" and (ends <= now or ends - now > MAX_SESSION_SEC):
                 mode = "expired"
             elif state == "running":
                 mode = "enforcing"
@@ -723,7 +790,7 @@ class GuardClient:
     def stop(self):
         st = read_json(self.store.p_status, {}) or {}
         pid = st.get("pid")
-        if pid and psutil.pid_exists(pid):
+        if pid and pid != os.getpid() and psutil.pid_exists(pid) and _is_guard_process(pid):
             try:
                 psutil.Process(pid).terminate()
             except Exception:

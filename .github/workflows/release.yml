@@ -18,6 +18,9 @@ jobs:
         run: |
           $v = (Select-String -Path voidlock/__init__.py -Pattern '__version__ = "(.+)"').Matches[0].Groups[1].Value
           if ("v$v" -ne "${{ github.ref_name }}") { Write-Error "Tag ${{ github.ref_name }} does not match __version__ $v"; exit 1 }
+      - name: Logic tests (informational)
+        continue-on-error: true
+        run: python tests/logic_test.py
       - run: python -m PyInstaller --noconsole --onefile --name VoidLock --icon assets/icon.ico --add-data "assets;assets" main.py
       - name: SHA-256 checksum
         shell: pwsh

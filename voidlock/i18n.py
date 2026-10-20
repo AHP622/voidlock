@@ -97,31 +97,61 @@ def _group(v):
 
 
 # ------------------------------------------------------------------ calendar (Jalali)
+_BREAKS = (-61, 9, 38, 199, 426, 686, 756, 818, 1111, 1181, 1210, 1635, 2060, 2097, 2192, 2262, 2324, 2394,
+           2456, 3178)
+
+
+def _jal_cal(jy):
+    """Leap status and the March day of Nowruz for Jalali year `jy` (33-year-cycle rules with the official break
+    years, as in jalaali-js). The old 4-year arithmetic was a day off after 1407, e.g. for exam dates in 1408+."""
+    gy = jy + 621
+    leap_j = -14
+    jp = _BREAKS[0]
+    jump = 0
+    for jm in _BREAKS[1:]:
+        jump = jm - jp
+        if jy < jm:
+            break
+        leap_j += (jump // 33) * 8 + (jump % 33) // 4
+        jp = jm
+    n = jy - jp
+    leap_j += (n // 33) * 8 + ((n % 33) + 3) // 4
+    if jump % 33 == 4 and jump - n == 4:
+        leap_j += 1
+    leap_g = gy // 4 - ((gy // 100 + 1) * 3) // 4 - 150
+    march = 20 + leap_j - leap_g
+    if jump - n < 6:
+        n = n - jump + ((jump + 4) // 33) * 33
+    leap = ((n + 1) % 33 - 1) % 4
+    if leap == -1:
+        leap = 4
+    return leap, march
+
+
+def is_jalali_leap(jy):
+    return _jal_cal(jy)[0] == 0
+
+
+def jalali_month_days(jy, jm):
+    return 31 if jm <= 6 else (30 if jm <= 11 else (30 if is_jalali_leap(jy) else 29))
+
+
 def to_jalali(dt):
-    gy, gm, gd = dt.year, dt.month, dt.day
-    g_d_m = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]
-    if gy > 1600:
-        jy = 979
-        gy -= 1600
+    from datetime import date as _date
+    d = _date(dt.year, dt.month, dt.day)
+    jy = d.year - 621
+    leap, march = _jal_cal(jy)
+    k = d.toordinal() - _date(d.year, 3, march).toordinal()
+    if k >= 0:
+        if k <= 185:
+            return jy, 1 + k // 31, k % 31 + 1
+        k -= 186
     else:
-        jy = 0
-        gy -= 621
-    gy2 = gy + 1 if gm > 2 else gy
-    days = 365 * gy + (gy2 + 3) // 4 - (gy2 + 99) // 100 + (gy2 + 399) // 400 - 80 + gd + g_d_m[gm - 1]
-    jy += 33 * (days // 12053)
-    days %= 12053
-    jy += 4 * (days // 1461)
-    days %= 1461
-    if days > 365:
-        jy += (days - 1) // 365
-        days = (days - 1) % 365
-    if days < 186:
-        jm = 1 + days // 31
-        jd = 1 + days % 31
-    else:
-        jm = 7 + (days - 186) // 30
-        jd = 1 + (days - 186) % 30
-    return jy, jm, jd
+        jy -= 1
+        k += 179
+        if leap == 1:
+            k += 1
+    return jy, 7 + k // 30, k % 30 + 1
 
 
 EN_JMONTHS = ["Farvardin", "Ordibehesht", "Khordad", "Tir", "Mordad", "Shahrivar", "Mehr", "Aban", "Azar", "Dey",
@@ -129,31 +159,13 @@ EN_JMONTHS = ["Farvardin", "Ordibehesht", "Khordad", "Tir", "Mordad", "Shahrivar
 
 
 def from_jalali(jy, jm, jd):
-    """Jalali -> (gy, gm, gd)."""
-    jy += 1595
-    days = -355668 + (365 * jy) + ((jy // 33) * 8) + (((jy % 33) + 3) // 4) + jd + \
-        ((jm - 1) * 31 if jm < 7 else ((jm - 7) * 30) + 186)
-    gy = 400 * (days // 146097)
-    days %= 146097
-    if days > 36524:
-        days -= 1
-        gy += 100 * (days // 36524)
-        days %= 36524
-        if days >= 365:
-            days += 1
-    gy += 4 * (days // 1461)
-    days %= 1461
-    if days > 365:
-        gy += (days - 1) // 365
-        days = (days - 1) % 365
-    gd = days + 1
-    leap = (gy % 4 == 0 and gy % 100 != 0) or gy % 400 == 0
-    sal = [0, 31, 29 if leap else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    gm = 0
-    while gm < 13 and gd > sal[gm]:
-        gd -= sal[gm]
-        gm += 1
-    return gy, gm, gd
+    """Jalali -> (gy, gm, gd). Raises ValueError for an impossible date."""
+    from datetime import date as _date, timedelta as _td
+    if not (1 <= jm <= 12) or not (1 <= jd <= jalali_month_days(jy, jm)):
+        raise ValueError("invalid Jalali date")
+    _leap, march = _jal_cal(jy)
+    d = _date(jy + 621, 3, march) + _td(days=(jm - 1) * 31 - (jm // 7) * (jm - 7) + jd - 1)
+    return d.year, d.month, d.day
 
 
 def jalali_str(jy, jm, jd):

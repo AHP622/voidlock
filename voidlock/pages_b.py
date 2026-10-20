@@ -963,7 +963,7 @@ class SettingsPage(Page):
 
     def _exam(self, _v=None):
         y, m, d = self.ey.value(), self.em.value(), self.ed.value()
-        d = min(d, 31 if m <= 6 else 30)
+        d = min(d, i18n.jalali_month_days(y, m))
         self.ctx.store.settings["exam_date"] = [y, m, d]
         self.ctx.store.save_settings()
         self._exam_label()
@@ -999,6 +999,8 @@ class SettingsPage(Page):
         self.ctx.toast("Backup created." if name else "Backup failed.", "success" if name else "error")
 
     def restore_flow(self):
+        if self.ctx.session.active:
+            return self.ctx.toast("End the current session first.", "warn")
         bks = self.ctx.store.list_backups()[:8]
         if not bks:
             return self.ctx.toast("There are no backups yet.", "warn")
@@ -1039,6 +1041,8 @@ class SettingsPage(Page):
 
     def import_settings(self):
         import json
+        if self.ctx.session.active:        # importing would replace the block list - never mid-session (strict mode!)
+            return self.ctx.toast("End the current session first.", "warn")
         f, _ = QFileDialog.getOpenFileName(self, "Import settings", "", "JSON (*.json)")
         if not f:
             return
@@ -1069,7 +1073,7 @@ class SettingsPage(Page):
                 w.writerow(["start", "subject", "planned_min", "focus_sec", "status", "blocked_count"])
                 for r in self.ctx.store.history:
                     w.writerow([datetime.fromtimestamp(r["start"]).isoformat(timespec="seconds"), r.get("subject", ""),
-                                r["planned_min"], r["focus_sec"], r["status"], r.get("blocked_count", 0)])
+                                r.get("planned_min", 0), r.get("focus_sec", 0), r.get("status", ""), r.get("blocked_count", 0)])
             self.ctx.toast("History exported.", "success")
         except OSError as e:
             self.ctx.toast(f"Export failed: {e}", "error")

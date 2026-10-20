@@ -1,7 +1,7 @@
 import os, sys, time, shutil
-os.environ["QT_QPA_PLATFORM"] = "offscreen"; os.environ["VOIDLOCK_HOME"] = "/tmp/vl_feat"
-shutil.rmtree("/tmp/vl_feat", ignore_errors=True)
-sys.path.insert(0, "/home/claude/voidlock")
+os.environ["QT_QPA_PLATFORM"] = "offscreen"; os.environ["VOIDLOCK_HOME"] = os.path.join(__import__("tempfile").gettempdir(), "vl_feat")
+shutil.rmtree(os.path.join(__import__("tempfile").gettempdir(), "vl_feat"), ignore_errors=True)
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from datetime import date, datetime, timedelta
 from PySide6.QtWidgets import QApplication, QLineEdit
 from PySide6.QtCore import QTimer

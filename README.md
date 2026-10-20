@@ -76,8 +76,12 @@ again within about a minute, and it also starts at Windows sign-in. A determined
 * System-critical programs (explorer, task manager, cmd, PowerShell ...) are never terminated.
 * The guard never enforces longer than 12 hours and exits when idle.
 
+## Tests
+    python tests/logic_test.py        # guard, locks, store, Jalali calendar, updater ... (no Qt needed)
+    python tests/features_ui_test.py  # UI smoke test (needs PySide6; runs offscreen)
+
 ## Keyboard
-Ctrl+1..6 pages · Ctrl+K search apps · Ctrl+Enter start/pause/resume · Esc closes dialogs · Tab/Shift+Tab focus.
+Ctrl+1..9 pages · Ctrl+K search apps · Ctrl+Enter start/pause/resume · Esc closes dialogs · Tab/Shift+Tab focus.
 
 ## Limits (honest)
 Enforcement = terminating processes by name every second. It cannot stop a user with admin rights

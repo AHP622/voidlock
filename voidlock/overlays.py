@@ -123,6 +123,9 @@ class Modal(QWidget):
     def finish(self, ok):
         if ok and not self.b_ok.isEnabled():
             return
+        if getattr(self, "_closing", False):      # a double click / Esc during the fade-out must not run this twice
+            return
+        self._closing = True
         self.result_ok = ok
         if self.background:
             self.background.setEnabled(True)

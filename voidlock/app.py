@@ -36,6 +36,19 @@ NAV = [("overview", "Overview", "overview"), ("study", "Study Timer", "stopwatch
        ("help", "Help", "book")]
 
 
+def set_keep_awake(on):
+    """Windows: while on, the PC does not go to sleep from inactivity (the screen may still turn off).
+    Used while the study stopwatch runs. Must be called from the same (UI) thread each time."""
+    if sys.platform != "win32":
+        return False
+    try:
+        ES_CONTINUOUS, ES_SYSTEM_REQUIRED = 0x80000000, 0x00000001
+        ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | (ES_SYSTEM_REQUIRED if on else 0))
+        return True
+    except Exception:
+        return False
+
+
 class NavButton(QAbstractButton):
     def __init__(self, text, icon, tip):
         super().__init__()
@@ -317,6 +330,11 @@ class MainWindow(QMainWindow):
         self._last_event_t = time.time()
         self._popups = []
         self._last_hb = 0.0
+        self._last_study_hb = 0.0
+        self._last_tick = time.time()
+        self._awake = False
+        self._last_sched = 0.0
+        self._last_upd_check = time.time()
         self._last_points = 0.0
         self.running, self.scan_ready, self.scan_error = set(), False, None
         s = store.settings
@@ -435,6 +453,7 @@ class MainWindow(QMainWindow):
                 e.ignore()
                 return
         self.study.heartbeat()
+        set_keep_awake(False)
         self.scanner.stop()
         self.store.snapshot("exit")
         super().closeEvent(e)
@@ -475,12 +494,26 @@ class MainWindow(QMainWindow):
         self.store.refresh_windows()
         self.session.tick()
         now = time.time()
+        gap, self._last_tick = now - self._last_tick, now
+        if gap > 90 and self.study.active():
+            # the PC slept / hibernated: the stopwatch must not count the time it was asleep
+            self.study.stop(now - gap)
+            self.toast("The PC was asleep - the stopwatch stopped when it went to sleep.", "warn")
+            self.after_study_change()
+        want_awake = bool(self.study.active())             # stopwatch running -> do not let the PC doze off
+        if want_awake != self._awake:
+            self._awake = want_awake
+            set_keep_awake(want_awake)
         if now - self._last_hb > 2:
             self._last_hb = now
             # visible=False when minimised or hidden: the guard then shows its own box so the message is not lost
             write_json(self.store.p_ui_alive, {"t": now, "visible": bool(self.isVisible() and not self.isMinimized())})
-            if self.study.active() and int(now) % 10 < 2:
-                self.study.heartbeat(now)
+        if self.study.active() and now - self._last_study_hb > 20:
+            self._last_study_hb = now
+            self.study.heartbeat(now)
+        if now - self._last_upd_check > 3600:          # long-running app: look for updates again (6 h throttle inside)
+            self._last_upd_check = now
+            self.check_updates(False)
         self._poll_events()
         if now - self._last_points > 3600:
             self._last_points = now
@@ -489,10 +522,11 @@ class MainWindow(QMainWindow):
             self.pages[self.current_key()].refresh()
         if self.study.active():
             self._check_goal()
-        now = datetime.now()
-        self.topbar.clock.setText(i18n.fmt_clock_line(now))
-        if now.second % 15 == 0 or self._first:
-            self._check_schedule(now)
+        dnow = datetime.now()
+        self.topbar.clock.setText(i18n.fmt_clock_line(dnow))
+        if now - self._last_sched >= 15:               # (the old "second % 15" test could be skipped by timer jitter)
+            self._last_sched = now
+            self._check_schedule(dnow)
 
     def _on_changed(self):
         prot = self.session.protection()
@@ -630,8 +664,7 @@ class MainWindow(QMainWindow):
         fa = self.PHRASES_FA.get(phrase, phrase)
         shown = fa if i18n.is_fa() else phrase
         holder = {}
-        body = typed_body(tr("Type {p} to confirm").replace("{p}", shown) if False else
-                          (tr(f"Type {phrase} to confirm") if not i18n.is_fa() else f"برای تأیید «{fa}» (یا {phrase}) را تایپ کنید"),
+        body = typed_body(tr(f"Type {phrase} to confirm") if not i18n.is_fa() else f"برای تأیید «{fa}» (یا {phrase}) را تایپ کنید",
                           shown, lambda: holder["m"].revalidate())
         ok = lambda: body.edit.text().strip().upper() == phrase or body.edit.text().strip() == fa
         m = self.new_modal().build(title, message, body, confirm, "Keep focusing", True,
@@ -837,10 +870,7 @@ class MainWindow(QMainWindow):
     def disable_admin_guard(self):
         if self.confirm("Remove the administrator guard?", "Website blocking stops working until you enable it again.",
                         "Remove", True, "warn"):
-            from .guard import GuardClient as _G
-            import subprocess
-            self.store.p_admin_flag.unlink(missing_ok=True)
-            self.toast("Removed. If Windows asks, accept it to delete the task.", "info")
+            self.toast("Accept the Windows prompt to remove the administrator guard.", "info")
             self.guard.stop()
             try:
                 import ctypes
@@ -966,8 +996,9 @@ class MainWindow(QMainWindow):
                                 color=T.amber, wrap=True))
 
         def base_until(a):
-            cur = self.store.lock_for(a["exe"])
-            return max(time.time(), float(cur["until"])) if (cur and extend) else time.time()
+            now_t = self.store.trusted_now()          # a changed PC clock must not shorten a lock
+            cur = self.store.lock_for(a["exe"], now_t)
+            return max(now_t, float(cur["until"])) if (cur and extend) else now_t
 
         def upd(_v=None):
             until = base_until(apps[0]) + days.value() * 86400

@@ -36,16 +36,23 @@ def write_json(path, data):
     """Atomic write so the guard never reads a half-written file."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=1)
-    for attempt in range(5):
+    # unique temp name: the UI and the guard process may write the same file at the same moment
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.{uuid.uuid4().hex[:6]}.tmp")
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=1)
+        for attempt in range(8):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:  # Windows: reader / antivirus holds the file for a moment
+                time.sleep(0.03 * (attempt + 1))
+        os.replace(tmp, path)
+    finally:
         try:
-            os.replace(tmp, path)
-            return
-        except PermissionError:  # Windows: reader holds the file for a moment
-            time.sleep(0.03)
-    os.replace(tmp, path)
+            tmp.unlink()
+        except OSError:
+            pass
 
 
 CATEGORIES = ["Games", "Launchers", "Social", "Media", "Browsers", "Sites", "Other"]
@@ -183,6 +190,9 @@ class Store:
         try:
             bad = path.with_name(path.name + f".corrupt-{int(time.time())}")
             path.replace(bad)
+            old = sorted(path.parent.glob(path.name + ".corrupt-*"))
+            for extra in old[:-5]:          # keep the 5 newest quarantined copies
+                extra.unlink(missing_ok=True)
         except OSError:
             pass
         for b in self.list_backups():
@@ -199,15 +209,15 @@ class Store:
         s = self._read(self.p_settings, dict)
         self.settings = {**DEFAULT_SETTINGS, **(s or {})}
         apps = self._read(self.p_apps, list)
-        if not apps:
+        if apps is None:
             apps = [self._default_app(n, e, c, en) for n, e, c, en in DEFAULT_APPS]
             if not self.service:
                 write_json(self.p_apps, apps)
-        self.apps = apps
-        self.history = self._read(self.p_history, list) or []
-        self.schedule = self._read(self.p_schedule, list) or []
+        self.apps = [a for a in apps if isinstance(a, dict) and a.get("exe") and a.get("name")]
+        self.history = [r for r in (self._read(self.p_history, list) or []) if isinstance(r, dict)]
+        self.schedule = [e for e in (self._read(self.p_schedule, list) or []) if isinstance(e, dict)]
         pre = self._read(self.p_presets, list)
-        if not pre:
+        if pre is None:
             pre = [dict(x) for x in DEFAULT_PRESETS]
             if not self.service:
                 write_json(self.p_presets, pre)
@@ -312,14 +322,22 @@ class Store:
         self.snapshot("before-import", force=True)
         if isinstance(data.get("settings"), dict):
             self.settings = {**DEFAULT_SETTINGS, **data["settings"]}
-        if isinstance(data.get("apps"), list) and data["apps"]:
-            self.apps = data["apps"]
+        if isinstance(data.get("apps"), list):
+            good = [a for a in data["apps"] if isinstance(a, dict) and isinstance(a.get("exe"), str)
+                    and isinstance(a.get("name"), str) and a["exe"].strip()]
+            if good:
+                for a in good:
+                    a.setdefault("id", uid()); a.setdefault("category", "Other")
+                    a.setdefault("enabled", False); a.setdefault("custom", True); a.setdefault("path", "")
+                self.apps = good
         if isinstance(data.get("history"), list):
-            self.history = data["history"]
+            self.history = [r for r in data["history"] if isinstance(r, dict) and "start" in r]
         if isinstance(data.get("schedule"), list):
-            self.schedule = data["schedule"]
-        if isinstance(data.get("presets"), list) and data["presets"]:
-            self.presets = data["presets"]
+            self.schedule = [e for e in data["schedule"] if isinstance(e, dict) and "day" in e and "time" in e]
+        if isinstance(data.get("presets"), list):
+            pres = [p for p in data["presets"] if isinstance(p, dict) and "minutes" in p and "name" in p]
+            if pres:
+                self.presets = pres
         if isinstance(data.get("study"), dict):
             self.study = data["study"]
         for f in (self.save_study, self.save_settings, self.save_apps, self.save_history, self.save_schedule, self.save_presets):
@@ -332,8 +350,26 @@ class Store:
         self.locks = data.get("locks", []) if isinstance(data, dict) else []
 
     def active_locks(self, now=None):
-        now = now or time.time()
+        now = now or self.trusted_now()
         return [l for l in self.locks if float(l.get("until", 0)) > now]
+
+    def trusted_now(self):
+        """Internet-corrected time when the guard has one, otherwise the PC clock. Used for things a changed
+        PC clock should not be able to fake (lock length, 'Fridays only')."""
+        t = time.time()
+        checked, off = getattr(self, "_toff", (0.0, 0.0))
+        if t - checked > 5 or t < checked:                 # re-read status.json at most every 5 s
+            off = 0.0
+            st = read_json(self.p_status, {}) or {}
+            try:
+                if st.get("clock_online") and t - float(st.get("heartbeat", 0)) < 30:
+                    o = float(st.get("clock_offset", 0))
+                    if abs(o) < 14 * 86400:
+                        off = o
+            except (TypeError, ValueError):
+                pass
+            self._toff = (t, off)
+        return t + off
 
     def lock_for(self, exe, now=None):
         exe = exe.lower()

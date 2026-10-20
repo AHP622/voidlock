@@ -384,4 +384,7 @@ FA = {
     "{x} was damaged and was restored from backup {y}.": "فایل {x} آسیب دیده بود و از پشتیبان {y} بازیابی شد.",
     "{x} was damaged and could not be restored; defaults were used.": "فایل {x} آسیب دیده بود و بازیابی نشد؛ مقادیر پیش‌فرض استفاده شد.",
     "Imported your previous data from {x}.": "داده‌های قبلی شما از {x} وارد شد.",
+    # ---------------- 1.2.9
+    "The PC was asleep - the stopwatch stopped when it went to sleep.": "کامپیوتر در حالت خواب بود؛ کرنومتر لحظه‌ی خواب‌رفتن متوقف شد.",
+    "Accept the Windows prompt to remove the administrator guard.": "برای حذف گارد ادمین، پیام ویندوز را تأیید کنید.",
 }
