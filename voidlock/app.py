@@ -22,6 +22,7 @@ from .mascot import BlockPopup, Confetti
 from .pages_a import AppsPage, OverviewPage
 from .pages_b import AnalyticsPage, SchedulePage, SessionsPage, SettingsPage
 from .pages_c import RewardsPage, StudyPage
+from .pages_help import HelpPage
 from .study import Points, StudyLog
 from .store import Store, fmt_clock, read_json, write_json
 from .theme import Motion, T, font, qc, system_reduced_motion
@@ -31,7 +32,8 @@ from .widgets import AA, AC, AnimWidget, Button, Stepper, Ticker, Toggle, label,
 NAV = [("overview", "Overview", "overview"), ("study", "Study Timer", "stopwatch"),
        ("apps", "Application Control", "apps"), ("sessions", "Study Sessions", "sessions"),
        ("schedule", "Schedule", "schedule"), ("rewards", "Rewards", "star"),
-       ("analytics", "Analytics", "analytics"), ("settings", "Settings", "settings")]
+       ("analytics", "Analytics", "analytics"), ("settings", "Settings", "settings"),
+       ("help", "Help", "book")]
 
 
 class NavButton(QAbstractButton):
@@ -346,7 +348,8 @@ class MainWindow(QMainWindow):
         self.pages = {}
         for key, cls in (("overview", OverviewPage), ("study", StudyPage), ("apps", AppsPage),
                          ("sessions", SessionsPage), ("schedule", SchedulePage), ("rewards", RewardsPage),
-                         ("analytics", AnalyticsPage), ("settings", SettingsPage)):
+                         ("analytics", AnalyticsPage), ("settings", SettingsPage),
+                         ("help", HelpPage)):
             pg = cls(self)
             self.pages[key] = pg
             self.stack.addWidget(pg)
