@@ -75,6 +75,7 @@ DEFAULT_APPS = [
 ]
 
 DEFAULT_SETTINGS = {
+    "female_mascot": False,
     "daily_goal_min": 120,
     "default_minutes": 50,
     "strict_default": False,

@@ -12,6 +12,14 @@ from .theme import Motion, T, font, qc
 from .widgets import AA, AC, AnimWidget, Button, label, tween
 
 
+STYLE = {"female": False}
+
+
+def set_style(female):
+    """Switches every mascot between the default and the female look (hair, bow, lashes, lipstick)."""
+    STYLE["female"] = bool(female)
+
+
 class Mascot(AnimWidget):
     """A friendly blob. States: idle (sleepy), study (focused, glasses), happy (cheering), sad."""
 
@@ -60,6 +68,14 @@ class Mascot(AnimWidget):
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(qc("#000000", 0.18 if not T.light else 0.10))
         p.drawEllipse(QPointF(cx, W * 0.9), bw * 0.8 * (1 - bounce / W * 2), W * 0.04)
+        fem = STYLE["female"]
+        if fem:
+            # hair behind the body: a cap on top and two side locks
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor("#2B1B3D"))
+            p.drawEllipse(QRectF(cx - bw * 1.12, cy - bh * 1.22, bw * 2.24, bh * 1.25))
+            p.drawRoundedRect(QRectF(cx - bw * 1.12, cy - bh * 0.35, bw * 0.32, bh * 1.25), bw * 0.16, bw * 0.16)
+            p.drawRoundedRect(QRectF(cx + bw * 0.80, cy - bh * 0.35, bw * 0.32, bh * 1.25), bw * 0.16, bw * 0.16)
         # body
         g = QLinearGradient(cx - bw, cy - bh, cx + bw, cy + bh)
         g.setColorAt(0, QColor(T.cyan))
@@ -71,6 +87,14 @@ class Mascot(AnimWidget):
         # glossy highlight
         p.setBrush(qc("#FFFFFF", 0.28))
         p.drawEllipse(QRectF(cx - bw * 0.62, cy - bh * 0.82, bw * 0.5, bh * 0.28))
+        if fem:
+            # hair bow
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor("#FF6B9A"))
+            p.drawEllipse(QPointF(cx + bw * 0.62, cy - bh * 0.92), bw * 0.22, bw * 0.14)
+            p.drawEllipse(QPointF(cx + bw * 0.92, cy - bh * 0.92), bw * 0.22, bw * 0.14)
+            p.setBrush(QColor("#D6336C"))
+            p.drawEllipse(QPointF(cx + bw * 0.77, cy - bh * 0.92), bw * 0.07, bw * 0.07)
         # arms (happy: raised)
         arm = QColor(T.violet)
         p.setBrush(arm)
@@ -107,8 +131,18 @@ class Mascot(AnimWidget):
             pdx = look
             pdy = (eh * 0.15) + (W * 0.012 if st == "sad" else 0)
             p.drawEllipse(QPointF(ex + pdx, ey + pdy), W * 0.038, min(eh, W * 0.045))
+            if fem:
+                # lashes on the outer corner of each eye
+                lp = QPen(QColor("#1B1330"), W * 0.012)
+                lp.setCapStyle(Qt.PenCapStyle.RoundCap)
+                p.setPen(lp)
+                for k in range(3):
+                    ax_ = ex + sx * ew * (0.55 + 0.22 * k)
+                    ay_ = ey - eh * (0.75 - 0.15 * k)
+                    p.drawLine(QPointF(ax_, ay_), QPointF(ax_ + sx * W * 0.03, ay_ - W * 0.025 + k * W * 0.005))
+                p.setPen(Qt.PenStyle.NoPen)
         # mouth
-        mpen = QPen(QColor("#1B1330"), W * 0.026)
+        mpen = QPen(QColor("#D6336C") if fem else QColor("#1B1330"), W * 0.026)
         mpen.setCapStyle(Qt.PenCapStyle.RoundCap)
         p.setPen(mpen)
         p.setBrush(Qt.BrushStyle.NoBrush)

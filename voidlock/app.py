@@ -373,6 +373,8 @@ class MainWindow(QMainWindow):
         self.tick = QTimer(self)
         self.tick.timeout.connect(self._second)
         self.tick.start(1000)
+        from .mascot import set_style
+        set_style(self.store.settings.get("female_mascot", False))
         self.goto("overview", animate=False)
         self._second()
         QTimer.singleShot(7000, lambda: self.check_updates(False))

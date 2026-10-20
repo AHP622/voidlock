@@ -696,6 +696,8 @@ class SettingsPage(Page):
         self.theme = Segmented([THEME_NAMES[k] for k in tnames], tnames.index(st.get("theme", "void")) if st.get("theme", "void") in tnames else 0)
         c2.lay.addLayout(setting_row("Theme", "Void is dark and calm, Candy is light and playful, Ocean is deep blue. The app "
                                      "restarts to apply it.", self.theme))
+        self.fem = Toggle(bool(st.get("female_mascot", False)))
+        c2.lay.addLayout(setting_row("Female character", "Switches the mascot to a girl version (hair, bow, lashes).", self.fem))
         c2.lay.addWidget(Divider())
         snames = ["off", "soft", "bell"]
         self.sound = Segmented(["Off", "Soft", "Bell"], snames.index(st.get("sound", "soft")) if st.get("sound", "soft") in snames else 1)
@@ -848,6 +850,7 @@ class SettingsPage(Page):
         self.dflt.valueChanged.connect(lambda v: self._set("default_minutes", v, plan=True))
         self.cool.valueChanged.connect(lambda v: self._set("emergency_cooldown", v))
         self.strict.toggled.connect(lambda v: self._set("strict_default", bool(v)))
+        self.fem.toggled.connect(lambda v: self._set("female_mascot", bool(v)))
         self.motion.currentChanged.connect(lambda i: self._set("reduce_motion", ["auto", "on", "off"][i], motion=True))
         self.week.currentChanged.connect(lambda i: self._set("week_start", [5, 6, 0][i]))
         self.lang.currentChanged.connect(self._language)
@@ -886,6 +889,9 @@ class SettingsPage(Page):
         c = self.ctx
         c.store.settings[key] = value
         c.store.save_settings()
+        if key == "female_mascot":
+            from .mascot import set_style
+            set_style(value)
         if plan and not c.session.active:
             c.plan["minutes"] = value
         if motion:
