@@ -370,7 +370,8 @@ def run_guard(home=None, interval=1.0):
         write_json(store.p_events, {"list": events})
         sounds.play("close", settings.get("sound", "soft"))
         ui = read_json(store.p_ui_alive, {}) or {}
-        if time.time() - float(ui.get("t", 0)) > 6 and not box_busy.is_set() and sys.platform == "win32":
+        ui_hidden = time.time() - float(ui.get("t", 0)) > 6 or not ui.get("visible", True)
+        if ui_hidden and not box_busy.is_set() and sys.platform == "win32":
             title, body = messages.block_message(settings, name, why)
             box_busy.set()
             threading.Thread(target=lambda: (_show_box(title, body), box_busy.clear()), daemon=True).start()

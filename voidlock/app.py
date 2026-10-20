@@ -474,7 +474,8 @@ class MainWindow(QMainWindow):
         now = time.time()
         if now - self._last_hb > 2:
             self._last_hb = now
-            write_json(self.store.p_ui_alive, {"t": now})
+            # visible=False when minimised or hidden: the guard then shows its own box so the message is not lost
+            write_json(self.store.p_ui_alive, {"t": now, "visible": bool(self.isVisible() and not self.isMinimized())})
             if self.study.active() and int(now) % 10 < 2:
                 self.study.heartbeat(now)
         self._poll_events()
