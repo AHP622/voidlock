@@ -441,7 +441,7 @@ class StudyPage(Page):
         c, sl, st = self.ctx, self.sl, self.ctx.store
         now = time.time()
         today = date.today()
-        total = sl.day_sec(today, True, now)
+        total = sl.day_sec(today, True, now, include_sessions=False)
         self.total_l.setText(fmt_hms(total))
         goal = st.settings["daily_goal_min"]
         self.goal_bar.set_value(total / 60 / max(1, goal))
@@ -479,7 +479,7 @@ class StudyPage(Page):
         self.date_l.setText(i18n.fmt_when(datetime(self.sel.year, self.sel.month, self.sel.day), with_time=False)
                             + (" · " + i18n.tr("Today") if self.sel == today else ""))
         self.b_next.setEnabled(self.sel < today)
-        self.day_total.setText(f"Study time this day: {fmt_hm(sl.day_sec(self.sel, True, now))}")
+        self.day_total.setText(f"Study time this day: {fmt_hm(sl.day_sec(self.sel, True, now, include_sessions=False))}")
         tests = sl.day_tests(self.sel)
         tg = int(st.settings.get("daily_tests_goal", 50))
         self.tests_bar.set_value(tests / max(1, tg))

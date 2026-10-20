@@ -139,8 +139,9 @@ class StudyLog:
                 pass
         return tot
 
-    def day_sec(self, d, include_running=True, now=None):
-        tot = self.day_entries_sec(d) + self.day_sessions_sec(d)
+    def day_sec(self, d, include_running=True, now=None, include_sessions=True):
+        """Study time for a day. Focus sessions (Start on Overview) are left out when include_sessions is False."""
+        tot = self.day_entries_sec(d) + (self.day_sessions_sec(d) if include_sessions else 0)
         a = self.d["active"]
         if include_running and a and dkey(d) == date.today().isoformat():
             tot += int(self.elapsed(now))
