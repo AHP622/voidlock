@@ -136,8 +136,7 @@ class CheckRow(QWidget):
         set_label_color(self.lb, T.text3 if self.todo["done"] else T.text)
 
     def mouseReleaseEvent(self, e):
-        if e.position().x() < self.width() - 40:
-            self.toggled.emit()
+        self.toggled.emit()
 
     def paintEvent(self, e):
         p = QPainter(self)

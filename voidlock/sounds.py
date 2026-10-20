@@ -40,6 +40,17 @@ def wav_bytes(kind="close", vol=0.28):
     return buf.getvalue()
 
 
+def _wav_file(kind, vol):
+    """winsound cannot play memory buffers asynchronously, so the sound is cached as a temp file."""
+    import os
+    import tempfile
+    path = os.path.join(tempfile.gettempdir(), f"voidlock_{kind}_{int(vol * 100)}.wav")
+    if not os.path.exists(path) or os.path.getsize(path) == 0:
+        with open(path, "wb") as f:
+            f.write(wav_bytes(kind, vol))
+    return path
+
+
 def play(kind="close", mode="soft"):
     """mode: off | soft | bell. Returns True if a sound was started."""
     if mode == "off" or sys.platform != "win32":
@@ -48,7 +59,8 @@ def play(kind="close", mode="soft"):
         import winsound
         if mode == "bell" and kind == "close":
             kind = "bell"
-        winsound.PlaySound(wav_bytes(kind, 0.4 if mode == "bell" else 0.28), winsound.SND_MEMORY | winsound.SND_ASYNC)
+        path = _wav_file(kind, 0.4 if mode == "bell" else 0.28)
+        winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
         return True
     except Exception:
         return False

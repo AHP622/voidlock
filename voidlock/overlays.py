@@ -186,7 +186,11 @@ class _Toast(QFrame):
         lay = QHBoxLayout(self)
         from .i18n import is_fa
         lay.setContentsMargins(*((18, 12, 46, 12) if is_fa() else (46, 12, 18, 12)))
-        self.lb = label(text, 13, QFont.Weight.Medium, wrap=False)
+        self.lb = label(text, 13, QFont.Weight.Medium, wrap=True)
+        self.lb.setMaximumWidth(420)
+        if is_fa():
+            self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+            self.lb.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         lay.addWidget(self.lb)
         self.adjustSize()
         self._col = col

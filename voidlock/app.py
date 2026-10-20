@@ -595,7 +595,7 @@ class MainWindow(QMainWindow):
         lay.addWidget(subj)
         r = QHBoxLayout()
         r.addWidget(label("Duration", 13, QFont.Weight.DemiBold), 1)
-        dur = Stepper(self.plan["minutes"], 5, 240, 5, " min")
+        dur = Stepper(self.plan["minutes"], 1, 480, 1, " min")
         r.addWidget(dur)
         lay.addLayout(r)
         r2 = QHBoxLayout()
