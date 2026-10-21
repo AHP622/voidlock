@@ -1,7 +1,7 @@
 import os, sys, time, shutil
 os.environ["QT_QPA_PLATFORM"] = "offscreen"; os.environ["VOIDLOCK_HOME"] = os.path.join(__import__("tempfile").gettempdir(), "vl_feat")
 shutil.rmtree(os.path.join(__import__("tempfile").gettempdir(), "vl_feat"), ignore_errors=True)
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from datetime import date, datetime, timedelta
 from PySide6.QtWidgets import QApplication, QLineEdit
 from PySide6.QtCore import QTimer
@@ -75,7 +75,8 @@ ok(a and a["exe"] == "youtube.com" and a["kind"] == "site" and a["category"] == 
 ok(any(b["exe"] == "youtube.com" and b["kind"] == "site" for b in win.session.blocked_list()), "session rule list carries kind=site")
 win.goto("apps"); pump(2200); row = win.pages["apps"].rows.get(a["id"]) or None
 win.pages["apps"].build_rows(); pump(300); win.pages["apps"].refresh()
-ok(win.pages["apps"].admin_card.isVisibleTo(win.pages["apps"]) or not win.guard.status().get("alive"), "banner explains websites need the administrator guard")
+g_ = win.guard.status()
+ok(win.pages["apps"].admin_card.isVisibleTo(win.pages["apps"]) or not g_.get("alive") or g_.get("elevated"), "banner explains websites need the administrator guard (unless the guard already has admin rights)")
 # ---- block popup from a guard event
 write_json(st.p_events, {"list": [{"id": "e1", "t": time.time() + 1, "exe": "efootball.exe", "name": "eFootball", "why": "window"}]}); pump(2500)
 ok(len(win._popups) == 1, "a guard event shows the personal popup card")

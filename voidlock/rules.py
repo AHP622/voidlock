@@ -54,23 +54,9 @@ def blocked_categories(windows, dt, pass_active=False):
 def next_change(windows, dt):
     """Next datetime (within 8 days) at which the blocked/unblocked state flips, or None."""
     cur = bool(active_windows(windows, dt))
-    t0 = dt.replace(second=0, microsecond=0)
-    limit = t0 + timedelta(days=8)
-    # the state can only flip at a window's start or end time, so test just those instants
-    # (the old minute-by-minute scan did up to 11 520 checks on every refresh)
-    cands = set()
-    for w in windows:
-        if not w.get("enabled", True) or not w.get("days"):
-            continue
-        try:
-            marks = {hm(w["start"]), hm(w["end"]), 0}
-        except (KeyError, ValueError, TypeError):
-            continue
-        for off in range(-1, 10):
-            base = (t0 + timedelta(days=off)).replace(hour=0, minute=0)
-            for m in marks:
-                cands.add(base + timedelta(minutes=m))
-    for t2 in sorted(c for c in cands if t0 < c <= limit):
+    t = dt.replace(second=0, microsecond=0)
+    for i in range(1, 8 * 24 * 60 + 1):
+        t2 = t + timedelta(minutes=i)
         if bool(active_windows(windows, t2)) != cur:
             return t2
     return None

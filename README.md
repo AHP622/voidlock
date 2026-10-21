@@ -36,6 +36,36 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
+## What changed in 1.3.0 (bug-fix release)
+
+**Data safety**
+- A file that was only locked for a moment (Windows sharing violation) was treated as corrupt: it got quarantined and replaced by an older backup. Now only really damaged files are restored.
+- Reading `locks.json` / `windows.json` failing for a moment made the UI forget all locks, and the next write dropped the others. Release/extend now never rewrite a file they could not read.
+- `points.json` was never restored from its backup (a damaged file silently reset your points to 0). Fixed.
+- **Reset everything / import / restore** left the Study log without its data keys, so the Study page and Overview crashed (`KeyError`). The log now repairs itself.
+- Imported / hand-edited settings with invalid values (for example `reduce_motion`) crashed the Settings page. Every value is validated on load and on import; broken apps / schedule / presets / history entries are dropped instead of crashing later.
+- Writes are fsync'ed, temp files are per-process, leftovers are cleaned up.
+
+**Guard**
+- The internet-time check ran inside the enforcement loop: up to 15 s per 10 min with nothing blocked (and a stale heartbeat) when offline. It now runs in a background thread and is anchored to the monotonic clock, so changing the Windows clock afterwards has no effect.
+- Closing blocked programs: all processes are terminated first and waited for together (a 30-process browser used to take ~12 s per pass).
+- Only one guard can run (file lock), even if the watchdog, sign-in task and UI start one in the same second.
+- A damaged JSON file can no longer stop the enforcement loop.
+- After an update, a guard still running the old code is swapped once when idle.
+
+**Loopholes closed**
+- The day-lock release wait could be lowered in Settings (or by scrolling the mouse wheel over its stepper, or by importing/restoring an older file) while locks existed. It can now only be raised while locks exist.
+- Day locks, play passes and the Friday rule use the guard's internet-corrected time, so moving the PC clock no longer gives a longer pass / the wrong weekday.
+- Moving the PC clock back and forth could award the same clean days twice.
+- An imported settings file could change the update source (remote code on next start). The update source is never imported.
+- Updater: redirects must stay on GitHub hosts, size cap, partial files removed.
+
+**Other**
+- Mouse wheel over a stepper no longer changes it unless it has focus; steppers clamp their start value.
+- Overview / Study / Rewards refreshed every second recomputed everything from all history (and re-read `play.json`): now indexed / cached.
+- Deleting a subject with a running timer discarded the time; a due scheduled session could open on top of another dialog; a broken schedule entry blocked all others; added site name was wrong after editing the chip text; hosts file keeps CRLF; `--clean-hosts` output; Task Scheduler calls no longer freeze the window; Jalali / duplicate translation key fixes.
+- New tests: `tests/logic_test.py` (no Qt, runs real guard + victim processes) and `tests/regressions_ui_test.py`.
+
 ## Features added in 1.2
 * **Lock hours** (Schedule page): close whole categories (games, launchers, social, media, sites) on chosen days between two
   times. Add freely; removing needs the RELEASE phrase + wait. Outside the hours you can play - and VOIDLOCK watches it.
@@ -76,12 +106,8 @@ again within about a minute, and it also starts at Windows sign-in. A determined
 * System-critical programs (explorer, task manager, cmd, PowerShell ...) are never terminated.
 * The guard never enforces longer than 12 hours and exits when idle.
 
-## Tests
-    python tests/logic_test.py        # guard, locks, store, Jalali calendar, updater ... (no Qt needed)
-    python tests/features_ui_test.py  # UI smoke test (needs PySide6; runs offscreen)
-
 ## Keyboard
-Ctrl+1..9 pages · Ctrl+K search apps · Ctrl+Enter start/pause/resume · Esc closes dialogs · Tab/Shift+Tab focus.
+Ctrl+1..6 pages · Ctrl+K search apps · Ctrl+Enter start/pause/resume · Esc closes dialogs · Tab/Shift+Tab focus.
 
 ## Limits (honest)
 Enforcement = terminating processes by name every second. It cannot stop a user with admin rights

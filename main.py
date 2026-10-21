@@ -37,11 +37,13 @@ def main():
         from voidlock.store import Store
         store = Store(args.home)
         if args.clean_hosts:
-            print(write_hosts([]))
+            ok, msg = write_hosts([])
+            print(("Website block removed (" + msg + ")") if ok else ("Could not clean the hosts file: " + msg))
         elif args.install_admin_guard:
-            print(admin_guard_install(store))
+            ok, msg = admin_guard_install(store)
+            print("Administrator guard installed." if ok else f"Could not install the administrator guard: {msg}")
         else:
-            print(admin_guard_remove(store))
+            print("Administrator guard removed." if admin_guard_remove(store) else "Could not remove the administrator guard.")
         return 0
     if args.release_locks:
         import time

@@ -622,7 +622,6 @@ class AnalyticsPage(Page):
             w.setLayout(r)
             self.rep_top.addWidget(w)
         # year
-        names = [i18n.FA_MONTHS[k] if fa else i18n.EN_JMONTHS[0] for k in range(12)] if False else None
         if fa:
             labels = [i18n.FA_MONTHS[k] for k in range(12)]
         else:
@@ -848,7 +847,7 @@ class SettingsPage(Page):
 
         self.goal.valueChanged.connect(lambda v: self._set("daily_goal_min", v))
         self.dflt.valueChanged.connect(lambda v: self._set("default_minutes", v, plan=True))
-        self.cool.valueChanged.connect(lambda v: self._set("emergency_cooldown", v))
+        self.cool.valueChanged.connect(self._set_cool)
         self.strict.toggled.connect(lambda v: self._set("strict_default", bool(v)))
         self.fem.toggled.connect(lambda v: self._set("female_mascot", bool(v)))
         self.motion.currentChanged.connect(lambda i: self._set("reduce_motion", ["auto", "on", "off"][i], motion=True))
@@ -874,7 +873,7 @@ class SettingsPage(Page):
         self.up_auto.toggled.connect(lambda v: self._set("update_auto_install", bool(v)))
         self.b_up_check.clicked.connect(self._check_now)
         self.b_up_install.clicked.connect(ctx.install_update)
-        self.longcool.valueChanged.connect(lambda v: self._set("long_cooldown", v * 60))
+        self.longcool.valueChanged.connect(self._set_longcool)
         self.b_backup.clicked.connect(self.backup_now)
         self.b_restore.clicked.connect(self.restore_flow)
         self.b_exp.clicked.connect(self.export_settings)
@@ -897,6 +896,25 @@ class SettingsPage(Page):
         if motion:
             c.apply_motion()
         c.settings_changed()
+
+    def _set_longcool(self, v):
+        """The wait before a day lock / lock hours can be released may be made longer at any time, never shorter
+        while something is locked - otherwise the commitment could be undone from this very page."""
+        st = self.ctx.store
+        cur = int(st.settings.get("long_cooldown", 600))
+        if v * 60 < cur and st.commitments_active():
+            self.longcool.set_value(max(1, cur // 60), emit=False)
+            self.ctx.toast("Locks are active - the release wait can only be made longer right now.", "warn")
+            return
+        self._set("long_cooldown", v * 60)
+
+    def _set_cool(self, v):
+        cur = int(self.ctx.store.settings.get("emergency_cooldown", 30))
+        if v < cur and self.ctx.session.active:
+            self.cool.set_value(cur, emit=False)
+            self.ctx.toast("A session is running - the emergency wait can only be made longer right now.", "warn")
+            return
+        self._set("emergency_cooldown", v)
 
     def refresh(self):
         s = self.ctx.store
@@ -963,7 +981,7 @@ class SettingsPage(Page):
 
     def _exam(self, _v=None):
         y, m, d = self.ey.value(), self.em.value(), self.ed.value()
-        d = min(d, i18n.jalali_month_days(y, m))
+        d = min(d, 31 if m <= 6 else 30)
         self.ctx.store.settings["exam_date"] = [y, m, d]
         self.ctx.store.save_settings()
         self._exam_label()
@@ -976,9 +994,9 @@ class SettingsPage(Page):
 
     def _tracking(self, on):
         self._set("play_tracking", bool(on))
-        from .guard import persist_protection
+        from .guard import persist_protection_async
         if on:
-            persist_protection(True, self.ctx.store)
+            persist_protection_async(True, self.ctx.store)
             self.ctx.guard.ensure()
 
     def _language(self, i):
@@ -999,8 +1017,6 @@ class SettingsPage(Page):
         self.ctx.toast("Backup created." if name else "Backup failed.", "success" if name else "error")
 
     def restore_flow(self):
-        if self.ctx.session.active:
-            return self.ctx.toast("End the current session first.", "warn")
         bks = self.ctx.store.list_backups()[:8]
         if not bks:
             return self.ctx.toast("There are no backups yet.", "warn")
@@ -1041,8 +1057,6 @@ class SettingsPage(Page):
 
     def import_settings(self):
         import json
-        if self.ctx.session.active:        # importing would replace the block list - never mid-session (strict mode!)
-            return self.ctx.toast("End the current session first.", "warn")
         f, _ = QFileDialog.getOpenFileName(self, "Import settings", "", "JSON (*.json)")
         if not f:
             return

@@ -21,13 +21,12 @@ API = "https://api.github.com/repos/{repo}/releases/latest"
 ASSET = "VoidLock.exe"
 HOSTS = ("github.com", "githubusercontent.com")
 HEADERS = {"User-Agent": "VoidLock-Updater", "Accept": "application/vnd.github+json"}
-DL_HEADERS = {"User-Agent": "VoidLock-Updater", "Accept": "application/octet-stream"}
-MAX_DOWNLOAD = 400 * 1024 * 1024
+MAX_DOWNLOAD = 400 * 1024 * 1024          # a program file larger than this is not ours
 
 
 class _SafeRedirect(urllib.request.HTTPRedirectHandler):
-    """GitHub answers a release download with a redirect. Every hop must stay on https + a GitHub host;
-    previously only the first URL was checked."""
+    """GitHub redirects downloads to its own CDN. Anything else is refused (the first URL was checked, the redirect
+    target used to be followed blindly)."""
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         _safe_url(newurl)
@@ -97,7 +96,7 @@ def download(info, dest_dir, progress=None, timeout=30):
     dest_dir = Path(dest_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
     try:
-        with urlopen(urllib.request.Request(info["sha_url"], headers=DL_HEADERS), timeout=timeout) as r:
+        with urlopen(urllib.request.Request(info["sha_url"], headers=HEADERS), timeout=timeout) as r:
             want = r.read(4096).decode("utf-8", "ignore").strip().split()[0].lower()
     except (urllib.error.URLError, OSError, IndexError) as e:
         raise UpdateError(f"Could not read the checksum: {e}")
@@ -107,25 +106,27 @@ def download(info, dest_dir, progress=None, timeout=30):
     h = hashlib.sha256()
     done = 0
     try:
-        with urlopen(urllib.request.Request(info["url"], headers=DL_HEADERS), timeout=timeout) as r, open(part, "wb") as f:
+        with urlopen(urllib.request.Request(info["url"], headers=HEADERS), timeout=timeout) as r, open(part, "wb") as f:
             total = int(r.headers.get("Content-Length", 0) or info.get("size", 0))
+            if total > MAX_DOWNLOAD:
+                raise UpdateError("The update file is unreasonably large - update cancelled.")
             while True:
                 chunk = r.read(1 << 16)
                 if not chunk:
                     break
+                if done + len(chunk) > MAX_DOWNLOAD:
+                    raise UpdateError("The update file is unreasonably large - update cancelled.")
                 f.write(chunk)
                 h.update(chunk)
                 done += len(chunk)
-                if done > MAX_DOWNLOAD:
-                    raise UpdateError("The download is unexpectedly large - update cancelled.")
                 if progress and total:
                     progress(int(done * 100 / total))
-    except (urllib.error.URLError, OSError) as e:
-        part.unlink(missing_ok=True)
-        raise UpdateError(f"Download failed: {e}")
     except UpdateError:
-        part.unlink(missing_ok=True)
+        _fail_cleanup(part)
         raise
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        _fail_cleanup(part)
+        raise UpdateError(f"Download failed: {e}")
     if h.hexdigest() != want:
         part.unlink(missing_ok=True)
         raise UpdateError("The downloaded file does not match its checksum - update cancelled.")
@@ -138,6 +139,13 @@ def download(info, dest_dir, progress=None, timeout=30):
     return final
 
 
+def _fail_cleanup(part):
+    try:
+        Path(part).unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def apply(new_path, target=None):
     """Swap the running exe for the new one. Rolls back on failure."""
     target = Path(target or sys.executable)
@@ -148,9 +156,12 @@ def apply(new_path, target=None):
         old = target.with_name(target.name + ".old2")
         try:
             old.unlink(missing_ok=True)
-        except OSError:
-            old = target.with_name(f"{target.name}.{os.getpid()}.old")
-    os.replace(target, old)
+        except OSError as e:
+            raise UpdateError(f"Could not prepare the update (an older copy is still in use): {e}")
+    try:
+        os.replace(target, old)
+    except OSError as e:
+        raise UpdateError(f"Could not replace the program file: {e}")
     try:
         shutil.move(str(new_path), str(target))
     except Exception as e:
@@ -161,10 +172,8 @@ def apply(new_path, target=None):
 
 def cleanup_old(target=None):
     target = Path(target or sys.executable)
-    leftovers = [target.with_name(target.name + s) for s in (".old", ".old2")]
-    leftovers += list(target.parent.glob(target.name + ".*.old"))
-    for p in leftovers:
+    for suffix in (".old", ".old2"):
         try:
-            p.unlink(missing_ok=True)
+            target.with_name(target.name + suffix).unlink(missing_ok=True)
         except OSError:
             pass   # still used by the previous guard process; removed on a later start

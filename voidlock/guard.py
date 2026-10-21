@@ -21,12 +21,12 @@ from pathlib import Path
 import psutil
 
 from . import hosts as hostsmod
-from . import i18n, messages, rules, sounds
-from .store import DEFAULT_SETTINGS, Store, read_json, uid, write_json
+from . import __version__, i18n, messages, rules, sounds
+from .store import DEFAULT_SETTINGS, Store, read_json, read_json_checked, sanitize_settings, uid, write_json
 
 MAX_SESSION_SEC = 12 * 3600        # failsafe: a *session* never enforces longer than this
 IDLE_EXIT_SEC = 45                 # guard quits when there is nothing to enforce
-HEARTBEAT_STALE = 4.0
+HEARTBEAT_STALE = 6.0
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_NAME = "VoidLockGuard"
 
@@ -61,88 +61,58 @@ def online_time():
     """Real time from an HTTP Date header, so changing the Windows clock cannot end a lock early."""
     for u in ("https://www.google.com", "https://www.microsoft.com", "https://www.cloudflare.com"):
         try:
-            r = urllib.request.urlopen(urllib.request.Request(u, method="HEAD"), timeout=5)
-            return email.utils.parsedate_to_datetime(r.headers["Date"]).timestamp()
+            with urllib.request.urlopen(urllib.request.Request(u, method="HEAD"), timeout=5) as r:
+                return email.utils.parsedate_to_datetime(r.headers["Date"]).timestamp()
         except Exception:
             continue
     return None
 
 
 class TrustedClock:
-    """PC clock corrected by internet time. The lookup runs in a background thread: an offline PC used to
-    freeze the whole guard for up to 15 s (no blocking, stale heartbeat, a second guard being started)."""
+    """Internet-corrected time that the PC clock cannot move.
 
-    def __init__(self, fetch=None):
-        self.offset = 0.0
+    The network is asked in a background thread (it used to run inside the enforcement loop: up to 15 seconds in which
+    nothing was blocked and the heartbeat went stale whenever the PC was offline). After a successful sync the time
+    is anchored to the monotonic clock, so changing the Windows clock later has no effect; a jump of the wall clock
+    is detected and triggers a new sync."""
+    SYNC_EVERY = 600.0
+
+    def __init__(self):
         self.online = False
-        self._fetch = fetch or online_time
-        self._next = 0.0
+        self._anchor_real = None          # trusted epoch time at the last sync
+        self._anchor_mono = None          # monotonic time at the last sync
+        self._last_try = 0.0              # monotonic time of the last attempt
         self._busy = False
+        self._wall_ref = (time.time(), time.monotonic())
 
-    def _work(self):
+    def _sync(self):
         try:
-            on = self._fetch()
-        except Exception:
-            on = None
-        t = time.time()
-        if on:
-            self.offset = on - t
-            self.online = True
-            self._next = t + 600
-        else:
-            self._next = t + 120          # offline: try again sooner, keep the last known offset
-        self._busy = False
+            t0 = time.monotonic()
+            on = online_time()
+            t1 = time.monotonic()
+            if on:
+                self._anchor_real = on + (t1 - t0) / 2.0
+                self._anchor_mono = t1
+                self._wall_ref = (time.time(), time.monotonic())
+                self.online = True
+        finally:
+            self._busy = False
 
     def now(self):
-        t = time.time()
-        if t >= self._next and not self._busy:
+        mono, wall = time.monotonic(), time.time()
+        jumped = abs((wall - self._wall_ref[0]) - (mono - self._wall_ref[1])) > 5.0
+        gap = mono - self._last_try
+        if not self._busy and (self._last_try == 0.0 or gap > self.SYNC_EVERY or (jumped and gap > 30.0)):
             self._busy = True
-            threading.Thread(target=self._work, daemon=True).start()
-        return t + self.offset
+            self._last_try = mono
+            threading.Thread(target=self._sync, daemon=True).start()
+        if self._anchor_real is None:
+            return wall
+        return self._anchor_real + (mono - self._anchor_mono)
 
-
-_LOCK_HANDLE = []        # keeps the guard's lock file open for the life of the process
-
-
-def acquire_guard_lock(home):
-    """Exclusive lock held by the running guard (released by the OS when the process dies). Returns True when
-    this process is the only guard. Two guards used to be possible when the UI, the watchdog and the sign-in
-    entry started one at the same moment."""
-    try:
-        path = Path(home) / "guard.lock"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        fd = os.open(str(path), os.O_RDWR | os.O_CREAT, 0o600)
-    except OSError:
-        return True                      # cannot even create it: do not lock the user out of enforcement
-    try:
-        if sys.platform == "win32":
-            import msvcrt
-            if os.fstat(fd).st_size == 0:
-                os.write(fd, b"1")
-            os.lseek(fd, 0, 0)
-            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
-        else:
-            import fcntl
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        os.close(fd)
-        return False
-    except Exception:
-        os.close(fd)
-        return True
-    _LOCK_HANDLE.append(fd)
-    return True
-
-
-def _is_guard_process(pid):
-    """True unless we can positively tell that `pid` is NOT a VOIDLOCK guard (a recycled PID)."""
-    try:
-        cmd = psutil.Process(pid).cmdline()
-    except psutil.NoSuchProcess:
-        return False
-    except Exception:                    # AccessDenied: an elevated guard - cannot be read, cannot be stopped either
-        return True
-    return "--guard" in cmd
+    @property
+    def offset(self):
+        return self.now() - time.time()
 
 
 # ------------------------------------------------------------------ autostart (Windows)
@@ -264,6 +234,11 @@ def persist_protection(enable, store):
     watchdog_task(enable, store)
 
 
+def persist_protection_async(enable, store):
+    """Task Scheduler / registry calls take a moment: keep them off the UI thread."""
+    threading.Thread(target=persist_protection, args=(enable, store), daemon=True).start()
+
+
 def admin_guard_install(store):
     """Run ELEVATED (UAC). Creates a logon task that starts the guard with administrator rights, which is
     needed for website blocking (hosts file) and for closing programs that run as administrator."""
@@ -352,17 +327,60 @@ def _persist_windows(store, known):
 
 def release_locks_direct(store, exes=(), windows=()):
     """Remove locks / lock hours (file level). Used by the guard on a release request, and by the UI
-    when the guard is not running."""
+    when the guard is not running. A file that cannot be read is left untouched (writing it back from an empty read
+    would have dropped every other lock)."""
     exes = {e.lower() for e in exes}
     wins = set(windows)
-    for p in (store.p_locks, store.p_locks_guard):
-        d = read_json(p, {}) or {}
-        locks = [l for l in d.get("locks", []) if l.get("exe", "").lower() not in exes]
-        write_json(p, {"version": 1, "locks": locks})
+    if exes:
+        for p in (store.p_locks, store.p_locks_guard):
+            status, d = read_json_checked(p)
+            if status == "missing":
+                continue
+            if status != "ok" or not isinstance(d, dict):
+                continue
+            locks = [l for l in d.get("locks", []) if str(l.get("exe", "")).lower() not in exes]
+            write_json(p, {"version": 1, "locks": locks})
     if wins:
         for p in (store.p_windows, store.p_windows_guard):
-            d = read_json(p, {}) or {}
+            status, d = read_json_checked(p)
+            if status != "ok" or not isinstance(d, dict):
+                continue
             write_json(p, {"version": 1, "windows": [w for w in d.get("windows", []) if w.get("id") not in wins]})
+
+
+def _rd(path):
+    """A JSON file as a dict, always (a damaged file must never stop the enforcement loop)."""
+    d = read_json(path, None)
+    return d if isinstance(d, dict) else {}
+
+
+def acquire_instance_lock(store):
+    """Only one guard may enforce at a time (the old heartbeat check could be raced by the watchdog, the sign-in
+    start and the UI starting a guard in the same second). Returns an open file handle to keep, False when locking is
+    not possible here (then we simply run), or None when another guard already holds the lock."""
+    try:
+        fh = open(store.home / "guard.lock", "a+")
+    except OSError:
+        return False
+    try:
+        if sys.platform == "win32":
+            import msvcrt
+            fh.seek(0, 2)
+            if fh.tell() == 0:
+                fh.write("1")
+                fh.flush()
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return fh
+    except OSError as e:
+        import errno
+        if isinstance(e, (BlockingIOError, PermissionError)) or e.errno in (errno.EACCES, errno.EAGAIN, 36):
+            fh.close()
+            return None
+        return False
 
 
 RANK = {"lock": 3, "session": 2, "window": 1}
@@ -381,17 +399,13 @@ def _show_box(title, body):
 def run_guard(home=None, interval=1.0):
     store = Store(home, service=True)
     pid = os.getpid()
-    for _try in range(15):               # a guard that is being replaced needs a moment to let go
-        if acquire_guard_lock(store.home):
-            break
-        time.sleep(0.2)
-    else:
-        return                           # another guard is already running
-    old = read_json(store.p_status, {}) or {}
-    if old.get("pid") and old["pid"] != pid and psutil.pid_exists(old["pid"]) \
-            and time.time() - old.get("heartbeat", 0) < HEARTBEAT_STALE and _is_guard_process(old["pid"]) \
-            and not _LOCK_HANDLE:
-        return                           # (only reached when the lock file could not be used)
+    instance = acquire_instance_lock(store)        # keep the handle: the lock lives as long as this process
+    if instance is None:
+        return
+    old = _rd(store.p_status)
+    if instance is False and old.get("pid") and old["pid"] != pid and psutil.pid_exists(old["pid"]) \
+            and time.time() - old.get("heartbeat", 0) < HEARTBEAT_STALE:
+        return
     started = time.time()
     clock = TrustedClock()
     per_app, denied, errors = {}, set(), []
@@ -401,28 +415,34 @@ def run_guard(home=None, interval=1.0):
     mode = "idle"
     known = {}
     known_w = {}
-    _merge_known(known, (read_json(store.p_locks_guard, {}) or {}).get("locks"))
-    _merge_known(known, (read_json(store.p_locks, {}) or {}).get("locks"))
-    _merge_windows(known_w, (read_json(store.p_windows_guard, {}) or {}).get("windows"))
-    _merge_windows(known_w, (read_json(store.p_windows, {}) or {}).get("windows"))
+    _merge_known(known, _rd(store.p_locks_guard).get("locks"))
+    _merge_known(known, _rd(store.p_locks).get("locks"))
+    _merge_windows(known_w, _rd(store.p_windows_guard).get("windows"))
+    _merge_windows(known_w, _rd(store.p_windows).get("windows"))
     _log(store, f"guard started pid={pid} locks={len(known)} windows={len(known_w)}")
     active = {}
     app_t = {}
     settings, settings_t = dict(DEFAULT_SETTINGS), 0.0
     catalog, catalog_t = [], 0.0
     sites_applied, sites_err, sites_want, sites_t = [], "", frozenset(), 0.0
-    play = (read_json(store.p_play, {}) or {}).get("days", {})
+    play = _rd(store.p_play).get("days", {})
+    if not isinstance(play, dict):
+        play = {}
     play_dirty, play_flush, last_tick = False, time.time(), time.time()
-    attempts = (read_json(store.p_attempts, {}) or {}).get("list", [])
+    attempts = _rd(store.p_attempts).get("list", [])
+    if not isinstance(attempts, list):
+        attempts = []
     last_attempt = {}
-    events = (read_json(store.p_events, {}) or {}).get("list", [])
+    events = _rd(store.p_events).get("list", [])
+    if not isinstance(events, list):
+        events = []
     box_busy = threading.Event()
     playing_now = False
     active_win_names = []
 
     def publish(extra_mode=None):
         write_json(store.p_status, {
-            "pid": pid, "heartbeat": time.time(), "started": started,
+            "pid": pid, "heartbeat": time.time(), "started": started, "version": __version__,
             "mode": extra_mode or mode, "session_id": cur_session,
             "killed": kills_session, "per_app": per_app, "denied": sorted(denied),
             "errors": errors[-5:], "platform": sys.platform, "elevated": _is_admin(),
@@ -450,8 +470,11 @@ def run_guard(home=None, interval=1.0):
         events.append(ev)
         del events[:-20]
         write_json(store.p_events, {"list": events})
-        sounds.play("close", settings.get("sound", "soft"))
-        ui = read_json(store.p_ui_alive, {}) or {}
+        try:
+            sounds.play("close", settings.get("sound", "soft"))
+        except Exception:
+            pass
+        ui = _rd(store.p_ui_alive)
         ui_hidden = time.time() - float(ui.get("t", 0)) > 6 or not ui.get("visible", True)
         if ui_hidden and not box_busy.is_set() and sys.platform == "win32":
             title, body = messages.block_message(settings, name, why)
@@ -463,7 +486,7 @@ def run_guard(home=None, interval=1.0):
         try:
             # ---- session recovery file: only honoured for the session it was meant for
             if store.p_recover.exists():
-                cur = read_json(store.p_session, {}) or {}
+                cur = _rd(store.p_session)
                 try:
                     want = store.p_recover.read_text(encoding="utf-8").strip()
                     mtime = store.p_recover.stat().st_mtime
@@ -492,19 +515,20 @@ def run_guard(home=None, interval=1.0):
             now = time.time()
             # ---- settings + app catalogue (cheap, cached)
             if now - settings_t > 10:
-                settings = {**DEFAULT_SETTINGS, **(read_json(store.p_settings, {}) or {})}
+                settings = sanitize_settings(_rd(store.p_settings))
                 i18n.set_language(settings.get("language", "en"))
                 settings_t = now
             if now - catalog_t > 4:
-                catalog = read_json(store.p_apps, []) or []
+                cat_raw = read_json(store.p_apps, [])
+                catalog = [a for a in cat_raw if isinstance(a, dict)] if isinstance(cat_raw, list) else []
                 catalog_t = now
 
             # ---- release requests (day locks / lock hours)
-            rel = read_json(store.p_release, None)
-            if isinstance(rel, dict) and (rel.get("exes") or rel.get("windows")):
-                for e in rel.get("exes", []):
-                    known.pop(e.strip().lower(), None)
-                for wid in rel.get("windows", []):
+            rel = _rd(store.p_release)
+            if rel.get("exes") or rel.get("windows"):
+                for e in rel.get("exes") or []:
+                    known.pop(str(e).strip().lower(), None)
+                for wid in rel.get("windows") or []:
                     known_w.pop(wid, None)
                 _log(store, f"released: {rel}")
                 try:
@@ -515,7 +539,9 @@ def run_guard(home=None, interval=1.0):
                 _persist_windows(store, known_w)
 
             # ---- day locks (trusted time so the PC clock cannot end them early)
-            file_locks = (read_json(store.p_locks, {}) or {}).get("locks")
+            file_locks = _rd(store.p_locks).get("locks")
+            if not isinstance(file_locks, list):
+                file_locks = []
             _merge_known(known, file_locks)
             for k in [k for k, v in known.items() if v["until"] <= tnow]:
                 known.pop(k)
@@ -531,18 +557,23 @@ def run_guard(home=None, interval=1.0):
             active = {k: v for k, v in known.items() if v["until"] > tnow and not is_protected(k)}
 
             # ---- lock hours
-            file_w = (read_json(store.p_windows, {}) or {}).get("windows")
+            file_w = _rd(store.p_windows).get("windows")
+            if not isinstance(file_w, list):
+                file_w = []
             _merge_windows(known_w, file_w)
-            if {w.get("id") for w in file_w or []} != set(known_w):          # edited / deleted -> restore
+            if {w.get("id") for w in file_w if isinstance(w, dict)} != set(known_w):          # edited / deleted -> restore
                 _persist_windows(store, known_w)
             ldt = datetime.fromtimestamp(tnow)
-            pass_active = float((read_json(store.p_pass, {}) or {}).get("until", 0) or 0) > tnow
+            try:
+                pass_active = float(_rd(store.p_pass).get("until", 0) or 0) > tnow
+            except (TypeError, ValueError):
+                pass_active = False
             wins = list(known_w.values())
             active_win_names = [w.get("name") or "hours" for w in rules.active_windows(wins, ldt)]
             cats = rules.blocked_categories(wins, ldt, pass_active)
 
             # ---- focus session
-            st = read_json(store.p_session, {}) or {}
+            st = _rd(store.p_session)
             state = st.get("state", "idle")
             if st.get("session_id") != cur_session:
                 cur_session = st.get("session_id")
@@ -550,7 +581,7 @@ def run_guard(home=None, interval=1.0):
                 per_app.clear(); denied.clear(); errors.clear()
             ends = float(st.get("ends_at", 0) or 0)
             started_at = float(st.get("started_at", now) or now)
-            if state == "running" and (ends <= now or ends - now > MAX_SESSION_SEC):
+            if state == "running" and (ends <= now or now - started_at > MAX_SESSION_SEC):
                 mode = "expired"
             elif state == "running":
                 mode = "enforcing"
@@ -572,8 +603,8 @@ def run_guard(home=None, interval=1.0):
 
             kind_of = {a["exe"].strip().lower(): a.get("kind", "app") for a in catalog if a.get("exe")}
             if mode == "enforcing":
-                for b in st.get("blocked", []):
-                    if b.get("exe"):
+                for b in st.get("blocked") or []:
+                    if isinstance(b, dict) and b.get("exe"):
                         want(b["exe"], b.get("kind") or kind_of.get(b["exe"].strip().lower(), "app"), b.get("name", b["exe"]), "session")
             for k, v in active.items():
                 want(k, kind_of.get(k, "app"), v.get("name", k), "lock")
@@ -646,6 +677,7 @@ def run_guard(home=None, interval=1.0):
                 return
         except Exception as e:  # never die silently, never lock the user out
             errors.append(f"{type(e).__name__}: {e}")
+            del errors[:-20]
             _log(store, f"error {e!r}")
             try:
                 publish()
@@ -655,9 +687,13 @@ def run_guard(home=None, interval=1.0):
 
 
 def _scan(store, blocked, per_app, denied, errors, now, games):
-    """One pass over running processes. Terminates blocked programs; returns (killed_names, running_games)."""
+    """One pass over running processes. Terminates blocked programs; returns (killed_names, running_games).
+
+    All matching processes get the terminate request first and are then waited for together. (Waiting for every
+    process one by one took up to 0.4 s each: a browser with 30 processes kept the loop busy for 12 s.)"""
     me = os.getpid()
     killed, playing = [], set()
+    victims = []
     for proc in psutil.process_iter(["pid", "name"]):
         try:
             name = (proc.info.get("name") or "").lower()
@@ -667,36 +703,59 @@ def _scan(store, blocked, per_app, denied, errors, now, games):
                 if name in games:
                     playing.add(name)
                 continue
-            rec = per_app[name]
+            rec = per_app.get(name)
+            if rec is None:
+                continue
             try:
                 proc.terminate()
-                try:
-                    proc.wait(0.4)
-                except psutil.TimeoutExpired:
-                    proc.kill()
-                rec["killed"] += 1
-                rec["last"] = now
-                rec["denied"] = False
-                denied.discard(name)
-                if name not in killed:
-                    killed.append(name)
-                _log(store, f"terminated {name} pid={proc.info['pid']}")
+                victims.append((proc, name))
             except psutil.AccessDenied:
-                rec["denied"] = True
-                denied.add(name)
-                if name in games:
-                    playing.add(name)          # still running = still playing (honest)
-                msg = f"permission denied for {name}"
-                if msg not in errors:
-                    errors.append(msg)
-                    _log(store, msg)
+                _mark_denied(store, rec, denied, errors, name, name in games, playing)
             except psutil.NoSuchProcess:
                 pass
-        except (psutil.NoSuchProcess, psutil.ZombieProcess):
+        except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):
             continue
-        except psutil.AccessDenied:
-            continue
+    if victims:
+        _gone, alive = psutil.wait_procs([p for p, _n in victims], timeout=0.6)
+        for p in alive:
+            try:
+                p.kill()
+            except psutil.NoSuchProcess:
+                pass
+            except psutil.AccessDenied:
+                pass
+        if alive:
+            psutil.wait_procs(alive, timeout=0.4)
+        for p, name in victims:
+            rec = per_app[name]
+            try:
+                still = p.is_running() and p.status() != psutil.STATUS_ZOMBIE
+            except (psutil.NoSuchProcess, psutil.ZombieProcess):
+                still = False
+            except psutil.AccessDenied:
+                still = True
+            if still:
+                _mark_denied(store, rec, denied, errors, name, name in games, playing)
+                continue
+            rec["killed"] += 1
+            rec["last"] = now
+            rec["denied"] = False
+            denied.discard(name)
+            if name not in killed:
+                killed.append(name)
+            _log(store, f"terminated {name} pid={p.pid}")
     return killed, playing
+
+
+def _mark_denied(store, rec, denied, errors, name, is_game, playing):
+    rec["denied"] = True
+    denied.add(name)
+    if is_game:
+        playing.add(name)          # still running = still playing (honest)
+    msg = f"permission denied for {name}"
+    if msg not in errors:
+        errors.append(msg)
+        _log(store, msg)
 
 
 def _is_admin():
@@ -718,14 +777,34 @@ class GuardClient:
         self.launched_at = 0.0
         self.launch_error = None
         self.attempts = 0
+        self._swapped = False
+
+    @staticmethod
+    def _enforcing_session(st):
+        return st.get("mode") in ("enforcing", "paused")
 
     def status(self):
-        st = read_json(self.store.p_status, {}) or {}
+        st = _rd(self.store.p_status)
         pid = st.get("pid")
-        alive = bool(pid) and psutil.pid_exists(pid) and \
-            time.time() - st.get("heartbeat", 0) < HEARTBEAT_STALE and st.get("mode") != "exited"
+        try:
+            alive = bool(pid) and psutil.pid_exists(pid) and \
+                time.time() - float(st.get("heartbeat", 0)) < HEARTBEAT_STALE and st.get("mode") != "exited"
+        except (TypeError, ValueError):
+            alive = False
         st["alive"] = alive
         return st
+
+    def trusted_now(self):
+        """Internet-corrected time as the guard sees it (falls back to the PC clock when the guard is offline).
+        Used wherever the UI creates something that the guard later measures with its own trusted clock - a day lock
+        or a play pass - so moving the Windows clock cannot make them longer or shorter."""
+        st = self.status()
+        try:
+            if st.get("alive") and st.get("clock_online"):
+                return time.time() + float(st.get("clock_offset", 0.0))
+        except (TypeError, ValueError):
+            pass
+        return time.time()
 
     def _cmd(self):
         return command_line(self.store)
@@ -738,8 +817,13 @@ class GuardClient:
             # example it was started before the admin task existed). It can not block websites, so swap it.
             wrong_rights = (sys.platform == "win32" and self.store.p_admin_flag.exists()
                             and not st.get("elevated") and time.time() - self.launched_at > 120)
-            if not wrong_rights:
+            # After an update the old guard keeps running the old code until it ends. Swap it once, when idle.
+            stale_code = (st.get("version") != __version__ and not self._swapped
+                          and not self._enforcing_session(st) and time.time() - self.launched_at > 30)
+            if not (wrong_rights or stale_code):
                 return False
+            if stale_code:
+                self._swapped = True
             self.stop()
             time.sleep(1.0)
         if self.store.p_admin_flag.exists() and sys.platform == "win32":
@@ -788,9 +872,9 @@ class GuardClient:
             return False, str(e)
 
     def stop(self):
-        st = read_json(self.store.p_status, {}) or {}
+        st = _rd(self.store.p_status)
         pid = st.get("pid")
-        if pid and pid != os.getpid() and psutil.pid_exists(pid) and _is_guard_process(pid):
+        if pid and psutil.pid_exists(pid):
             try:
                 psutil.Process(pid).terminate()
             except Exception:
@@ -803,8 +887,9 @@ class GuardClient:
             write_json(self.store.p_release, {"exes": exes, "windows": list(windows), "t": time.time()})
         else:
             release_locks_direct(self.store, exes, windows)
-            if not (read_json(self.store.p_locks_guard, {}) or {}).get("locks") and \
-                    not (read_json(self.store.p_windows_guard, {}) or {}).get("windows"):
+            if not _rd(self.store.p_locks_guard).get("locks") and \
+                    not _rd(self.store.p_windows_guard).get("windows") and \
+                    not self.store.settings.get("play_tracking", True):
                 persist_protection(False, self.store)
         self.store.refresh_locks()
         self.store.refresh_windows()
@@ -832,11 +917,11 @@ class GuardClient:
 def emergency_recover(store: Store):
     """Out-of-band recovery of a *session*: clears it and stops the guard. Day locks are not
     cleared here - they have their own (slower) release path."""
-    sid = (read_json(store.p_session, {}) or {}).get("session_id")
+    sid = _rd(store.p_session).get("session_id")
     write_json(store.p_session, {"state": "idle", "recovered": True, "session_id": sid})
     try:
         store.p_recover.write_text(sid or "", encoding="utf-8")
     except OSError:
         pass
-    if not (read_json(store.p_locks_guard, {}) or {}).get("locks"):
+    if not _rd(store.p_locks_guard).get("locks"):
         GuardClient(store).stop()

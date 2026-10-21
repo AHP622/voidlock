@@ -24,35 +24,57 @@ def default_home():
     return Path.home() / ".voidlock"
 
 
+def read_json_checked(path, retries=4):
+    """Returns (status, data). status: 'ok' | 'missing' | 'corrupt' | 'error'.
+    'error' means the file exists but could not be read (for example another process holds it for a moment
+    on Windows). It is NOT the same as 'missing': callers must never treat it as 'no data'."""
+    last = None
+    for attempt in range(retries):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return "ok", json.load(f)
+        except FileNotFoundError:
+            return "missing", None
+        except ValueError:
+            return "corrupt", None
+        except OSError as e:               # PermissionError / sharing violation: retry briefly
+            last = e
+            time.sleep(0.04 * (attempt + 1))
+    return "error", last
+
+
 def read_json(path, default=None):
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, ValueError):
-        return default
+    status, data = read_json_checked(path)
+    return data if status == "ok" else default
 
 
 def write_json(path, data):
-    """Atomic write so the guard never reads a half-written file."""
+    """Atomic write so the guard never reads a half-written file. The temp name is unique per process, so the
+    UI and the guard can never trample each other's temp file."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    # unique temp name: the UI and the guard process may write the same file at the same moment
-    tmp = path.with_name(f"{path.name}.{os.getpid()}.{uuid.uuid4().hex[:6]}.tmp")
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
     try:
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=1)
+            f.flush()
+            try:
+                os.fsync(f.fileno())
+            except OSError:
+                pass
         for attempt in range(8):
             try:
                 os.replace(tmp, path)
                 return
-            except PermissionError:  # Windows: reader / antivirus holds the file for a moment
+            except PermissionError:  # Windows: reader holds the file for a moment
                 time.sleep(0.03 * (attempt + 1))
         os.replace(tmp, path)
-    finally:
+    except BaseException:
         try:
             tmp.unlink()
         except OSError:
             pass
+        raise
 
 
 CATEGORIES = ["Games", "Launchers", "Social", "Media", "Browsers", "Sites", "Other"]
@@ -127,6 +149,134 @@ def uid():
     return uuid.uuid4().hex[:10]
 
 
+_INT_RANGES = {
+    "daily_goal_min": (15, 720), "default_minutes": (1, 480), "emergency_cooldown": (5, 300),
+    "points_per_day": (1, 50), "streak_bonus": (0, 500), "play_tolerance_min": (0, 120),
+    "daily_tests_goal": (5, 1000), "long_cooldown": (5, 3600),
+}
+_ENUMS = {"reduce_motion": ("auto", "on", "off"), "language": ("en", "fa"), "theme": ("void", "candy", "ocean"),
+          "sound": ("off", "soft", "bell"), "week_start": (5, 6, 0)}
+_BOOLS = ("female_mascot", "strict_default", "play_tracking", "game_friday_only", "update_check", "update_auto_install")
+# never taken from an imported file: they decide where code comes from
+_NOT_IMPORTED = ("update_repo", "update_last_check", "update_last_tag")
+
+
+def sanitize_settings(s):
+    """Hand-edited / imported / older settings can hold values the UI cannot show (it would crash while building the
+    Settings page). Put every value back into its valid range. Unknown keys are kept."""
+    out = dict(DEFAULT_SETTINGS)
+    out.update(s if isinstance(s, dict) else {})
+    for k, (lo, hi) in _INT_RANGES.items():
+        try:
+            out[k] = max(lo, min(hi, int(out[k])))
+        except (TypeError, ValueError):
+            out[k] = DEFAULT_SETTINGS[k]
+    for k, allowed in _ENUMS.items():
+        if out.get(k) not in allowed:
+            out[k] = DEFAULT_SETTINGS[k]
+    for k in _BOOLS:
+        out[k] = bool(out.get(k))
+    for k in ("target_field", "custom_message", "last_subject", "update_repo"):
+        if not isinstance(out.get(k), str):
+            out[k] = ""
+    ex = out.get("exam_date")
+    if not (isinstance(ex, (list, tuple)) and len(ex) == 3 and all(isinstance(x, int) and not isinstance(x, bool) for x in ex)
+            and 1300 <= ex[0] <= 1500 and 1 <= ex[1] <= 12 and 1 <= ex[2] <= 31):
+        out["exam_date"] = list(DEFAULT_SETTINGS["exam_date"])
+    else:
+        out["exam_date"] = list(ex)
+    rs = out.get("recent_subjects")
+    out["recent_subjects"] = [x for x in rs if isinstance(x, str)][:6] if isinstance(rs, list) else []
+    try:
+        out["update_last_check"] = float(out.get("update_last_check", 0))
+    except (TypeError, ValueError):
+        out["update_last_check"] = 0
+    return out
+
+
+def clean_apps(apps, dedupe=False):
+    """Every app needs id / name / exe / category / enabled. Entries that cannot work are dropped."""
+    out, seen = [], set()
+    for a in apps if isinstance(apps, list) else []:
+        if not isinstance(a, dict):
+            continue
+        exe = str(a.get("exe") or "").strip()
+        if not exe or "/" in exe or "\\" in exe:
+            continue
+        if dedupe:
+            if exe.lower() in seen:
+                continue
+            seen.add(exe.lower())
+        d = dict(a)
+        d["exe"] = exe
+        d["name"] = str(a.get("name") or exe).strip()[:60] or exe
+        d["category"] = a.get("category") if a.get("category") in CATEGORIES else "Other"
+        d["enabled"] = bool(a.get("enabled"))
+        d["custom"] = bool(a.get("custom"))
+        d["path"] = a.get("path") if isinstance(a.get("path"), str) else ""
+        d["id"] = str(a.get("id") or uid())
+        if d.get("kind") not in (None, "site", "app"):
+            d.pop("kind")
+        out.append(d)
+    return out
+
+
+def clean_schedule(items):
+    out = []
+    for e in items if isinstance(items, list) else []:
+        try:
+            if not isinstance(e, dict):
+                continue
+            day = int(e["day"])
+            h, m = str(e["time"]).split(":")
+            h, m, mins = int(h), int(m), int(e["minutes"])
+            if not (0 <= day <= 6 and 0 <= h <= 23 and 0 <= m <= 59 and mins >= 1):
+                continue
+        except (KeyError, TypeError, ValueError):
+            continue
+        d = dict(e)
+        d.update(day=day, time=f"{h:02d}:{m:02d}", minutes=mins)
+        d.setdefault("id", uid())
+        d.setdefault("subject", "")
+        d.setdefault("enabled", True)
+        out.append(d)
+    return out
+
+
+def clean_presets(items):
+    out = []
+    for p in items if isinstance(items, list) else []:
+        try:
+            if not isinstance(p, dict):
+                continue
+            d = dict(p)
+            d["minutes"] = max(1, min(480, int(p["minutes"])))
+            d["name"] = str(p.get("name") or f"{d['minutes']} min")[:24]
+            d["strict"] = bool(p.get("strict"))
+            d["id"] = str(p.get("id") or uid())
+        except (KeyError, TypeError, ValueError):
+            continue
+        out.append(d)
+    return out
+
+
+def clean_history(items):
+    out = []
+    for r in items if isinstance(items, list) else []:
+        try:
+            if not isinstance(r, dict):
+                continue
+            d = dict(r)
+            d["start"] = float(r["start"])
+            d["focus_sec"] = max(0, int(r.get("focus_sec", 0)))
+            d["planned_min"] = max(0, int(r.get("planned_min", 0)))
+            d.setdefault("status", "ended")
+        except (KeyError, TypeError, ValueError):
+            continue
+        out.append(d)
+    return out
+
+
 class Store:
     """JSON persistence. Data lives in the user profile (never inside the program folder), so
     updating or rebuilding the app never resets it. Every start also writes a rolling backup,
@@ -161,6 +311,7 @@ class Store:
         self.p_log = self.home / "guard.log"
         self.backup_dir = self.home / "backups"
         self.notices = []                   # human-readable things that happened while loading
+        self.unreadable = set()             # files that exist but could not be read right now (never overwritten)
         self.load_error = None
         self.settings = dict(DEFAULT_SETTINGS)
         self.apps, self.history, self.schedule, self.presets, self.locks = [], [], [], [], []
@@ -174,25 +325,21 @@ class Store:
 
     # ---- robust reading
     def _read(self, path, kind):
-        """Returns data of type `kind`, or None when missing. Corrupt files are quarantined and
-        restored from the newest backup that has a valid copy."""
-        if not path.exists():
+        """Returns data of type `kind`, or None when missing / unreadable. Only genuinely corrupt files are quarantined
+        and restored from the newest backup that has a valid copy. A file that is merely locked for a moment is left
+        alone (it used to be treated as corrupt, which replaced fresh data with an old backup)."""
+        status, data = read_json_checked(path)
+        if status in ("missing", "error"):
+            if status == "error":
+                self.unreadable.add(path.name)
             return None
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if isinstance(data, kind):
-                return data
-        except (OSError, ValueError):
-            pass
+        if status == "ok" and isinstance(data, kind):
+            return data
         if self.service:
             return None
         try:
             bad = path.with_name(path.name + f".corrupt-{int(time.time())}")
             path.replace(bad)
-            old = sorted(path.parent.glob(path.name + ".corrupt-*"))
-            for extra in old[:-5]:          # keep the 5 newest quarantined copies
-                extra.unlink(missing_ok=True)
         except OSError:
             pass
         for b in self.list_backups():
@@ -207,19 +354,22 @@ class Store:
 
     def load(self):
         s = self._read(self.p_settings, dict)
-        self.settings = {**DEFAULT_SETTINGS, **(s or {})}
+        self.settings = sanitize_settings(s)
         apps = self._read(self.p_apps, list)
-        if apps is None:
+        if not apps:
             apps = [self._default_app(n, e, c, en) for n, e, c, en in DEFAULT_APPS]
-            if not self.service:
+            # defaults are only written when there is really no file (never over one that was just locked)
+            if not self.service and "apps.json" not in self.unreadable and not self.p_apps.exists():
                 write_json(self.p_apps, apps)
-        self.apps = [a for a in apps if isinstance(a, dict) and a.get("exe") and a.get("name")]
-        self.history = [r for r in (self._read(self.p_history, list) or []) if isinstance(r, dict)]
-        self.schedule = [e for e in (self._read(self.p_schedule, list) or []) if isinstance(e, dict)]
-        pre = self._read(self.p_presets, list)
-        if pre is None:
+        elif not self.service:
+            apps = clean_apps(apps)
+        self.apps = apps
+        self.history = clean_history(self._read(self.p_history, list) or [])
+        self.schedule = clean_schedule(self._read(self.p_schedule, list) or [])
+        pre = clean_presets(self._read(self.p_presets, list))
+        if not pre:
             pre = [dict(x) for x in DEFAULT_PRESETS]
-            if not self.service:
+            if not self.service and "presets.json" not in self.unreadable and not self.p_presets.exists():
                 write_json(self.p_presets, pre)
         self.presets = pre
         st = self._read(self.p_study, dict)
@@ -305,79 +455,81 @@ class Store:
         if not src.is_dir():
             return False
         self.snapshot("before-restore", force=True)
+        wait = int(self.settings.get("long_cooldown", 600))
         for f in DATA_FILES:
             if (src / f).exists():
                 shutil.copy2(src / f, self.home / f)
         self.load()
+        self._keep_commitments(wait)
         return True
 
     def export_all(self):
         return {"voidlock_export": SCHEMA, "settings": self.settings, "apps": self.apps,
                 "history": self.history, "schedule": self.schedule, "presets": self.presets, "study": self.study}
 
+    def commitments_active(self):
+        """True while a day lock or lock hours exist: things that must not be made easier from the settings."""
+        return bool(self.active_locks() or self.windows)
+
+    def _keep_commitments(self, wait):
+        """A restore / import brings back older settings. While locks exist the release wait may only grow."""
+        if self.commitments_active() and int(self.settings.get("long_cooldown", 600)) < int(wait):
+            self.settings["long_cooldown"] = int(wait)
+            self.save_settings()
+
     def import_all(self, data):
-        """Replaces data from an export. Locks are never imported (they cannot be removed this way)."""
+        """Replaces data from an export. Locks are never imported (they cannot be removed this way). Everything is
+        validated first; the update source is never taken from a file (it decides where program code comes from)."""
         if not isinstance(data, dict) or "voidlock_export" not in data:
             return False
         self.snapshot("before-import", force=True)
+        wait = int(self.settings.get("long_cooldown", 600))
         if isinstance(data.get("settings"), dict):
-            self.settings = {**DEFAULT_SETTINGS, **data["settings"]}
+            keep = {k: self.settings.get(k) for k in _NOT_IMPORTED if k in self.settings}
+            self.settings = sanitize_settings({**DEFAULT_SETTINGS, **data["settings"], **keep})
         if isinstance(data.get("apps"), list):
-            good = [a for a in data["apps"] if isinstance(a, dict) and isinstance(a.get("exe"), str)
-                    and isinstance(a.get("name"), str) and a["exe"].strip()]
-            if good:
-                for a in good:
-                    a.setdefault("id", uid()); a.setdefault("category", "Other")
-                    a.setdefault("enabled", False); a.setdefault("custom", True); a.setdefault("path", "")
-                self.apps = good
+            apps = clean_apps(data["apps"], dedupe=True)
+            if apps:
+                self.apps = apps
         if isinstance(data.get("history"), list):
-            self.history = [r for r in data["history"] if isinstance(r, dict) and "start" in r]
+            self.history = clean_history(data["history"])
         if isinstance(data.get("schedule"), list):
-            self.schedule = [e for e in data["schedule"] if isinstance(e, dict) and "day" in e and "time" in e]
+            self.schedule = clean_schedule(data["schedule"])
         if isinstance(data.get("presets"), list):
-            pres = [p for p in data["presets"] if isinstance(p, dict) and "minutes" in p and "name" in p]
-            if pres:
-                self.presets = pres
+            pre = clean_presets(data["presets"])
+            if pre:
+                self.presets = pre
         if isinstance(data.get("study"), dict):
             self.study = data["study"]
+        self._keep_commitments(wait)
         for f in (self.save_study, self.save_settings, self.save_apps, self.save_history, self.save_schedule, self.save_presets):
             f()
         return True
 
     # ---- multi-day locks
+    def _read_list(self, path, key, current):
+        """Lock files are shared with the guard. If one is momentarily unreadable we keep the list we already have
+        instead of pretending there are no locks (which used to make the next write drop the other locks)."""
+        status, data = read_json_checked(path)
+        if status == "missing":
+            return []
+        if status == "ok":
+            return data.get(key, []) if isinstance(data, dict) and isinstance(data.get(key, []), list) else []
+        return current
+
     def refresh_locks(self):
-        data = read_json(self.p_locks, {})
-        self.locks = data.get("locks", []) if isinstance(data, dict) else []
+        self.locks = self._read_list(self.p_locks, "locks", self.locks)
 
     def active_locks(self, now=None):
-        now = now or self.trusted_now()
+        now = now or time.time()
         return [l for l in self.locks if float(l.get("until", 0)) > now]
-
-    def trusted_now(self):
-        """Internet-corrected time when the guard has one, otherwise the PC clock. Used for things a changed
-        PC clock should not be able to fake (lock length, 'Fridays only')."""
-        t = time.time()
-        checked, off = getattr(self, "_toff", (0.0, 0.0))
-        if t - checked > 5 or t < checked:                 # re-read status.json at most every 5 s
-            off = 0.0
-            st = read_json(self.p_status, {}) or {}
-            try:
-                if st.get("clock_online") and t - float(st.get("heartbeat", 0)) < 30:
-                    o = float(st.get("clock_offset", 0))
-                    if abs(o) < 14 * 86400:
-                        off = o
-            except (TypeError, ValueError):
-                pass
-            self._toff = (t, off)
-        return t + off
 
     def lock_for(self, exe, now=None):
         exe = exe.lower()
         return next((l for l in self.active_locks(now) if l["exe"].lower() == exe), None)
 
     def refresh_windows(self):
-        data = read_json(self.p_windows, {})
-        self.windows = data.get("windows", []) if isinstance(data, dict) else []
+        self.windows = self._read_list(self.p_windows, "windows", self.windows)
 
     def add_window(self, w):
         """Lock hours can be added freely; removing/shortening them goes through the release flow."""
@@ -473,7 +625,10 @@ def focus_by_day(history):
     for r in history:
         d = _day(r)
         if d:
-            out[d] = out.get(d, 0) + int(r.get("focus_sec", 0))
+            try:
+                out[d] = out.get(d, 0) + int(r.get("focus_sec", 0))
+            except (TypeError, ValueError):
+                pass
     return out
 
 

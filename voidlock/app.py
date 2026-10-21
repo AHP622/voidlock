@@ -14,7 +14,7 @@ from . import __version__
 from . import messages, rules, sounds, updater
 from .core import Scanner, SessionController, UpdateWorker
 from . import i18n
-from .guard import GuardClient, admin_task_outdated, child_env, emergency_recover, is_protected, persist_protection
+from .guard import GuardClient, admin_task_outdated, child_env, emergency_recover, is_protected, persist_protection_async
 from .i18n import tr
 from .icons import paint_icon
 from .overlays import Modal, ToastHost, typed_body
@@ -34,19 +34,6 @@ NAV = [("overview", "Overview", "overview"), ("study", "Study Timer", "stopwatch
        ("schedule", "Schedule", "schedule"), ("rewards", "Rewards", "star"),
        ("analytics", "Analytics", "analytics"), ("settings", "Settings", "settings"),
        ("help", "Help", "book")]
-
-
-def set_keep_awake(on):
-    """Windows: while on, the PC does not go to sleep from inactivity (the screen may still turn off).
-    Used while the study stopwatch runs. Must be called from the same (UI) thread each time."""
-    if sys.platform != "win32":
-        return False
-    try:
-        ES_CONTINUOUS, ES_SYSTEM_REQUIRED = 0x80000000, 0x00000001
-        ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | (ES_SYSTEM_REQUIRED if on else 0))
-        return True
-    except Exception:
-        return False
 
 
 class NavButton(QAbstractButton):
@@ -330,11 +317,7 @@ class MainWindow(QMainWindow):
         self._last_event_t = time.time()
         self._popups = []
         self._last_hb = 0.0
-        self._last_study_hb = 0.0
-        self._last_tick = time.time()
-        self._awake = False
         self._last_sched = 0.0
-        self._last_upd_check = time.time()
         self._last_points = 0.0
         self.running, self.scan_ready, self.scan_error = set(), False, None
         s = store.settings
@@ -398,7 +381,8 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(7000, lambda: self.check_updates(False))
         QTimer.singleShot(9000, self._check_admin_task)
         if self.store.active_locks() or self.store.windows or self.store.settings.get("play_tracking", True):
-            QTimer.singleShot(2500, lambda: persist_protection(True, self.store))   # exe may have moved/rebuilt
+            QTimer.singleShot(2500, lambda: persist_protection_async(True, self.store))   # exe may have moved/rebuilt
+        QTimer.singleShot(20000, self.guard.ensure)      # swaps a guard that still runs older code after an update
         QTimer.singleShot(3500, self.process_points)
 
     # ------------------------------------------------------------ window chrome
@@ -453,7 +437,6 @@ class MainWindow(QMainWindow):
                 e.ignore()
                 return
         self.study.heartbeat()
-        set_keep_awake(False)
         self.scanner.stop()
         self.store.snapshot("exit")
         super().closeEvent(e)
@@ -494,26 +477,12 @@ class MainWindow(QMainWindow):
         self.store.refresh_windows()
         self.session.tick()
         now = time.time()
-        gap, self._last_tick = now - self._last_tick, now
-        if gap > 90 and self.study.active():
-            # the PC slept / hibernated: the stopwatch must not count the time it was asleep
-            self.study.stop(now - gap)
-            self.toast("The PC was asleep - the stopwatch stopped when it went to sleep.", "warn")
-            self.after_study_change()
-        want_awake = bool(self.study.active())             # stopwatch running -> do not let the PC doze off
-        if want_awake != self._awake:
-            self._awake = want_awake
-            set_keep_awake(want_awake)
         if now - self._last_hb > 2:
             self._last_hb = now
             # visible=False when minimised or hidden: the guard then shows its own box so the message is not lost
             write_json(self.store.p_ui_alive, {"t": now, "visible": bool(self.isVisible() and not self.isMinimized())})
-        if self.study.active() and now - self._last_study_hb > 20:
-            self._last_study_hb = now
-            self.study.heartbeat(now)
-        if now - self._last_upd_check > 3600:          # long-running app: look for updates again (6 h throttle inside)
-            self._last_upd_check = now
-            self.check_updates(False)
+            if self.study.active() and int(now) % 10 < 2:
+                self.study.heartbeat(now)
         self._poll_events()
         if now - self._last_points > 3600:
             self._last_points = now
@@ -522,11 +491,12 @@ class MainWindow(QMainWindow):
             self.pages[self.current_key()].refresh()
         if self.study.active():
             self._check_goal()
-        dnow = datetime.now()
-        self.topbar.clock.setText(i18n.fmt_clock_line(dnow))
-        if now - self._last_sched >= 15:               # (the old "second % 15" test could be skipped by timer jitter)
-            self._last_sched = now
-            self._check_schedule(dnow)
+        now = datetime.now()
+        self.topbar.clock.setText(i18n.fmt_clock_line(now))
+        # (a QTimer drifts: "second % 15 == 0" could be skipped several times in a row)
+        if time.monotonic() - self._last_sched >= 15 or self._first:
+            self._last_sched = time.monotonic()
+            self._check_schedule(now)
 
     def _on_changed(self):
         prot = self.session.protection()
@@ -664,8 +634,8 @@ class MainWindow(QMainWindow):
         fa = self.PHRASES_FA.get(phrase, phrase)
         shown = fa if i18n.is_fa() else phrase
         holder = {}
-        body = typed_body(tr(f"Type {phrase} to confirm") if not i18n.is_fa() else f"برای تأیید «{fa}» (یا {phrase}) را تایپ کنید",
-                          shown, lambda: holder["m"].revalidate())
+        prompt = tr(f"Type {phrase} to confirm") if not i18n.is_fa() else f"برای تأیید «{fa}» (یا {phrase}) را تایپ کنید"
+        body = typed_body(prompt, shown, lambda: holder["m"].revalidate())
         ok = lambda: body.edit.text().strip().upper() == phrase or body.edit.text().strip() == fa
         m = self.new_modal().build(title, message, body, confirm, "Keep focusing", True,
                                   validator=ok, cooldown=cool, icon=icon)
@@ -734,8 +704,12 @@ class MainWindow(QMainWindow):
                 if self.current_key() in ("overview", "apps"):
                     self.pages[self.current_key()].refresh()
 
+    def trusted_today(self):
+        """Today's date on the guard's internet-corrected clock (the PC clock when offline)."""
+        return datetime.fromtimestamp(self.guard.trusted_now()).date()
+
     def process_points(self):
-        res = self.points.process_days()
+        res = self.points.process_days(self.trusted_today())
         gained = sum(p for _d, _k, p in res)
         if gained > 0:
             days = sum(1 for _d, k, _p in res if k == "clean")
@@ -784,7 +758,7 @@ class MainWindow(QMainWindow):
         if not m.exec_modal():
             return False
         w = self.store.add_window(form.values())
-        persist_protection(True, self.store)
+        persist_protection_async(True, self.store)
         self.guard.attempts = 0
         self.guard.ensure()
         self.session.changed.emit()
@@ -847,7 +821,8 @@ class MainWindow(QMainWindow):
         if not m.exec_modal():
             return None
         d = hostsmod.normalize(ed.text())
-        name = ed.property("nm") if (ed.property("nm") and d in [x for _n, x in hostsmod.PRESETS]) else d
+        name = next((n for n, dom in hostsmod.PRESETS if dom == d), d)      # the chip text used to stay behind when the
+        #                                                                     address was edited afterwards
         from .store import uid
         a = {"id": uid(), "name": name, "exe": d, "category": "Sites", "kind": "site", "enabled": True,
              "custom": True, "path": ""}
@@ -870,7 +845,8 @@ class MainWindow(QMainWindow):
     def disable_admin_guard(self):
         if self.confirm("Remove the administrator guard?", "Website blocking stops working until you enable it again.",
                         "Remove", True, "warn"):
-            self.toast("Accept the Windows prompt to remove the administrator guard.", "info")
+            self.store.p_admin_flag.unlink(missing_ok=True)
+            self.toast("Removed. If Windows asks, accept it to delete the task.", "info")
             self.guard.stop()
             try:
                 import ctypes
@@ -907,7 +883,7 @@ class MainWindow(QMainWindow):
         s["update_last_check"] = time.time()
         self.store.save_settings()
         if info and info["tag"] == s.get("update_last_tag"):
-            info = None
+            self.update_info = None
             self._set_update_status("The latest release has the same version number as this app. Bump __version__ before tagging.")
             return
         self.update_info = info
@@ -995,10 +971,11 @@ class MainWindow(QMainWindow):
             lay.addWidget(label("Warning: this includes a web browser you may need for studying.", 12,
                                 color=T.amber, wrap=True))
 
+        trusted = self.guard.trusted_now()      # the PC clock can be wrong on purpose; the guard measures with its own
+
         def base_until(a):
-            now_t = self.store.trusted_now()          # a changed PC clock must not shorten a lock
-            cur = self.store.lock_for(a["exe"], now_t)
-            return max(now_t, float(cur["until"])) if (cur and extend) else now_t
+            cur = self.store.lock_for(a["exe"], trusted)
+            return max(trusted, float(cur["until"])) if (cur and extend) else trusted
 
         def upd(_v=None):
             until = base_until(apps[0]) + days.value() * 86400
@@ -1016,7 +993,7 @@ class MainWindow(QMainWindow):
             a["enabled"] = True
         self.store.save_apps()
         self.store.refresh_locks()
-        persist_protection(True, self.store)
+        persist_protection_async(True, self.store)
         self.guard.attempts = 0
         self.guard.ensure()
         self.session.sync_rules()
@@ -1056,7 +1033,10 @@ class MainWindow(QMainWindow):
         for e in self.store.schedule:
             if not e.get("enabled", True):
                 continue
-            h, m = [int(x) for x in e["time"].split(":")]
+            try:
+                h, m = [int(x) for x in e["time"].split(":")]
+            except (KeyError, TypeError, ValueError):
+                continue
             for add in range(8):
                 d = (now + timedelta(days=add)).replace(hour=h, minute=m, second=0, microsecond=0)
                 if d.weekday() == e["day"] and d > now:
@@ -1069,25 +1049,29 @@ class MainWindow(QMainWindow):
         return f"{i18n.day_name(d.weekday())} {i18n.digits(e['time'])}" + (f" · {e['subject']}" if e.get("subject") else "") + " · " + tr(f"{e['minutes']} min")
 
     def _check_schedule(self, now):
-        if self._sched_busy:
-            return
+        if self._sched_busy or self.root.findChildren(Modal):
+            return                                  # never stack a dialog on top of another one
         today = now.date().isoformat()
         for e in self.store.schedule:
-            if not e.get("enabled", True) or e["day"] != now.weekday() or e.get("last_fired") == today:
-                continue
-            h, m = [int(x) for x in e["time"].split(":")]
-            due = now.replace(hour=h, minute=m, second=0, microsecond=0)
-            if 0 <= (now - due).total_seconds() <= 180:
-                e["last_fired"] = today
-                self.store.save_schedule()
-                if self.session.active:
-                    self.toast(f"Scheduled session “{e.get('subject') or 'Focus'}” skipped - a session is running.", "warn")
-                    return
-                self._sched_busy = True
-                try:
-                    if self.confirm("Scheduled session", f"{e.get('subject') or 'Focus session'} · {e['minutes']} min is due now.",
-                                    "Start now", False, "schedule"):
-                        self.start_session(e["minutes"], e.get("subject", ""), False)
-                finally:
-                    self._sched_busy = False
+            try:
+                if not e.get("enabled", True) or e["day"] != now.weekday() or e.get("last_fired") == today:
+                    continue
+                h, m = [int(x) for x in e["time"].split(":")]
+                due = now.replace(hour=h, minute=m, second=0, microsecond=0)
+                if not 0 <= (now - due).total_seconds() <= 180:
+                    continue
+            except (KeyError, TypeError, ValueError):
+                continue                            # a broken entry must not stop the others
+            e["last_fired"] = today
+            self.store.save_schedule()
+            if self.session.active:
+                self.toast(f"Scheduled session “{e.get('subject') or 'Focus'}” skipped - a session is running.", "warn")
                 return
+            self._sched_busy = True
+            try:
+                if self.confirm("Scheduled session", f"{e.get('subject') or 'Focus session'} · {e['minutes']} min is due now.",
+                                "Start now", False, "schedule"):
+                    self.start_session(e["minutes"], e.get("subject", ""), False)
+            finally:
+                self._sched_busy = False
+            return

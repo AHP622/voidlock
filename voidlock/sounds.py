@@ -46,8 +46,10 @@ def _wav_file(kind, vol):
     import tempfile
     path = os.path.join(tempfile.gettempdir(), f"voidlock_{kind}_{int(vol * 100)}.wav")
     if not os.path.exists(path) or os.path.getsize(path) == 0:
-        with open(path, "wb") as f:
+        tmp = f"{path}.{os.getpid()}.tmp"          # written whole, then renamed: the guard and the UI both use it
+        with open(tmp, "wb") as f:
             f.write(wav_bytes(kind, vol))
+        os.replace(tmp, path)
     return path
 
 

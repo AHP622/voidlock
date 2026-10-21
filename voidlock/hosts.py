@@ -68,12 +68,18 @@ def build_block(domains):
 
 
 def apply_to_text(text, domains):
-    """Return `text` with our block replaced (or removed when there are no domains)."""
+    """Return `text` with our block replaced (or removed when there are no domains). The file keeps its own line
+    endings (the Windows hosts file uses CRLF; mixing them confuses some editors and tools)."""
     pat = re.compile(re.escape(BEGIN) + r".*?" + re.escape(END) + r"\r?\n?", re.S)
     base = pat.sub("", text)
+    crlf = "\r\n" in text
+    nl = "\r\n" if crlf else "\n"
     if base and not base.endswith("\n"):
-        base += "\n"
-    return base + (build_block(domains) if domains else "")
+        base += nl
+    block = build_block(domains) if domains else ""
+    if crlf:
+        block = block.replace("\n", "\r\n")
+    return base + block
 
 
 def hosts_path():
@@ -95,8 +101,15 @@ def write_hosts(domains, path=None, flush=True):
         if path.exists() and not bak.exists():
             bak.write_bytes(raw)
         tmp = path.with_name(path.name + ".voidlock.tmp")
-        tmp.write_bytes(new.encode("utf-8", errors="surrogateescape"))
-        os.replace(tmp, path)
+        try:
+            tmp.write_bytes(new.encode("utf-8", errors="surrogateescape"))
+            os.replace(tmp, path)
+        except BaseException:
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+            raise
         if flush and sys.platform == "win32":
             subprocess.run(["ipconfig", "/flushdns"], capture_output=True, creationflags=0x08000000)
         return True, "updated"

@@ -296,7 +296,7 @@ FA = {
     "Attempts per day": "تلاش‌ها در هر روز", "Attempts by hour of the day": "تلاش‌ها بر اساس ساعت روز",
     "Most attempts happen around {x} - plan something else for that time (a walk, a snack, a short call).": "بیشترین تلاش‌ها حوالی ساعت {x} است - برای آن زمان کار دیگری برنامه بریزید (پیاده‌روی، یک خوراکی، تماس کوتاه).",
     "No attempts to open blocked programs this week. Great discipline!": "این هفته هیچ تلاشی برای باز کردن برنامه‌های مسدود نبود. انضباط عالی!",
-    "Year overview": "نمای سال", "YEAR OVERVIEW": "نمای سال", "Year overview · {x}": "نمای سال · {x}", "Study hours": "ساعت‌های مطالعه", "Tests solved ": "تست‌های حل‌شده",
+    "Year overview": "نمای سال", "YEAR OVERVIEW": "نمای سال", "Year overview · {x}": "نمای سال · {x}", "Tests solved": "تست‌های حل‌شده",
     "Best day": "بهترین روز", "{num}h": "{num} ساعت", "{num} active days": "{num} روز فعال", "this year": "امسال", "Study hours per month": "ساعت‌های مطالعه در هر ماه", "Tests per month": "تست‌ها در هر ماه",
     "No attempts": "بدون تلاش",
     "FOCUS POINTS": "امتیاز تمرکز", "REWARD SHOP": "فروشگاه جایزه", "YOUR TICKETS": "بلیت‌های شما", "RECENT POINTS": "امتیازهای اخیر",
@@ -384,7 +384,4 @@ FA = {
     "{x} was damaged and was restored from backup {y}.": "فایل {x} آسیب دیده بود و از پشتیبان {y} بازیابی شد.",
     "{x} was damaged and could not be restored; defaults were used.": "فایل {x} آسیب دیده بود و بازیابی نشد؛ مقادیر پیش‌فرض استفاده شد.",
     "Imported your previous data from {x}.": "داده‌های قبلی شما از {x} وارد شد.",
-    # ---------------- 1.2.9
-    "The PC was asleep - the stopwatch stopped when it went to sleep.": "کامپیوتر در حالت خواب بود؛ کرنومتر لحظه‌ی خواب‌رفتن متوقف شد.",
-    "Accept the Windows prompt to remove the administrator guard.": "برای حذف گارد ادمین، پیام ویندوز را تأیید کنید.",
 }

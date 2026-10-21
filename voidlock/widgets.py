@@ -570,7 +570,10 @@ class Stepper(QWidget):
     def __init__(self, value=50, lo=1, hi=999, step=5, suffix="", parent=None):
         super().__init__(parent)
         self.lo, self.hi, self.step, self.suffix = lo, hi, step, suffix
-        self._v = value
+        try:
+            self._v = max(lo, min(hi, int(value)))
+        except (TypeError, ValueError):
+            self._v = lo
         self.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
         lay = QHBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -588,7 +591,7 @@ class Stepper(QWidget):
             b.setAutoRepeatInterval(70)
         self.b_minus.clicked.connect(lambda: self.set_value(self._v - self.step))
         self.b_plus.clicked.connect(lambda: self.set_value(self._v + self.step))
-        self.setFocusPolicy(Qt.FocusPolicy.WheelFocus)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._show()
 
     def value(self):
@@ -610,6 +613,11 @@ class Stepper(QWidget):
         self.b_plus.setEnabled(self._v < self.hi)
 
     def wheelEvent(self, e):
+        # Only when the stepper was clicked into focus. Otherwise the wheel belongs to the page: scrolling Settings
+        # used to change whatever value happened to be under the mouse (even the day-lock release wait).
+        if not self.hasFocus() and not any(b.hasFocus() for b in (self.b_minus, self.b_plus)):
+            e.ignore()
+            return
         self.set_value(self._v + (self.step if e.angleDelta().y() > 0 else -self.step))
 
     def keyPressEvent(self, e):

@@ -12,10 +12,9 @@ DEFAULT_SUBJECTS = [("Math", "#8B5CF6"), ("Physics", "#00C2FF"), ("Chemistry", "
 
 
 def dkey(d):
-    """'YYYY-MM-DD' for a date, a datetime (its date part - the old code returned the full timestamp) or a string."""
     if isinstance(d, str):
-        return d[:10]
-    if isinstance(d, datetime):
+        return d
+    if isinstance(d, datetime):          # datetime is a subclass of date: its isoformat() would carry the time
         return d.date().isoformat()
     return d.isoformat()
 
@@ -26,19 +25,55 @@ class StudyLog:
 
     def __init__(self, store):
         self.store = store
-        st = store.study
+        self._gen = 0                      # bumped by every change made through this class
+        self._ikey, self._idx = None, None
+        self._ensure()
+
+    def _ensure(self):
+        """The study data can be replaced behind our back (reset, restore, import). Missing parts are put back here,
+        on every access, instead of only once at start-up (a reset used to crash the Study page and the Overview)."""
+        st = self.store.study
+        if not isinstance(st, dict):
+            st = self.store.study = {}
+        fresh = "subjects" not in st
         st.setdefault("subjects", [])
         st.setdefault("entries", [])      # {id,date,subject,sec,source,t}
         st.setdefault("tests", {})        # {date: {subject_id: count}}
         st.setdefault("todos", [])        # {id,date,text,done}
         st.setdefault("active", None)     # {subject, started, last_seen}
-        if not st["subjects"]:
+        if fresh and not st["subjects"]:
             st["subjects"] = [{"id": uid(), "name": n, "color": c} for n, c in DEFAULT_SUBJECTS]
             self.save()
+        return st
 
     @property
     def d(self):
-        return self.store.study
+        return self._ensure()
+
+    # ---- per-day totals, built once per change (the Overview asks for them every second; they used to be recomputed
+    # from every entry and every session for every day, which gets slow after months of use)
+    def _index(self):
+        st, hist = self.d, self.store.history
+        key = (id(st["entries"]), len(st["entries"]), id(hist), len(hist),
+               hist[-1].get("id") if hist and isinstance(hist[-1], dict) else None, self._gen)
+        if key == self._ikey:
+            return self._idx
+        ent_day, ent_subj, sess_day = {}, {}, {}
+        for e in st["entries"]:
+            try:
+                k, sec = e["date"], int(e["sec"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            ent_day[k] = ent_day.get(k, 0) + sec
+            ent_subj[(k, e.get("subject"))] = ent_subj.get((k, e.get("subject")), 0) + sec
+        for r in hist:
+            try:
+                k = datetime.fromtimestamp(r["start"]).date().isoformat()
+                sess_day[k] = sess_day.get(k, 0) + int(r.get("focus_sec", 0))
+            except Exception:
+                pass
+        self._ikey, self._idx = key, (ent_day, ent_subj, sess_day)
+        return self._idx
 
     def save(self):
         self.store.save_study()
@@ -54,13 +89,15 @@ class StudyLog:
         color = color or SUBJECT_COLORS[len(self.subjects()) % len(SUBJECT_COLORS)]
         s = {"id": uid(), "name": name.strip(), "color": color}
         self.subjects().append(s)
+        self._gen += 1
         self.save()
         return s
 
     def remove_subject(self, sid):
-        self.d["subjects"] = [s for s in self.subjects() if s["id"] != sid]
         if self.d["active"] and self.d["active"]["subject"] == sid:
-            self.d["active"] = None
+            self.stop()                    # keep the time that was running (it used to be thrown away)
+        self.d["subjects"] = [s for s in self.subjects() if s["id"] != sid]
+        self._gen += 1
         self.save()
 
     # ---- stopwatch (one subject at a time)
@@ -114,6 +151,7 @@ class StudyLog:
         return 0
 
     def _split_over_midnight(self, sid, t0, t1, source):
+        self._gen += 1
         cur = t0
         while cur < t1:
             dt = datetime.fromtimestamp(cur)
@@ -126,23 +164,17 @@ class StudyLog:
     def add_manual(self, d, sid, minutes):
         self.d["entries"].append({"id": uid(), "date": dkey(d), "subject": sid, "sec": int(minutes * 60),
                                   "source": "manual", "t": time.time()})
+        self._gen += 1
         self.save()
 
     # ---- totals (stopwatch/manual entries + finished countdown sessions)
     def day_entries_sec(self, d, sid=None):
         k = dkey(d)
-        return sum(e["sec"] for e in self.d["entries"] if e["date"] == k and (sid is None or e["subject"] == sid))
+        ent_day, ent_subj, _s = self._index()
+        return ent_day.get(k, 0) if sid is None else ent_subj.get((k, sid), 0)
 
     def day_sessions_sec(self, d):
-        k = dkey(d)
-        tot = 0
-        for r in self.store.history:
-            try:
-                if datetime.fromtimestamp(r["start"]).date().isoformat() == k:
-                    tot += int(r.get("focus_sec", 0))
-            except Exception:
-                pass
-        return tot
+        return self._index()[2].get(dkey(d), 0)
 
     def day_sec(self, d, include_running=True, now=None, include_sessions=True):
         """Study time for a day. Focus sessions (Start on Overview) are left out when include_sessions is False."""
@@ -282,8 +314,25 @@ class StudyLog:
 
 
 # ============================================================ play tracking + attempts
+_PLAY_CACHE = {}
+
+
 def play_days(store):
-    return (read_json(store.p_play, {}) or {}).get("days", {})
+    """play.json is written by the guard; reading + parsing it every second (the Rewards page refreshes that often)
+    is wasteful, so it is cached until the file changes."""
+    try:
+        stt = store.p_play.stat()
+        sig = (stt.st_mtime_ns, stt.st_size)
+    except OSError:
+        return {}
+    hit = _PLAY_CACHE.get(str(store.p_play))
+    if hit and hit[0] == sig:
+        return hit[1]
+    data = read_json(store.p_play, {})
+    days = data.get("days", {}) if isinstance(data, dict) else {}
+    days = days if isinstance(days, dict) else {}
+    _PLAY_CACHE[str(store.p_play)] = (sig, days)
+    return days
 
 
 def play_day(store, d):
@@ -291,7 +340,9 @@ def play_day(store, d):
 
 
 def attempts(store):
-    return (read_json(store.p_attempts, {}) or {}).get("list", [])
+    d = read_json(store.p_attempts, {})
+    lst = d.get("list", []) if isinstance(d, dict) else []
+    return [a for a in lst if isinstance(a, dict) and isinstance(a.get("t"), (int, float))]
 
 
 def attempts_report(store, days=7, now=None):
@@ -329,7 +380,9 @@ OLD_GAME_COSTS = {"r_play90": 60, "r_play120": 80}      # earlier defaults, upgr
 class Points:
     def __init__(self, store):
         self.store = store
-        d = read_json(store.p_points, None)
+        # through the store reader: a damaged points file is restored from the newest backup instead of silently
+        # starting again at zero (the backup of points.json existed but was never used)
+        d = store._read(store.p_points, dict)
         if not isinstance(d, dict):
             d = {}
         d.setdefault("balance", 0)
@@ -376,7 +429,10 @@ class Points:
             self.d["last_award"] = (today - timedelta(days=1)).isoformat()   # start counting from today
             self.save()
             return []
-        last = date.fromisoformat(self.d["last_award"])
+        try:
+            last = date.fromisoformat(self.d["last_award"])
+        except (TypeError, ValueError):
+            last = today - timedelta(days=1)
         out = []
         d = last + timedelta(days=1)
         tol = int(s.get("play_tolerance_min", 5)) * 60
@@ -400,7 +456,8 @@ class Points:
                     pts += bonus
                 out.append((d, "clean", pts))
             d += timedelta(days=1)
-        self.d["last_award"] = (today - timedelta(days=1)).isoformat()
+        # never move backwards: setting the PC clock back and forth must not award the same days twice
+        self.d["last_award"] = max(last, today - timedelta(days=1)).isoformat()
         if out:
             self.save()
         return out
@@ -411,8 +468,7 @@ class Points:
 
     def game_day_ok(self, when=None):
         """Play passes can only be used on Fridays (setting 'game_friday_only', on by default)."""
-        if when is None:
-            when = datetime.fromtimestamp(self.store.trusted_now()).date()      # PC clock changes do not count
+        when = when or date.today()
         return when.weekday() == 4 or not self.store.settings.get("game_friday_only", True)
 
     def claim(self, reward_id, when=None):
@@ -448,7 +504,7 @@ def pass_until(store):
 
 
 def start_pass(store, minutes, now=None):
-    now = now or store.trusted_now()
+    now = now or time.time()
     until = max(now, pass_until(store)) + minutes * 60
     write_json(store.p_pass, {"until": until, "minutes": minutes, "started": now})
     return until

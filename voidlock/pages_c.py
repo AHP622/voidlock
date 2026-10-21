@@ -611,7 +611,7 @@ class RewardsPage(Page):
             self.pass_pill.hide()
         self.rule_l.setText(f"{s.get('points_per_day', 5)} points for every day without playing. The play reward (1.5-2 hours) costs "
                             f"a lot of points and can only be used on Fridays. Days when VOIDLOCK was not watching do not count.")
-        sig = (bal, len(P.d["rewards"]), tuple((t["id"], t["used"]) for t in P.d["tickets"]), date.today().weekday(),
+        sig = (bal, len(P.d["rewards"]), tuple((t["id"], t["used"]) for t in P.d["tickets"]), c.trusted_today().weekday(),
                bool(s.get("game_friday_only", True)))
         if sig == self._sig:
             return
@@ -638,7 +638,7 @@ class RewardsPage(Page):
             row.setSpacing(10)
             row.addWidget(IconTile(color=T.violet, size=32, icon=KIND_ICON.get(t["kind"], "gift")))
             row.addWidget(label(t["name"], 13, QFont.Weight.DemiBold), 1)
-            can = t["kind"] != "game" or P.game_day_ok()
+            can = t["kind"] != "game" or P.game_day_ok(c.trusted_today())
             b = Button(("Use now" if can else "Use on Friday") if t["kind"] == "game" else "Mark as used",
                        "primary" if (t["kind"] == "game" and can) else "soft", height=34)
             b.setEnabled(can)
@@ -692,14 +692,14 @@ class RewardsPage(Page):
 
     def use_ticket(self, t):
         if t["kind"] == "game":
-            if not self.P.game_day_ok():
+            if not self.P.game_day_ok(self.ctx.trusted_today()):
                 return self.ctx.toast("Play passes can only be used on Fridays.", "warn")
             if not self.ctx.confirm("Start your play pass?", f"Lock hours for games are lifted for {t['minutes']} minutes starting now. "
                                     f"Multi-day locks and focus sessions still apply.", "Start now", False, "bolt"):
                 return
             if not self.P.use_ticket(t["id"]):
                 return
-            until = studymod.start_pass(self.ctx.store, int(t["minutes"]))
+            until = studymod.start_pass(self.ctx.store, int(t["minutes"]), self.ctx.guard.trusted_now())
             self.ctx.guard.ensure()
             self.ctx.toast(f"Play pass started - {t['minutes']} minutes. Have fun!", "success")
         else:
