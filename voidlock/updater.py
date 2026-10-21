@@ -5,6 +5,7 @@ asset `VoidLock.exe`, verify it against the release's `VoidLock.exe.sha256`, the
 (a running exe can be renamed on Windows) and restart. Nothing is installed without a matching checksum.
 """
 import hashlib
+import http.client
 import json
 import os
 import re
@@ -92,8 +93,52 @@ def check(repo=REPO, timeout=10):
             "size": int(exe.get("size", 0)), "notes": (data.get("body") or "")[:600]}
 
 
-def download(info, dest_dir, progress=None, timeout=30):
-    """Download + verify. Returns the verified file path."""
+def _sha256_file(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _fetch(url, part, expected, progress, timeout):
+    """Append to `part` (resuming after a cut connection when the server allows it). Returns the bytes now on disk."""
+    have = part.stat().st_size if part.exists() else 0
+    if expected and have > expected:
+        part.unlink()
+        have = 0
+    headers = dict(HEADERS)
+    if have:
+        headers["Range"] = f"bytes={have}-"
+    with urlopen(urllib.request.Request(url, headers=headers), timeout=timeout) as r:
+        status = getattr(r, "status", None) or r.getcode()
+        if have and status != 206:               # the server ignored the range: start again from zero
+            have = 0
+        total = expected or (int(r.headers.get("Content-Length", 0) or 0) + have)
+        if total > MAX_DOWNLOAD:
+            raise UpdateError("The update file is unreasonably large - update cancelled.")
+        with open(part, "ab" if have else "wb") as f:
+            while True:
+                chunk = r.read(1 << 16)
+                if not chunk:
+                    break
+                have += len(chunk)
+                if have > MAX_DOWNLOAD:
+                    raise UpdateError("The update file is unreasonably large - update cancelled.")
+                f.write(chunk)
+                if progress and total:
+                    progress(min(99, int(have * 100 / total)))
+    return have
+
+
+def download(info, dest_dir, progress=None, timeout=30, attempts=4):
+    """Download + verify. Returns the verified file path.
+
+    A cut or filtered connection is common (VPN / proxy / flaky network). Python's HTTP client does NOT raise when the
+    body ends early, so the old code only noticed through a checksum mismatch ("update cancelled"). Now the size is
+    checked against the release's file size, a short download is resumed (Range) and the whole thing is retried a few
+    times before giving up."""
+    import time as _t
     dest_dir = Path(dest_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
     try:
@@ -103,37 +148,35 @@ def download(info, dest_dir, progress=None, timeout=30):
         raise UpdateError(f"Could not read the checksum: {e}")
     if not re.fullmatch(r"[0-9a-f]{64}", want):
         raise UpdateError("The checksum file is not a valid SHA-256.")
+    expected = int(info.get("size") or 0)
     part = dest_dir / (ASSET + ".part")
-    h = hashlib.sha256()
-    done = 0
-    try:
-        with urlopen(urllib.request.Request(info["url"], headers=HEADERS), timeout=timeout) as r, open(part, "wb") as f:
-            total = int(r.headers.get("Content-Length", 0) or info.get("size", 0))
-            if total > MAX_DOWNLOAD:
-                raise UpdateError("The update file is unreasonably large - update cancelled.")
-            while True:
-                chunk = r.read(1 << 16)
-                if not chunk:
-                    break
-                if done + len(chunk) > MAX_DOWNLOAD:
-                    raise UpdateError("The update file is unreasonably large - update cancelled.")
-                f.write(chunk)
-                h.update(chunk)
-                done += len(chunk)
-                if progress and total:
-                    progress(int(done * 100 / total))
-    except UpdateError:
+    part.unlink(missing_ok=True)
+    problem = "unknown"
+    for attempt in range(attempts):
+        if attempt:
+            _t.sleep(min(8, 2 * attempt))
+        try:
+            got = _fetch(info["url"], part, expected, progress, timeout)
+        except UpdateError:
+            _fail_cleanup(part)
+            raise
+        except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as e:
+            problem = f"connection problem: {e}"
+            continue                                   # whatever arrived stays in .part and is resumed
+        if expected and got < expected:
+            problem = f"the download was cut off ({got} of {expected} bytes)"
+            continue
+        if _sha256_file(part) == want:
+            break
+        problem = "the file does not match its checksum"
+        _fail_cleanup(part)                            # corrupted in transit: start from zero
+    else:
         _fail_cleanup(part)
-        raise
-    except (urllib.error.URLError, OSError, ValueError) as e:
-        _fail_cleanup(part)
-        raise UpdateError(f"Download failed: {e}")
-    if h.hexdigest() != want:
-        part.unlink(missing_ok=True)
-        raise UpdateError("The downloaded file does not match its checksum - update cancelled.")
+        raise UpdateError(f"The update could not be downloaded safely ({problem}). Nothing was installed. Check the "
+                          f"connection (VPN / proxy) and try again later.")
     with open(part, "rb") as f:
         if f.read(2) != b"MZ":
-            part.unlink(missing_ok=True)
+            _fail_cleanup(part)
             raise UpdateError("The downloaded file is not a Windows program.")
     final = dest_dir / ASSET
     os.replace(part, final)

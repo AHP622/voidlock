@@ -292,9 +292,10 @@ def test_updater():
     good = hashlib.sha256(payload).hexdigest()
 
     class R(io.BytesIO):
-        def __init__(self, data, headers=None):
+        def __init__(self, data, headers=None, status=200):
             super().__init__(data)
             self.headers = headers or {}
+            self.status = status
         def __enter__(self): return self
         def __exit__(self, *a): return False
 
@@ -313,6 +314,48 @@ def test_updater():
             ok(False, "wrong checksum is refused")
         except updater.UpdateError:
             ok(not (d / "VoidLock.exe.part").exists(), "wrong checksum is refused and leaves no partial file")
+        # a connection that ends early WITHOUT an error (what Python's HTTP client does) is resumed
+        big = b"MZ" + bytes(range(256)) * 400
+        good2 = hashlib.sha256(big).hexdigest()
+        calls = []
+
+        def flaky(req, timeout=0):
+            if req.full_url.endswith("sha"):
+                return R((good2 + "  VoidLock.exe").encode())
+            rng = req.headers.get("Range")
+            calls.append(rng)
+            if rng is None:
+                return R(big[:len(big) // 2], {"Content-Length": str(len(big))})          # cut off, no exception
+            start = int(rng.split("=")[1].rstrip("-"))
+            return R(big[start:], {"Content-Length": str(len(big) - start)}, status=206)
+        updater.urlopen = flaky
+        updater.time_sleep = None
+        d2 = tmp()
+        p2 = updater.download({"sha_url": "https://github.com/sha", "url": "https://github.com/exe", "size": len(big)}, d2)
+        ok(p2.read_bytes() == big and calls[0] is None and calls[1] == f"bytes={len(big) // 2}-", "a cut-off download is resumed and verified")
+
+        n = []
+
+        def no_range(req, timeout=0):
+            if req.full_url.endswith("sha"):
+                return R((good2 + "  VoidLock.exe").encode())
+            n.append(1)
+            return R(big[:100] if len(n) == 1 else big, {"Content-Length": str(len(big))})   # ignores Range the second time
+        updater.urlopen = no_range
+        p3 = updater.download({"sha_url": "https://github.com/sha", "url": "https://github.com/exe", "size": len(big)}, tmp())
+        ok(p3.read_bytes() == big, "a server that ignores Range gets a clean restart")
+
+        def corrupt(req, timeout=0):
+            if req.full_url.endswith("sha"):
+                return R((good2 + "  VoidLock.exe").encode())
+            return R(big[:500] + b"X" + big[501:], {"Content-Length": str(len(big))})
+        updater.urlopen = corrupt
+        d4 = tmp()
+        try:
+            updater.download({"sha_url": "https://github.com/sha", "url": "https://github.com/exe", "size": len(big)}, d4, attempts=2)
+            ok(False, "a corrupted file is refused")
+        except updater.UpdateError as e:
+            ok("could not be downloaded safely" in str(e) and not list(d4.glob("*.part")), "a corrupted file is refused after retries and nothing is left behind")
     finally:
         updater.urlopen = real
 

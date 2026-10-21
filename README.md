@@ -36,6 +36,13 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
+## What changed in 1.4.1
+
+- **Update download:** "The downloaded file does not match its checksum" could appear when the connection was cut or filtered (VPN / proxy)
+  - Python's HTTP client does not report a download that ends early. The download is now checked against the release's file size,
+  resumed from where it stopped (Range), restarted when it arrives corrupted, and retried up to 4 times. The message now says what
+  happened. Nothing is installed without a matching SHA-256, as before.
+
 ## What changed in 1.4.0
 
 - **Study log:** every subject now shows its study time for the selected day next to the number of tests (also for past days).
