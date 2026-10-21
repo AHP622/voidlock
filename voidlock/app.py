@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (QAbstractButton, QFrame, QHBoxLayout, QLineEdit, 
                                QVBoxLayout, QWidget)
 
 from . import __version__
+from . import classes as classtools
 from . import messages, rules, sounds, updater
 from .core import Scanner, SessionController, UpdateWorker
 from . import i18n
@@ -27,7 +28,7 @@ from .study import Points, StudyLog
 from .store import Store, fmt_clock, read_json, write_json
 from .theme import Motion, T, font, qc, system_reduced_motion
 from .viz import LockIcon
-from .widgets import AA, AC, AnimWidget, Button, Stepper, Ticker, Toggle, label, reveal, tween
+from .widgets import AA, AC, AnimWidget, Button, Pill, Stepper, Ticker, Toggle, label, reveal, tween
 
 NAV = [("overview", "Overview", "overview"), ("study", "Study Timer", "stopwatch"),
        ("apps", "Application Control", "apps"), ("sessions", "Study Sessions", "sessions"),
@@ -195,6 +196,9 @@ class TopBar(QWidget):
         col.addWidget(self.sub)
         lay.addLayout(col, 1)
         self.title.setMinimumWidth(260)
+        self.class_pill = Pill("", T.violet, px=11)          # next class / class running now (hidden without classes)
+        self.class_pill.setVisible(False)
+        lay.addWidget(self.class_pill)
         self.clock = label("", 12, color=T.text2, mono=True)
         lay.addWidget(self.clock)
         self.pill = StatusPill()
@@ -378,9 +382,13 @@ class MainWindow(QMainWindow):
         set_style(self.store.settings.get("female_mascot", False))
         self.goto("overview", animate=False)
         self._second()
-        QTimer.singleShot(7000, lambda: self.check_updates(False))
+        QTimer.singleShot(7000, lambda: self.check_updates(False, startup=True))
+        self._upd_timer = QTimer(self)                # then again every few hours while the program stays open
+        self._upd_timer.timeout.connect(lambda: self.check_updates(False))
+        self._upd_timer.start(30 * 60 * 1000)
         QTimer.singleShot(9000, self._check_admin_task)
-        if self.store.active_locks() or self.store.windows or self.store.settings.get("play_tracking", True):
+        if (self.store.active_locks() or self.store.windows or self.store.settings.get("play_tracking", True)
+                or any(c.get("enabled", True) for c in self.store.classes)):
             QTimer.singleShot(2500, lambda: persist_protection_async(True, self.store))   # exe may have moved/rebuilt
         QTimer.singleShot(20000, self.guard.ensure)      # swaps a guard that still runs older code after an update
         QTimer.singleShot(3500, self.process_points)
@@ -493,6 +501,10 @@ class MainWindow(QMainWindow):
             self._check_goal()
         now = datetime.now()
         self.topbar.clock.setText(i18n.fmt_clock_line(now))
+        self._check_classes(now)
+        self.update_class_pill(now)
+        if self.current_key() == "schedule" and now.second == 0:
+            self.pages["schedule"].refresh()               # "in 25m" / NOW / DONE stay current
         # (a QTimer drifts: "second % 15 == 0" could be skipped several times in a row)
         if time.monotonic() - self._last_sched >= 15 or self._first:
             self._last_sched = time.monotonic()
@@ -675,8 +687,17 @@ class MainWindow(QMainWindow):
             self.toast("Restarting the enforcement guard…", "info")
 
     def _check_admin_task(self):
-        if admin_task_outdated(self.store):
-            self.toast("The administrator guard points to an older version. Enable it again in Settings, once.", "warn")
+        """The administrator task is only changeable with administrator rights, so an old one (wrong program path, or the
+        pre-1.4 settings that stop it from starting on battery) needs one confirmation to be refreshed."""
+        if not admin_task_outdated(self.store) or getattr(self, "_admin_asked", False):
+            return
+        self._admin_asked = True
+        if self.confirm("Refresh the administrator guard?",
+                        "The administrator guard was set up by an older version. It must be refreshed once so it also starts "
+                        "when the laptop is on battery. Windows will ask for permission.", "Refresh", False, "shield-check"):
+            ok, msg = self.guard.install_admin()
+            self.toast("Refreshing… accept the Windows prompt." if ok else (msg or "Could not start the elevated setup."),
+                       "info" if ok else "error")
 
     def elevate_guard(self):
         ok, msg = self.guard.start_elevated()
@@ -689,6 +710,15 @@ class MainWindow(QMainWindow):
     def celebrate(self, kind="reward"):
         self.confetti.burst()
         self.play_sound("reward" if kind == "reward" else "done")
+
+    def notify_popup(self, title, body, ms=9000):
+        """A small always-on-top card (like the 'program closed' one) plus a toast inside the window."""
+        try:
+            self._popups = [p for p in self._popups if p.isVisible()]
+            self._popups.append(BlockPopup(i18n.tr(title), i18n.tr(body), ms))
+        except Exception:
+            pass
+        self.toast(body, "info")
 
     def _poll_events(self):
         try:
@@ -862,16 +892,21 @@ class MainWindow(QMainWindow):
         if self.current_key() == "settings":
             self.pages["settings"].refresh()
 
-    def check_updates(self, manual=False):
+    UPDATE_EVERY = 3 * 3600          # automatic check interval while the program is open
+
+    def check_updates(self, manual=False, startup=False):
         s = self.store.settings
-        repo = (s.get("update_repo") or "").strip()
-        if not repo:
-            return self.toast("Set the update source (owner/repo) first.", "warn") if manual else None
-        if not manual and (not s.get("update_check") or time.time() - float(s.get("update_last_check", 0)) < 6 * 3600):
-            return
+        if not manual:
+            if not s.get("update_check"):
+                return
+            age = time.time() - float(s.get("update_last_check", 0))
+            if age < (10 * 60 if startup else self.UPDATE_EVERY):
+                return                              # (at start-up: unless we looked very recently)
+            if self.update_info and not startup:
+                return                              # already known; the install / reminder logic handles it
         if self._upd_worker and self._upd_worker.isRunning():
             return
-        w = UpdateWorker("check", repo)
+        w = UpdateWorker("check")
         w.checked.connect(lambda i: self._on_checked(i, manual))
         w.failed.connect(lambda m: self._on_update_failed(m, manual))
         self._upd_worker = w
@@ -893,9 +928,17 @@ class MainWindow(QMainWindow):
                 self.toast("You are up to date.", "success")
             return
         self._set_update_status(f"Version {info['version']} is available.")
-        if s.get("update_auto_install") and not manual:
+        auto = bool(s.get("update_auto_install")) and not manual
+        if s.get("update_notified") != info["tag"]:     # tell the person once per new version
+            s["update_notified"] = info["tag"]
+            self.store.save_settings()
+            self.notify_popup("UPDATE AVAILABLE",
+                              (f"Version {info['version']} is out. Installing it now - VOIDLOCK will restart."
+                               if auto else f"Version {info['version']} is out. Open Settings to install it."))
+            self.play_sound("done")
+        if auto:
             self.install_update(auto=True)
-        else:
+        elif manual:
             self.toast(f"Update {info['version']} is available. Open Settings to install it.", "info")
 
     def _on_update_failed(self, msg, manual):
@@ -1048,6 +1091,8 @@ class MainWindow(QMainWindow):
         d, e = best
         return f"{i18n.day_name(d.weekday())} {i18n.digits(e['time'])}" + (f" · {e['subject']}" if e.get("subject") else "") + " · " + tr(f"{e['minutes']} min")
 
+    LATE_START_MIN = 30        # a scheduled session is still offered this long after its time (app opened late)
+
     def _check_schedule(self, now):
         if self._sched_busy or self.root.findChildren(Modal):
             return                                  # never stack a dialog on top of another one
@@ -1058,20 +1103,88 @@ class MainWindow(QMainWindow):
                     continue
                 h, m = [int(x) for x in e["time"].split(":")]
                 due = now.replace(hour=h, minute=m, second=0, microsecond=0)
-                if not 0 <= (now - due).total_seconds() <= 180:
+                late = (now - due).total_seconds()
+                if not 0 <= late <= self.LATE_START_MIN * 60:
                     continue
             except (KeyError, TypeError, ValueError):
                 continue                            # a broken entry must not stop the others
             e["last_fired"] = today
             self.store.save_schedule()
+            name = e.get("subject") or "Focus session"
             if self.session.active:
-                self.toast(f"Scheduled session “{e.get('subject') or 'Focus'}” skipped - a session is running.", "warn")
+                self.toast(f"Scheduled session “{name}” skipped - a session is running.", "warn")
+                return
+            if e.get("auto_start"):
+                self.notify_popup("SESSION STARTING", f"{name} · {e['minutes']} min starts now.")
+                self.start_session(e["minutes"], e.get("subject", ""), False)
                 return
             self._sched_busy = True
             try:
-                if self.confirm("Scheduled session", f"{e.get('subject') or 'Focus session'} · {e['minutes']} min is due now.",
-                                "Start now", False, "schedule"):
+                msg = f"{name} · {e['minutes']} min is due now."
+                if late >= 120:
+                    msg = f"{name} · {e['minutes']} min was due {int(late // 60)} minutes ago. Start it now?"
+                if self.confirm("Scheduled session", msg, "Start now", False, "schedule"):
                     self.start_session(e["minutes"], e.get("subject", ""), False)
             finally:
                 self._sched_busy = False
             return
+
+    # ------------------------------------------------------------ classes
+    def _check_classes(self, now):
+        """Reminder N minutes before a class (default 15) and a small note when it begins."""
+        due = classtools.due_reminders(self.store.classes, now)
+        if not due:
+            return
+        for c, kind, left in due:
+            classtools.mark_done(c, kind, now)
+            place = f" · {c['place']}" if c.get("place") else ""
+            if kind == "soon":
+                self.notify_popup("CLASS SOON", i18n.tr(f"{c['name']} starts in {left} minutes") + place, 12000)
+                self.play_sound("done")
+            else:
+                self.toast(i18n.tr(f"{c['name']} is starting now") + place, "info")
+        self.store.save_classes()
+        if self.current_key() == "schedule":
+            self.pages["schedule"].refresh()
+
+    def class_status(self, now=None):
+        """(text, color, tooltip) for the top-bar pill, or None when there are no classes."""
+        now = now or datetime.now()
+        state, c, s, e = classtools.current_or_next(self.store.classes, now)
+        if not state:
+            return None
+        name = c["name"] if len(c["name"]) <= 18 else c["name"][:17] + "…"
+        place = f" · {c['place']}" if c.get("place") else ""
+        if state == "now":
+            return (i18n.tr(f"Class now: {name} · ends in {i18n.fmt_remaining((e - now).total_seconds())}"),
+                    T.green, f"{c['name']}{place}")
+        delta = (s - now).total_seconds()
+        when = (i18n.fmt_in(delta) if delta < 86400
+                else f"{i18n.day_name(s.weekday())} {i18n.digits(s.strftime('%H:%M'))}")
+        color = T.amber if delta <= int(c.get("remind", 15)) * 60 else T.violet
+        return i18n.tr(f"Next class: {name} · {when}"), color, f"{c['name']}{place} · {i18n.digits(s.strftime('%H:%M'))}"
+
+    def update_class_pill(self, now=None):
+        st = self.class_status(now)
+        pill = self.topbar.class_pill
+        if not st:
+            if pill.isVisible():
+                pill.setVisible(False)
+            return
+        text, color, tip = st
+        if getattr(self, "_class_txt", None) != (text, color):
+            self._class_txt = (text, color)
+            pill.set(text, color)
+            pill.setToolTip(tip)
+        if not pill.isVisible():
+            pill.setVisible(True)
+
+    def schedule_summary(self):
+        parts = []
+        st = self.class_status()
+        if st:
+            parts.append(st[0])
+        nxt = self.next_scheduled()
+        if nxt:
+            parts.append(i18n.tr(f"Next session: {nxt}"))
+        return "   ·   ".join(parts) if parts else i18n.tr("Nothing upcoming.")

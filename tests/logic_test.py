@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT))
 
 import psutil  # noqa: E402
 
-from voidlock import guard, hosts, i18n, rules, store as S, study, updater  # noqa: E402
+from voidlock import classes as classtools, guard, hosts, i18n, rules, sounds, store as S, study, updater  # noqa: E402
 
 FAILS = []
 
@@ -71,12 +71,11 @@ def test_sanitize_and_import():
                              "exam_date": [1, 2], "long_cooldown": -5, "update_repo": 7, "play_tracking": 0})
     ok(s["reduce_motion"] == "auto" and s["daily_goal_min"] == 120 and s["theme"] == "void" and s["week_start"] == 5,
        "invalid settings values fall back to valid ones")
-    ok(s["exam_date"] == [1406, 4, 10] and s["long_cooldown"] == 5 and s["update_repo"] == "" and s["play_tracking"] is False,
+    ok(s["exam_date"] == [1406, 4, 10] and s["long_cooldown"] == 5 and "update_repo" not in s and s["play_tracking"] is False,
        "exam date, numbers, strings and booleans are repaired")
 
     d = tmp()
     st = S.Store(d)
-    st.settings["update_repo"] = "me/mine"
     st.settings["long_cooldown"] = 900
     st.add_lock("steam.exe", "Steam", time.time() + 86400)
     st.refresh_locks()
@@ -85,7 +84,7 @@ def test_sanitize_and_import():
             "schedule": [{"day": 9, "time": "99:99", "minutes": 5}, {"day": 2, "time": "7:5", "minutes": 30}],
             "history": [{"start": "x"}, {"start": 1700000000, "focus_sec": "60"}]}
     ok(st.import_all(evil), "import accepted")
-    ok(st.settings["update_repo"] == "me/mine", "an imported file cannot change the update source")
+    ok("update_repo" not in st.settings, "the update source is not a setting any more (and never imported)")
     ok(st.settings["long_cooldown"] == 900, "an import cannot shorten the release wait while a lock exists")
     ok([a["exe"] for a in st.apps] == ["ok.exe"] and st.apps[0]["category"] == "Other" and st.apps[0]["id"], "imported apps are validated")
     ok(len(st.schedule) == 1 and st.schedule[0]["time"] == "07:05", "imported schedule is validated")
@@ -337,7 +336,7 @@ def test_study_and_points():
     st.study = {}
     try:
         sl.day_sec(today); sl.subjects(); sl.streak(); sl.heat(3); sl.todos(today); sl.year_summary(today.year)
-        ok(len(sl.subjects()) == 5, "after a reset the Study log rebuilds itself (used to raise KeyError)")
+        ok(len(sl.subjects()) == 6, "after a reset the Study log rebuilds itself (used to raise KeyError)")
     except KeyError as e:
         ok(False, f"after a reset the Study log rebuilds itself ({e!r})")
     # deleting a subject keeps its running time
@@ -375,6 +374,165 @@ def test_i18n():
         d += timedelta(days=1)
     ok(bad == 0, f"Jalali <-> Gregorian round trip over 25 years ({bad} mismatches)")
     ok(i18n.to_jalali(datetime(2027, 7, 1)) == (1406, 4, 10), "10 Tir 1406 is 2027-07-01")
+
+
+# ------------------------------------------------------------------ 1.4.0
+def test_updater_repo_fixed():
+    ok(updater.REPO == "AHP622/voidlock" and updater.valid_repo(updater.REPO), "the update source is fixed to the project repository")
+    ok("update_repo" not in S.sanitize_settings({"update_repo": "evil/repo"}), "a stored update_repo is dropped on load")
+
+
+def test_task_xml():
+    import xml.etree.ElementTree as ET
+    for logon, highest in ((False, False), (True, True)):
+        x = guard.task_xml('C:\\Program Files\\VoidLock & Co\\VoidLock.exe', '"--guard" "--home" "C:\\Users\\me\\<x>"', logon=logon, highest=highest)
+        root = ET.fromstring(x.replace('encoding="UTF-16"', ""))
+        ns = {"t": "http://schemas.microsoft.com/windows/2004/02/mit/task"}
+        g = lambda path: root.find(path, ns).text
+        ok(g("t:Settings/t:DisallowStartIfOnBatteries") == "false" and g("t:Settings/t:StopIfGoingOnBatteries") == "false",
+           f"task XML allows running on battery (logon={logon})")
+        ok(g("t:Settings/t:ExecutionTimeLimit") == "PT0S" and g("t:Settings/t:StartWhenAvailable") == "true", "task XML has no time limit and catches up")
+        ok(g("t:Principals/t:Principal/t:RunLevel") == ("HighestAvailable" if highest else "LeastPrivilege"), "task XML run level")
+        ok(("LogonTrigger" in x) == logon and ("TimeTrigger" in x) != logon, "task XML trigger")
+        ok(root.find("t:Actions/t:Exec/t:Command", ns).text.endswith("VoidLock.exe") and "<x>" in root.find("t:Actions/t:Exec/t:Arguments", ns).text,
+           "task XML escapes paths")
+
+
+def test_session_rules_only_grow():
+    """The rules of a running session can be added to, never removed (UI frozen set + guard merge)."""
+    from voidlock.core import SessionController
+    d = tmp()
+    st = S.Store(d)
+    for a in st.apps:
+        a["enabled"] = False
+    st.apps[0]["enabled"] = True
+    first = st.apps[0]["exe"]
+
+    class G:
+        launched_at = 0
+        attempts = 0
+        def ensure(self): return True
+        def status(self): return {"alive": True}
+    sc = SessionController(st, G())
+    sc.start(10, "x")
+    ok([b["exe"] for b in sc.blocked_list()] == [first], "session starts with the enabled app")
+    st.apps[0]["enabled"] = False                 # somebody switches it off mid-session
+    st.apps[1]["enabled"] = True
+    sc.sync_rules()
+    sess = json.loads((d / "session.json").read_text(encoding="utf-8"))
+    names = {b["exe"] for b in sess["blocked"]}
+    ok(first in names and st.apps[1]["exe"] in names, "switching an app off mid-session does not unblock it; new ones are added")
+    sc2 = SessionController(st, G())              # restart of the program keeps the frozen rules
+    ok(first in {b["exe"] for b in sc2.blocked_list()}, "after a restart the session keeps its rules")
+
+
+def test_guard_session_rules_merge():
+    if not sys.platform.startswith("linux"):
+        return print("SKIP (needs a Linux sleep binary)")
+    d = tmp()
+    exe = victim_binary(d)
+    home = d / "home"
+    st = S.Store(home)
+    st.settings["play_tracking"] = False
+    st.save_settings()
+    sid = "sess-1"
+    rule = {"exe": "vl_victim", "name": "Victim", "kind": "app"}
+    S.write_json(st.p_session, {"state": "running", "session_id": sid, "started_at": time.time(), "ends_at": time.time() + 600,
+                                "remaining": 600, "planned_sec": 600, "subject": "", "strict": False, "blocked": [rule]})
+    g = subprocess.Popen([sys.executable, str(ROOT / "main.py"), "--guard", "--home", str(home)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        time.sleep(3)
+        S.write_json(st.p_session, {"state": "running", "session_id": sid, "started_at": time.time(), "ends_at": time.time() + 600,
+                                    "remaining": 600, "planned_sec": 600, "subject": "", "strict": False, "blocked": []})   # edited
+        time.sleep(2.5)
+        v = subprocess.Popen([str(exe), "60"])
+        t_end = time.time() + 8
+        while v.poll() is None and time.time() < t_end:
+            time.sleep(0.2)
+        ok(v.poll() is not None, "the guard keeps a session's rules even if the session file is edited")
+    finally:
+        g.kill()
+        for p in psutil.process_iter(["name"]):
+            if p.info["name"] == "vl_victim":
+                p.kill()
+
+
+def test_classes():
+    cl = S.clean_classes([{"id": "1", "name": "Math", "day": 2, "time": "10:00", "minutes": 90, "remind": 15},
+                          {"name": "", "day": 2, "time": "10:00"}, {"name": "x", "day": 9, "time": "10:00"}, "junk",
+                          {"name": "Phys", "day": "1", "time": "8:5", "minutes": "45"}])
+    ok(len(cl) == 2 and cl[1]["time"] == "08:05" and cl[1]["minutes"] == 45 and cl[1]["remind"] == 15, "classes are validated")
+    wed = lambda h, m: datetime(2026, 10, 21, h, m)          # a Wednesday
+    ok(classtools.due_reminders(cl, wed(9, 44)) == [], "no reminder 16 minutes before")
+    r = classtools.due_reminders(cl, wed(9, 45))
+    ok(len(r) == 1 and r[0][1] == "soon" and r[0][2] == 15, "reminder exactly 15 minutes before")
+    classtools.mark_done(r[0][0], "soon", wed(9, 45))
+    ok(classtools.due_reminders(cl, wed(9, 50)) == [], "a reminder fires only once per day")
+    late = classtools.due_reminders(S.clean_classes([{"name": "A", "day": 2, "time": "10:00"}]), wed(9, 58))
+    ok(late and late[0][2] == 2, "a late reminder says the real minutes left")
+    ok(classtools.due_reminders(cl, wed(10, 1))[0][1] == "start" and classtools.due_reminders(cl, wed(10, 5)) == [], "start note within 2 minutes")
+    st_, c, s_, e_ = classtools.current_or_next(cl, wed(10, 30))
+    ok(st_ == "now" and c["name"] == "Math" and e_ == wed(11, 30), "a running class is reported")
+    st_, c, s_, e_ = classtools.current_or_next(cl, wed(11, 31))
+    ok(st_ == "next" and s_ > wed(11, 31), "after the class the next one is next week")
+    cl[0]["enabled"] = False
+    ok(classtools.due_reminders(cl, wed(9, 50)) == [], "a disabled class never reminds")
+    ov = classtools.overlap_names([{"id": "1", "name": "Math", "day": 2, "time": "10:00", "minutes": 90, "enabled": True}], [], 2, "11:00", 60)
+    ok(len(ov) == 1 and not classtools.overlap_names([{"id": "1", "name": "Math", "day": 2, "time": "10:00", "minutes": 60, "enabled": True}], [], 2, "11:00", 60),
+       "overlap detection (touching is not overlapping)")
+
+
+def test_words_and_classes_storage():
+    d = tmp()
+    st = S.Store(d)
+    sl = study.StudyLog(st)
+    eng = next(s for s in sl.subjects() if s["name"] == "English")
+    math = next(s for s in sl.subjects() if s["name"] == "Math")
+    ok(sl.tracks_words(eng) and not sl.tracks_words(math), "language subjects get a words counter")
+    ok(sl.tracks_words(sl.add_subject("زبان تخصصی")) and not sl.tracks_words(sl.add_subject("Geography")) and sl.tracks_words(sl.add_subject("Spanish", words=True)),
+       "name detection and the explicit flag")
+    today = date.today()
+    sl.set_words(today, eng["id"], 40)
+    sl.set_words(today - timedelta(days=1), eng["id"], 25)
+    ok(sl.day_words(today) == 40 and sl.year_words(today.year) >= 40 and sl.year_summary(today.year)["words"] >= 40, "words are counted per day and year")
+    sl.set_words(today, eng["id"], 0)
+    ok(sl.day_words(today) == 0, "zero removes the entry")
+    st.classes = S.clean_classes([{"name": "Math", "day": 1, "time": "09:00"}])
+    st.save_classes()
+    st2 = S.Store(d)
+    ok(len(st2.classes) == 1, "classes persist")
+    exp = st2.export_all()
+    st3 = S.Store(tmp())
+    ok(st3.import_all(exp) and len(st3.classes) == 1, "classes are part of export / import")
+    st3.snapshot("x", force=True)
+    st3.reset_all()
+    ok(st3.classes == [], "reset clears classes")
+
+
+def test_apply_days():
+    from voidlock.pages_b import apply_days
+    items = [{"id": "a", "day": 2, "time": "10:00", "minutes": 30, "last_fired": "2026-10-21"}]
+    mk = lambda d, b: {"id": f"n{d}", "day": d, **b}
+    c, u = apply_days(items, None, {"days": [0, 1, 3], "time": "08:00", "minutes": 20}, mk)
+    ok(c == 3 and u == 0 and len(items) == 4, "new entry for several days at once")
+    e = items[0]
+    c, u = apply_days(items, e, {"days": [2, 5], "time": "10:00", "minutes": 45}, mk)
+    ok(u == 1 and c == 1 and e["day"] == 2 and e["minutes"] == 45 and e["last_fired"] == "2026-10-21", "editing keeps its day and adds a copy; an unchanged time keeps last_fired")
+    c, u = apply_days(items, e, {"days": [6], "time": "10:00", "minutes": 45}, mk)
+    ok(e["day"] == 6 and e["last_fired"] == "" and c == 0, "unticking its own day moves the entry")
+
+
+def test_sounds_and_themes():
+    ok(all(k in sounds.STYLES for k in sounds.STYLE_ORDER if k != "off"), "every sound style exists")
+    ok(all(len(sounds.wav_bytes(k, s)) > 2000 for s in sounds.STYLES for k in sounds.KINDS), "every style has every sound")
+    ok(S.sanitize_settings({"sound": "zen"})["sound"] == "zen" and S.sanitize_settings({"sound": "nope"})["sound"] == "soft", "sound setting is validated")
+    try:
+        from voidlock import theme
+        ok(set(theme.THEMES) == set(S.THEME_KEYS) == set(theme.THEME_ORDER) == set(theme.THEME_NAMES), "theme lists agree")
+        need = set(theme.THEMES["void"])
+        ok(all(set(v) == need for v in theme.THEMES.values()), "every theme defines every colour")
+    except ImportError:
+        print("SKIP theme check (no Qt)")
 
 
 if __name__ == "__main__":

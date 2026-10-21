@@ -759,3 +759,110 @@ class ProgressBar(AnimWidget):
             p.setBrush(g)
             left = (r.right() - w) if self.isRightToLeft() else r.left()
             p.drawRoundedRect(QRectF(left, r.top(), w, r.height()), r.height() / 2, r.height() / 2)
+
+
+class ChipGrid(QWidget):
+    """Like Segmented, but wraps into rows (for a longer list of options)."""
+    currentChanged = Signal(int)
+
+    def __init__(self, options, current=0, per_row=5, parent=None):
+        super().__init__(parent)
+        from PySide6.QtWidgets import QGridLayout
+        lay = QGridLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(8)
+        self.chips = []
+        for i, o in enumerate(options):
+            c = Chip(o)
+            c.set_checked_silent(i == current)
+            c.clicked.connect(lambda _=False, i=i: self.set_current(i))
+            lay.addWidget(c, i // per_row, i % per_row)
+            self.chips.append(c)
+        lay.setColumnStretch(per_row, 1)
+        self._cur = current
+
+    def current(self):
+        return self._cur
+
+    def set_current(self, i, emit=True):
+        for k, c in enumerate(self.chips):
+            c.set_checked_silent(k == i)
+        if i != self._cur:
+            self._cur = i
+            if emit:
+                self.currentChanged.emit(i)
+
+
+class ThemePicker(QWidget):
+    """Little preview cards, one per theme (background, panel and accent colours); click one to choose it."""
+    currentChanged = Signal(int)
+
+    def __init__(self, keys, names, current=0, parent=None):
+        super().__init__(parent)
+        from .theme import THEMES
+        self._themes = [THEMES[k] for k in keys]
+        self._names = [names[k] for k in keys]
+        self._cur, self._hover = current, -1
+        self.setMouseTracking(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFixedHeight(78)
+        self._cw, self._gap = 78, 10
+        self.setMinimumWidth(len(keys) * (self._cw + self._gap))
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    def current(self):
+        return self._cur
+
+    def set_current(self, i, emit=True):
+        if i != self._cur:
+            self._cur = i
+            self.update()
+            if emit:
+                self.currentChanged.emit(i)
+
+    def _idx(self, pos):
+        i = int(pos.x() // (self._cw + self._gap))
+        return i if 0 <= i < len(self._themes) and pos.x() % (self._cw + self._gap) <= self._cw else -1
+
+    def mouseMoveEvent(self, e):
+        i = self._idx(e.position())
+        if i != self._hover:
+            self._hover = i
+            self.setToolTip(i18n_tr(self._names[i]) if i >= 0 else "")
+            self.update()
+
+    def leaveEvent(self, e):
+        self._hover = -1
+        self.update()
+
+    def mouseReleaseEvent(self, e):
+        i = self._idx(e.position())
+        if i >= 0:
+            self.set_current(i)
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        p.setRenderHint(AA)
+        for i, th in enumerate(self._themes):
+            x = i * (self._cw + self._gap)
+            r = QRectF(x + 1, 1, self._cw - 2, 52)
+            p.setPen(QPen(qc(T.cyan if i == self._cur else T.border_hi, 1.0 if i == self._cur else 0.7), 2 if i == self._cur else 1))
+            p.setBrush(QColor(th["bg"]))
+            p.drawRoundedRect(r, 10, 10)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor(th["panel"]))
+            p.drawRoundedRect(QRectF(x + 8, 9, self._cw - 16, 22), 6, 6)
+            p.setBrush(QColor(th["cyan"]))
+            p.drawRoundedRect(QRectF(x + 12, 15, 26, 6), 3, 3)
+            p.setBrush(QColor(th["violet"]))
+            p.drawEllipse(QPointF(x + self._cw - 17, 20), 5, 5)
+            p.setBrush(QColor(th["raised"]))
+            p.drawRoundedRect(QRectF(x + 8, 36, self._cw - 16, 10), 5, 5)
+            p.setPen(QColor(T.text if i == self._cur else T.text2))
+            p.setFont(font(11, QFont.Weight.DemiBold if i == self._cur else QFont.Weight.Normal))
+            p.drawText(QRectF(x, 56, self._cw, 18), AC, i18n_tr(self._names[i]))
+
+
+def i18n_tr(s):
+    from .i18n import tr
+    return tr(s)

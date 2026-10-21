@@ -1,5 +1,6 @@
 """Study log (stopwatch, tests, to-dos), play statistics, focus points and attempt reports.
 Pure functions over the Store - no Qt."""
+import re
 import time
 from datetime import date, datetime, timedelta
 
@@ -8,7 +9,9 @@ from .store import read_json, uid, write_json
 
 SUBJECT_COLORS = ["#FF5DA2", "#8B5CF6", "#00C2FF", "#34D399", "#FBBF24", "#FB7185", "#60A5FA", "#F97316"]
 DEFAULT_SUBJECTS = [("Math", "#8B5CF6"), ("Physics", "#00C2FF"), ("Chemistry", "#34D399"),
-                    ("Biology", "#FBBF24"), ("Literature", "#FF5DA2")]
+                    ("Biology", "#FBBF24"), ("Literature", "#FF5DA2"), ("English", "#FB923C")]
+# subjects whose name looks like a language get a "words learned" counter next to the tests counter
+_WORDS_NAME = re.compile(r"english|انگلیسی|زبان|language|vocab|لغت|واژه", re.I)
 
 
 def dkey(d):
@@ -39,6 +42,7 @@ class StudyLog:
         st.setdefault("subjects", [])
         st.setdefault("entries", [])      # {id,date,subject,sec,source,t}
         st.setdefault("tests", {})        # {date: {subject_id: count}}
+        st.setdefault("words", {})        # {date: {subject_id: count}}  (language subjects)
         st.setdefault("todos", [])        # {id,date,text,done}
         st.setdefault("active", None)     # {subject, started, last_seen}
         if fresh and not st["subjects"]:
@@ -85,9 +89,11 @@ class StudyLog:
     def subject(self, sid):
         return next((s for s in self.subjects() if s["id"] == sid), None)
 
-    def add_subject(self, name, color=None):
+    def add_subject(self, name, color=None, words=False):
         color = color or SUBJECT_COLORS[len(self.subjects()) % len(SUBJECT_COLORS)]
         s = {"id": uid(), "name": name.strip(), "color": color}
+        if words:
+            s["words"] = True
         self.subjects().append(s)
         self._gen += 1
         self.save()
@@ -216,6 +222,32 @@ class StudyLog:
     def year_tests(self, year):
         return sum(sum(v.values()) for k, v in self.d["tests"].items() if k.startswith(f"{year}-"))
 
+    # ---- words learned (language subjects)
+    def tracks_words(self, subject):
+        """True for a subject that was marked as a language one, or whose name says so (English, زبان, ...)."""
+        s = subject if isinstance(subject, dict) else self.subject(subject)
+        return bool(s) and (bool(s.get("words")) or bool(_WORDS_NAME.search(str(s.get("name", "")))))
+
+    def word_subjects(self):
+        return [s for s in self.subjects() if self.tracks_words(s)]
+
+    def set_words(self, d, sid, count):
+        day = self.d["words"].setdefault(dkey(d), {})
+        if count <= 0:
+            day.pop(sid, None)
+        else:
+            day[sid] = int(count)
+        if not day:
+            self.d["words"].pop(dkey(d), None)
+        self.save()
+
+    def day_words(self, d, sid=None):
+        day = self.d["words"].get(dkey(d), {})
+        return day.get(sid, 0) if sid else sum(day.values())
+
+    def year_words(self, year):
+        return sum(sum(v.values()) for k, v in self.d["words"].items() if k.startswith(f"{year}-"))
+
     # ---- to-dos
     def todos(self, d):
         return [t for t in self.d["todos"] if t["date"] == dkey(d)]
@@ -287,7 +319,9 @@ class StudyLog:
             if yy == year:
                 tests[mm - 1] += sum(v.values())
         days = sum(1 for k in per_day if self._ym(k, jalali)[0] == year)
-        return {"months": list(zip(sec, tests)), "sec": sum(sec), "tests": sum(tests), "best": best, "active_days": days}
+        words = sum(sum(v.values()) for k, v in self.d["words"].items() if self._ym(k, jalali)[0] == year)
+        return {"months": list(zip(sec, tests)), "sec": sum(sec), "tests": sum(tests), "best": best, "active_days": days,
+                "words": words}
 
     def heat(self, weeks=15, today=None):
         """Matrix [week][weekday Mon..Sun] of study seconds ending with the current week."""

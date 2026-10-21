@@ -153,19 +153,25 @@ class CheckRow(QWidget):
 class CounterRow(QWidget):
     changed = Signal(int)
 
-    def __init__(self, subject, value):
+    def __init__(self, subject, value, kind="tests", bump=10, with_time=True):
         super().__init__()
-        self.v = value
+        self.v, self.bump = value, bump
         lay = QHBoxLayout(self)
         lay.setContentsMargins(0, 2, 0, 2)
         lay.setSpacing(8)
         lay.addWidget(IconTile(subject["name"], subject["color"], 28))
-        lay.addWidget(label(subject["name"], 13), 1)
+        col = QVBoxLayout()
+        col.setSpacing(0)
+        col.addWidget(label(subject["name"] if kind == "tests" else subject["name"] + " · " + i18n.tr("Words"), 13))
+        self.time_l = label("", 11, color=T.text2, mono=True)
+        self.time_l.setVisible(with_time)
+        col.addWidget(self.time_l)
+        lay.addLayout(col, 1)
         self.b_m = Button("", "soft", "minus", "-1", square=34)
         self.val = label(str(value), 16, QFont.Weight.DemiBold, mono=True, align=AC)
         self.val.setMinimumWidth(46)
         self.b_p = Button("", "soft", "plus", "+1", square=34)
-        self.b_10 = Button("+10", "soft", None, "+10", height=34)
+        self.b_10 = Button(f"+{bump}", "soft", None, f"+{bump}", height=34)
         for b in (self.b_m, self.val, self.b_p, self.b_10):
             lay.addWidget(b)
         for b in (self.b_m, self.b_p):
@@ -174,7 +180,11 @@ class CounterRow(QWidget):
             b.setAutoRepeatInterval(70)
         self.b_m.clicked.connect(lambda: self.set(self.v - 1))
         self.b_p.clicked.connect(lambda: self.set(self.v + 1))
-        self.b_10.clicked.connect(lambda: self.set(self.v + 10))
+        self.b_10.clicked.connect(lambda: self.set(self.v + self.bump))
+
+    def set_time(self, sec):
+        """Study time of this subject on the shown day (it used to show only the number of tests)."""
+        self.time_l.setText(fmt_hm(sec) if sec > 0 else "-")
 
     def set(self, v):
         v = max(0, min(9999, v))
@@ -275,7 +285,7 @@ class StudyPage(Page):
         sr.addWidget(self.day_total, 1)
         lg.lay.addLayout(sr)
         lg.lay.addWidget(Divider())
-        lg.lay.addWidget(label("Tests solved", 14, QFont.Weight.DemiBold))
+        lg.lay.addWidget(label("Study time and tests by subject", 14, QFont.Weight.DemiBold))
         self.counters = QVBoxLayout()
         self.counters.setSpacing(2)
         lg.lay.addLayout(self.counters)
@@ -283,6 +293,18 @@ class StudyPage(Page):
         lg.lay.addWidget(self.tests_bar)
         self.tests_l = label("", 12, color=T.text2)
         lg.lay.addWidget(self.tests_l)
+        self.words_box_w = QWidget()                      # language subjects: words learned
+        wl = QVBoxLayout(self.words_box_w)
+        wl.setContentsMargins(0, 6, 0, 0)
+        wl.setSpacing(2)
+        wl.addWidget(Divider())
+        wl.addWidget(label("Words learned", 14, QFont.Weight.DemiBold))
+        self.words = QVBoxLayout()
+        self.words.setSpacing(2)
+        wl.addLayout(self.words)
+        self.words_l = label("", 12, color=T.text2)
+        wl.addWidget(self.words_l)
+        lg.lay.addWidget(self.words_box_w)
         lg.lay.addWidget(Divider())
         lg.lay.addWidget(label("Add study time manually", 14, QFont.Weight.DemiBold))
         self.man_chips = QHBoxLayout()
@@ -299,6 +321,7 @@ class StudyPage(Page):
         self.body.addStretch(1)
         self.man_sid = None
         self.manage = False
+        self.rows, self.word_rows = {}, {}
 
         self.b_add.clicked.connect(self.add_subject)
         self.b_manage.clicked.connect(self.toggle_manage)
@@ -346,10 +369,19 @@ class StudyPage(Page):
 
     def build_log(self):
         clear_layout(self.counters)
+        clear_layout(self.words)
+        self.rows, self.word_rows = {}, {}
         for s in self.sl.subjects():
             cr = CounterRow(s, self.sl.day_tests(self.sel, s["id"]))
             cr.changed.connect(lambda v, s=s: self.set_tests(s["id"], v))
             self.counters.addWidget(cr)
+            self.rows[s["id"]] = cr
+        for s in self.sl.word_subjects():
+            wr = CounterRow(s, self.sl.day_words(self.sel, s["id"]), kind="words", bump=20, with_time=False)
+            wr.changed.connect(lambda v, s=s: self.set_words(s["id"], v))
+            self.words.addWidget(wr)
+            self.word_rows[s["id"]] = wr
+        self.words_box_w.setVisible(bool(self.word_rows))
         clear_layout(self.man_chips)
         subs = self.sl.subjects()
         self.man_sid = subs[0]["id"] if subs and self.man_sid not in {x["id"] for x in subs} else self.man_sid
@@ -395,10 +427,16 @@ class StudyPage(Page):
         lay.setSpacing(10)
         lay.addWidget(ed)
         lay.addWidget(cp)
+        wrow = QHBoxLayout()
+        wrow.addWidget(label("Count words learned (for a language)", 13), 1)
+        wt = Toggle(False)
+        wrow.addWidget(wt)
+        lay.addLayout(wrow)
+        ed.textChanged.connect(lambda t: wt.set_silent(bool(studymod._WORDS_NAME.search(t))))   # English / زبان ...
         m = self.ctx.new_modal().build("Add subject", None, body, "Add", validator=lambda: bool(ed.text().strip()), icon="book")
         ed.textChanged.connect(lambda _t: m.revalidate())
         if m.exec_modal():
-            self.sl.add_subject(ed.text(), cp.color())
+            self.sl.add_subject(ed.text(), cp.color(), words=wt.isChecked())
             self.build_tiles()
             self.build_log()
             self.refresh()
@@ -420,6 +458,11 @@ class StudyPage(Page):
 
     def set_tests(self, sid, v):
         self.sl.set_tests(self.sel, sid, v)
+        self.refresh()
+        self.ctx.after_study_change()
+
+    def set_words(self, sid, v):
+        self.sl.set_words(self.sel, sid, v)
         self.refresh()
         self.ctx.after_study_change()
 
@@ -480,6 +523,10 @@ class StudyPage(Page):
                             + (" · " + i18n.tr("Today") if self.sel == today else ""))
         self.b_next.setEnabled(self.sel < today)
         self.day_total.setText(f"Study time this day: {fmt_hm(sl.day_sec(self.sel, True, now, include_sessions=False))}")
+        for sid, row in getattr(self, "rows", {}).items():
+            row.set_time(sl.subject_day_sec(self.sel, sid, now))
+        if self.word_rows:
+            self.words_l.setText(f"Words this day: {sl.day_words(self.sel)} · year total {sl.year_words(self.sel.year)}")
         tests = sl.day_tests(self.sel)
         tg = int(st.settings.get("daily_tests_goal", 50))
         self.tests_bar.set_value(tests / max(1, tg))

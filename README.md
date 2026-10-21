@@ -36,6 +36,26 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
+## What changed in 1.4.0
+
+- **Study log:** every subject now shows its study time for the selected day next to the number of tests (also for past days).
+- **Words learned:** language subjects (English, زبان ...; or any subject marked "Count words" when it is added) get a words counter like the tests counter; yearly total in Analytics.
+- **Classes:** Schedule -> Add class (name, place, days, time, duration, reminder minutes). The top bar always shows the next class
+  ("Next class: Math in 1h 20m" / "Class now"), a card pops up 15 minutes before (configurable per class) and a note when it starts.
+  If the window is closed the guard shows the reminder.
+- **Schedule tab:** "Today" timeline (classes + sessions, now / in 25m / done / missed), a week summary, add a session or class to
+  several days at once, overlap warnings, optional automatic start, sessions are still offered up to 30 minutes late, editing a
+  time resets only what changed.
+- **Updates:** the repository is fixed (`AHP622/voidlock`); automatic check every 3 hours while open and a notice (once per version).
+- **Themes and sounds:** 6 new themes (Midnight, Forest, Sunset, Graphite + light Paper and Mint) with a visual picker; 7 new sounds
+  (Chime, Marimba, Zen, Crystal, Pulse, Arcade, Drop).
+- **Application Control:** during a session what is blocked can only grow. Apps that were blocked could be switched off mid-session; now the toggle is
+  disabled, "Allow all" is refused, and the guard also keeps a session's rules even if the session file is edited. Restore / Import are refused while a session runs.
+- **Persian:** the "Female character" row and a few other labels were untranslated.
+- **Guard on battery:** the scheduled tasks (watchdog and the administrator guard) were created with the Windows defaults - not started on battery power,
+  stopped when unplugged, killed after 72 hours. They are now registered from an XML definition without those limits. The watchdog is refreshed
+  automatically; the administrator task asks once (Windows prompt) to be refreshed.
+
 ## What changed in 1.3.0 (bug-fix release)
 
 **Data safety**
@@ -89,8 +109,9 @@ To add another language, add a catalog like that file and a code in `i18n.LANGS`
 2. To publish a version: raise `__version__` in `voidlock/__init__.py` (e.g. "1.2.0"), commit, push, then
    `git tag v1.2.0` and `git push origin v1.2.0`. GitHub Actions builds `VoidLock.exe` + `VoidLock.exe.sha256`
    and attaches them to a release. (The workflow refuses a tag that does not match `__version__`.)
-3. In the app: Settings -> Updates -> enter `owner/repo`. It checks on start; with "Install automatically" on it
-   downloads, verifies the SHA-256, swaps the exe and restarts - only when no session is running.
+3. The source is fixed in the program (`updater.REPO` = `AHP622/voidlock`); it is no longer a setting. VOIDLOCK checks
+   when it starts and every 3 hours while it is open, and shows a notice when a new version is out. With "Install
+   automatically" on it downloads, verifies the SHA-256, swaps the exe and restarts - only when no session is running.
 Only files from github.com are accepted and an update without a matching checksum is refused.
 Anyone who can push tags to that repo can ship code to your PC: protect the account with 2FA.
 

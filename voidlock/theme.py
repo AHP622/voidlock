@@ -21,8 +21,40 @@ THEMES = {
                   cyan_dim="#14A090", cyan_end="#38BDF8", violet="#60A5FA", violet_end="#3B82F6",
                   green="#4ADE80", amber="#FACC15", red="#FB7185", on_accent="#03201C", scrim="#020B12",
                   light=False),
+    "forest": dict(bg="#07110C", panel="#0C1B13", panel2="#12251A", raised="#193325", border="#1B3626",
+                   border_hi="#2A5238", text="#E8F5EC", text2="#94B8A3", text3="#5B806B", cyan="#4ADE80",
+                   cyan_dim="#22A659", cyan_end="#A3E635", violet="#2DD4BF", violet_end="#0EA5A0",
+                   green="#86EFAC", amber="#FACC15", red="#FB7185", on_accent="#03170B", scrim="#020A05",
+                   light=False),
+    "sunset": dict(bg="#140A10", panel="#1E1018", panel2="#2A1621", raised="#3A1F2D", border="#3A1F2D",
+                   border_hi="#5B3045", text="#FFEDE6", text2="#D1A3A8", text3="#8E6671", cyan="#FF8A4C",
+                   cyan_dim="#D9622A", cyan_end="#FF5E7E", violet="#C084FC", violet_end="#9B5BE0",
+                   green="#4ADE80", amber="#FBBF24", red="#FF4D6D", on_accent="#1F0A05", scrim="#0A0408",
+                   light=False),
+    "midnight": dict(bg="#0A0B1E", panel="#11132B", panel2="#181B3A", raised="#22264C", border="#232850",
+                     border_hi="#353B73", text="#ECEEFF", text2="#A0A6D6", text3="#666CA0", cyan="#7C9CFF",
+                     cyan_dim="#5472E6", cyan_end="#A78BFA", violet="#F472B6", violet_end="#D6409F",
+                     green="#34D399", amber="#FBBF24", red="#FB7185", on_accent="#070A24", scrim="#04051A",
+                     light=False),
+    "graphite": dict(bg="#0B0B0C", panel="#141416", panel2="#1B1B1E", raised="#25252A", border="#2A2A30",
+                     border_hi="#3C3C45", text="#F0F0F2", text2="#A4A4AE", text3="#6C6C76", cyan="#E5E7EB",
+                     cyan_dim="#9CA3AF", cyan_end="#CBD5E1", violet="#A1A1AA", violet_end="#71717A",
+                     green="#6EE7B7", amber="#FCD34D", red="#F87171", on_accent="#0B0B0C", scrim="#000000",
+                     light=False),
+    "paper": dict(bg="#F6F4EF", panel="#FFFFFF", panel2="#F1EEE7", raised="#E9E5DB", border="#E2DDD0",
+                  border_hi="#CFC8B6", text="#1F2430", text2="#4F5666", text3="#8A8F9C", cyan="#2563EB",
+                  cyan_dim="#1D4FC4", cyan_end="#0EA5E9", violet="#7C3AED", violet_end="#5B21B6",
+                  green="#0E9F6E", amber="#C77700", red="#DC2626", on_accent="#FFFFFF", scrim="#1F2430",
+                  light=True),
+    "mint": dict(bg="#F2FBF7", panel="#FFFFFF", panel2="#E8F6EF", raised="#D9EFE5", border="#CFE8DC",
+                 border_hi="#A9D4C0", text="#11322A", text2="#3F6558", text3="#7FA597", cyan="#0EA37A",
+                 cyan_dim="#0A7F5E", cyan_end="#22C1A0", violet="#6366F1", violet_end="#4F46E5",
+                 green="#16A34A", amber="#CA8A04", red="#E11D48", on_accent="#FFFFFF", scrim="#11322A",
+                 light=True),
 }
-THEME_NAMES = {"void": "Void", "candy": "Candy", "ocean": "Ocean"}
+THEME_ORDER = ("void", "ocean", "midnight", "forest", "sunset", "graphite", "candy", "paper", "mint")
+THEME_NAMES = {"void": "Void", "candy": "Candy", "ocean": "Ocean", "forest": "Forest", "sunset": "Sunset",
+               "midnight": "Midnight", "graphite": "Graphite", "paper": "Paper", "mint": "Mint"}
 
 
 class T:

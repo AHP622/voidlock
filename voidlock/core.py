@@ -61,11 +61,19 @@ class SessionController(QObject):
         self.gstat = {"alive": False}
         self.last_record = None
         self._failed_notified = False
+        self.frozen = {}        # exe(lower) -> rule: what the running session blocks. It can only grow until it ends.
         self.restore()
 
     # ---- helpers
     def blocked_list(self):
-        return [{"exe": a["exe"], "name": a["name"], "kind": a.get("kind", "app")} for a in self.store.enabled_apps()]
+        """Rules for the guard. While a session runs this is the rules it started with plus anything switched on since:
+        turning an app off in Application Control mid-session used to remove it from the block list."""
+        cur = {a["exe"].strip().lower(): {"exe": a["exe"], "name": a["name"], "kind": a.get("kind", "app")}
+               for a in self.store.enabled_apps()}
+        if self.active:
+            self.frozen.update(cur)
+            return list(self.frozen.values())
+        return list(cur.values())
 
     def _write(self, state):
         write_json(self.store.p_session, {
@@ -87,6 +95,7 @@ class SessionController(QObject):
         if self.active:
             return False
         self.session_id = uid()
+        self.frozen = {}
         self.planned = float(minutes * 60)
         self.remaining = self.planned
         self.subject = (subject or "").strip()
@@ -197,6 +206,8 @@ class SessionController(QObject):
         self.planned = float(st.get("planned_sec", 0))
         self.subject = st.get("subject", "")
         self.strict = bool(st.get("strict", False))
+        self.frozen = {str(b["exe"]).strip().lower(): b for b in st.get("blocked") or []
+                       if isinstance(b, dict) and b.get("exe")}
         self.started_at = float(st.get("started_at", time.time()))
         self.ends_at = float(st.get("ends_at", 0))
         self.remaining = float(st.get("remaining", 0))
@@ -311,9 +322,9 @@ class UpdateWorker(QThread):
     downloaded = Signal(str)
     failed = Signal(str)
 
-    def __init__(self, mode, repo="", info=None, dest=None):
+    def __init__(self, mode, repo=None, info=None, dest=None):
         super().__init__()
-        self.mode, self.repo, self.info, self.dest = mode, repo, info, dest
+        self.mode, self.repo, self.info, self.dest = mode, repo or updater.REPO, info, dest
 
     def run(self):
         try:

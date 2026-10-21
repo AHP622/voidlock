@@ -9,8 +9,10 @@ import uuid
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+from .sounds import STYLE_ORDER
+
 SCHEMA = 3
-DATA_FILES = ["settings.json", "apps.json", "history.json", "schedule.json", "presets.json", "study.json"]
+DATA_FILES = ["settings.json", "apps.json", "history.json", "schedule.json", "presets.json", "study.json", "classes.json"]
 BACKUP_ONLY = ["points.json"]      # backed up for crash recovery, never restored/imported by the user
 MAX_BACKUPS = 15
 
@@ -112,7 +114,7 @@ DEFAULT_SETTINGS = {
     "reduce_motion": "auto",     # auto | on | off
     "week_start": 5,             # 0=Mon ... 5=Sat, 6=Sun
     "language": "en",            # en | fa
-    "theme": "void",             # void | candy | ocean
+    "theme": "void",             # see THEME_KEYS
     "sound": "soft",             # off | soft | bell
     "target_field": "",          # shown in the message when a blocked program is closed
     "exam_date": [1406, 4, 10],  # Jalali [year, month, day]
@@ -123,7 +125,6 @@ DEFAULT_SETTINGS = {
     "game_friday_only": True,    # the play pass (1.5-2 h of gaming) can only be used on Fridays
     "play_tolerance_min": 5,     # minutes of play that still count as a "clean" day
     "daily_tests_goal": 50,
-    "update_repo": "",           # GitHub "owner/repo" that publishes releases
     "update_check": True,
     "update_auto_install": True,
     "update_last_check": 0,
@@ -149,16 +150,17 @@ def uid():
     return uuid.uuid4().hex[:10]
 
 
+THEME_KEYS = ("void", "candy", "ocean", "forest", "sunset", "midnight", "graphite", "paper", "mint")   # = theme.THEMES
 _INT_RANGES = {
     "daily_goal_min": (15, 720), "default_minutes": (1, 480), "emergency_cooldown": (5, 300),
     "points_per_day": (1, 50), "streak_bonus": (0, 500), "play_tolerance_min": (0, 120),
     "daily_tests_goal": (5, 1000), "long_cooldown": (5, 3600),
 }
-_ENUMS = {"reduce_motion": ("auto", "on", "off"), "language": ("en", "fa"), "theme": ("void", "candy", "ocean"),
-          "sound": ("off", "soft", "bell"), "week_start": (5, 6, 0)}
+_ENUMS = {"reduce_motion": ("auto", "on", "off"), "language": ("en", "fa"), "theme": THEME_KEYS,
+          "sound": STYLE_ORDER, "week_start": (5, 6, 0)}
 _BOOLS = ("female_mascot", "strict_default", "play_tracking", "game_friday_only", "update_check", "update_auto_install")
 # never taken from an imported file: they decide where code comes from
-_NOT_IMPORTED = ("update_repo", "update_last_check", "update_last_tag")
+_NOT_IMPORTED = ("update_last_check", "update_last_tag", "update_notified")
 
 
 def sanitize_settings(s):
@@ -176,7 +178,8 @@ def sanitize_settings(s):
             out[k] = DEFAULT_SETTINGS[k]
     for k in _BOOLS:
         out[k] = bool(out.get(k))
-    for k in ("target_field", "custom_message", "last_subject", "update_repo"):
+    out.pop("update_repo", None)             # fixed in the program now (updater.REPO)
+    for k in ("target_field", "custom_message", "last_subject"):
         if not isinstance(out.get(k), str):
             out[k] = ""
     ex = out.get("exam_date")
@@ -243,6 +246,38 @@ def clean_schedule(items):
     return out
 
 
+def clean_classes(items):
+    """Weekly classes: {id, name, day 0-6 (Mon=0), time "HH:MM", minutes, remind (minutes before), enabled, place}."""
+    out = []
+    for c in items if isinstance(items, list) else []:
+        try:
+            if not isinstance(c, dict):
+                continue
+            day = int(c["day"])
+            h, m = str(c["time"]).split(":")
+            h, m = int(h), int(m)
+            if not (0 <= day <= 6 and 0 <= h <= 23 and 0 <= m <= 59):
+                continue
+            name = str(c.get("name") or "").strip()[:40]
+            if not name:
+                continue
+        except (KeyError, TypeError, ValueError):
+            continue
+        d = dict(c)
+        try:
+            d["minutes"] = max(5, min(600, int(c.get("minutes", 90))))
+            d["remind"] = max(0, min(180, int(c.get("remind", 15))))
+        except (TypeError, ValueError):
+            d["minutes"], d["remind"] = 90, 15
+        d.update(name=name, day=day, time=f"{h:02d}:{m:02d}", enabled=bool(c.get("enabled", True)),
+                 place=str(c.get("place") or "")[:40])
+        d["id"] = str(c.get("id") or uid())
+        d.setdefault("rem_done", "")
+        d.setdefault("start_done", "")
+        out.append(d)
+    return out
+
+
 def clean_presets(items):
     out = []
     for p in items if isinstance(items, list) else []:
@@ -291,6 +326,7 @@ class Store:
         self.p_history = self.home / "history.json"
         self.p_schedule = self.home / "schedule.json"
         self.p_presets = self.home / "presets.json"
+        self.p_classes = self.home / "classes.json"
         self.p_meta = self.home / "meta.json"
         self.p_session = self.home / "session.json"   # UI -> guard
         self.p_status = self.home / "status.json"     # guard -> UI
@@ -315,6 +351,7 @@ class Store:
         self.load_error = None
         self.settings = dict(DEFAULT_SETTINGS)
         self.apps, self.history, self.schedule, self.presets, self.locks = [], [], [], [], []
+        self.classes = []
         self.windows, self.study = [], {}
         if not service:
             self._import_legacy_if_first_run()
@@ -366,6 +403,7 @@ class Store:
         self.apps = apps
         self.history = clean_history(self._read(self.p_history, list) or [])
         self.schedule = clean_schedule(self._read(self.p_schedule, list) or [])
+        self.classes = clean_classes(self._read(self.p_classes, list) or [])
         pre = clean_presets(self._read(self.p_presets, list))
         if not pre:
             pre = [dict(x) for x in DEFAULT_PRESETS]
@@ -465,7 +503,8 @@ class Store:
 
     def export_all(self):
         return {"voidlock_export": SCHEMA, "settings": self.settings, "apps": self.apps,
-                "history": self.history, "schedule": self.schedule, "presets": self.presets, "study": self.study}
+                "history": self.history, "schedule": self.schedule, "presets": self.presets, "study": self.study,
+                "classes": self.classes}
 
     def commitments_active(self):
         """True while a day lock or lock hours exist: things that must not be made easier from the settings."""
@@ -495,6 +534,8 @@ class Store:
             self.history = clean_history(data["history"])
         if isinstance(data.get("schedule"), list):
             self.schedule = clean_schedule(data["schedule"])
+        if isinstance(data.get("classes"), list):
+            self.classes = clean_classes(data["classes"])
         if isinstance(data.get("presets"), list):
             pre = clean_presets(data["presets"])
             if pre:
@@ -502,7 +543,8 @@ class Store:
         if isinstance(data.get("study"), dict):
             self.study = data["study"]
         self._keep_commitments(wait)
-        for f in (self.save_study, self.save_settings, self.save_apps, self.save_history, self.save_schedule, self.save_presets):
+        for f in (self.save_study, self.save_settings, self.save_apps, self.save_history, self.save_schedule, self.save_presets,
+                  self.save_classes):
             f()
         return True
 
@@ -566,6 +608,9 @@ class Store:
     def save_schedule(self):
         write_json(self.p_schedule, self.schedule)
 
+    def save_classes(self):
+        write_json(self.p_classes, self.classes)
+
     def save_presets(self):
         write_json(self.p_presets, self.presets)
 
@@ -604,7 +649,8 @@ class Store:
 
     def reset_all(self):
         self.snapshot("before-reset", force=True)
-        for p in (self.p_settings, self.p_apps, self.p_history, self.p_schedule, self.p_presets, self.p_study):
+        for p in (self.p_settings, self.p_apps, self.p_history, self.p_schedule, self.p_presets, self.p_study,
+                  self.p_classes):
             try:
                 p.unlink()
             except OSError:

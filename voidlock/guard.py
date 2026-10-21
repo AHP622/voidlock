@@ -21,8 +21,8 @@ from pathlib import Path
 import psutil
 
 from . import hosts as hostsmod
-from . import __version__, i18n, messages, rules, sounds
-from .store import DEFAULT_SETTINGS, Store, read_json, read_json_checked, sanitize_settings, uid, write_json
+from . import __version__, classes as classtools, i18n, messages, rules, sounds
+from .store import DEFAULT_SETTINGS, Store, clean_classes, read_json, read_json_checked, sanitize_settings, uid, write_json
 
 MAX_SESSION_SEC = 12 * 3600        # failsafe: a *session* never enforces longer than this
 IDLE_EXIT_SEC = 45                 # guard quits when there is nothing to enforce
@@ -184,6 +184,12 @@ def _watchdog_vbs(store):
         '    If InStr(t, """until""") > 0 Or InStr(t, """start""") > 0 Then need = True\r\n'
         '  End If\r\n'
         'Next\r\n'
+        'If fso.FileExists(home & "\\classes.json") Then\r\n'
+        '  Set f = fso.OpenTextFile(home & "\\classes.json", 1)\r\n'
+        '  t = f.ReadAll\r\n'
+        '  f.Close\r\n'
+        '  If InStr(t, """enabled"": true") > 0 Then need = True\r\n'
+        'End If\r\n'
         'If fso.FileExists(home & "\\settings.json") Then\r\n'
         '  Set f = fso.OpenTextFile(home & "\\settings.json", 1)\r\n'
         '  t = f.ReadAll\r\n'
@@ -206,18 +212,90 @@ def _watchdog_vbs(store):
     )
 
 
+_NO_WINDOW = 0x08000000
+
+
+def task_xml(command, arguments, logon=False, highest=False):
+    """Task Scheduler definition. The defaults of `schtasks /Create` are wrong for a guard: the task is not started
+    on battery power, is stopped when the charger is unplugged, and is killed after 72 hours. This definition
+    removes all three (a laptop that starts on battery used to come up without a guard until it was plugged in)."""
+    from xml.sax.saxutils import escape
+    trigger = ("<LogonTrigger><Enabled>true</Enabled></LogonTrigger>" if logon else
+               "<TimeTrigger><Repetition><Interval>PT1M</Interval><StopAtDurationEnd>false</StopAtDurationEnd></Repetition>"
+               "<StartBoundary>2024-01-01T00:00:00</StartBoundary><Enabled>true</Enabled></TimeTrigger>")
+    return (
+        '<?xml version="1.0" encoding="UTF-16"?>\n'
+        '<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">'
+        f'<Triggers>{trigger}</Triggers>'
+        '<Principals><Principal id="Author"><LogonType>InteractiveToken</LogonType>'
+        f'<RunLevel>{"HighestAvailable" if highest else "LeastPrivilege"}</RunLevel></Principal></Principals>'
+        '<Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>'
+        '<DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>'
+        '<StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>'
+        '<AllowHardTerminate>true</AllowHardTerminate><StartWhenAvailable>true</StartWhenAvailable>'
+        '<RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable><AllowStartOnDemand>true</AllowStartOnDemand>'
+        '<Enabled>true</Enabled><Hidden>true</Hidden><WakeToRun>false</WakeToRun>'
+        '<ExecutionTimeLimit>PT0S</ExecutionTimeLimit><Priority>6</Priority></Settings>'
+        f'<Actions Context="Author"><Exec><Command>{escape(command)}</Command>'
+        f'<Arguments>{escape(arguments)}</Arguments></Exec></Actions></Task>')
+
+
+def create_task(store, name, xml):
+    """Registers a task from XML. Returns (ok, message)."""
+    f = store.home / f"{name}.task.xml"
+    try:
+        f.write_text(xml, encoding="utf-16")
+        r = subprocess.run(["schtasks", "/Create", "/TN", name, "/XML", str(f), "/F"], capture_output=True, text=True,
+                           creationflags=_NO_WINDOW)
+        return r.returncode == 0, (r.stderr or r.stdout or "").strip()
+    except Exception as e:
+        return False, str(e)
+    finally:
+        try:
+            f.unlink()
+        except OSError:
+            pass
+
+
+def relax_task_power_settings(name):
+    """Fallback for a task created the old way: allow start / keep running on battery, no time limit."""
+    ps = ("Set-ScheduledTask -TaskName '%s' -Settings (New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries "
+          "-DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero))" % name)
+    try:
+        subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps], capture_output=True,
+                       creationflags=_NO_WINDOW, timeout=30)
+    except Exception:
+        pass
+
+
+def task_runs_on_battery(name):
+    """True when the task may start and keep running on battery power. None when it cannot be checked."""
+    try:
+        r = subprocess.run(["schtasks", "/Query", "/TN", name, "/XML"], capture_output=True, text=True,
+                           creationflags=_NO_WINDOW, timeout=20)
+        if r.returncode != 0:
+            return None
+        x = r.stdout
+        return ("<DisallowStartIfOnBatteries>false" in x and "<StopIfGoingOnBatteries>false" in x)
+    except Exception:
+        return None
+
+
 def watchdog_task(enable, store):
     """Windows only. Registers/removes the once-a-minute watchdog (no admin rights needed)."""
     if sys.platform != "win32":
         return False
     try:
-        flags = 0x08000000
+        flags = _NO_WINDOW
         if enable:
             vbs = store.home / "watchdog.vbs"
             vbs.write_text(_watchdog_vbs(store), encoding="utf-16")     # BOM: non-ASCII paths stay intact
-            tr = f'wscript.exe //B //Nologo "{vbs}"'
-            subprocess.run(["schtasks", "/Create", "/TN", TASK_NAME, "/SC", "MINUTE", "/MO", "1", "/TR", tr, "/F"],
-                           capture_output=True, creationflags=flags)
+            ok, _msg = create_task(store, TASK_NAME, task_xml("wscript.exe", f'//B //Nologo "{vbs}"'))
+            if not ok:                                                    # very old Windows: the plain command
+                tr = f'wscript.exe //B //Nologo "{vbs}"'
+                subprocess.run(["schtasks", "/Create", "/TN", TASK_NAME, "/SC", "MINUTE", "/MO", "1", "/TR", tr, "/F"],
+                               capture_output=True, creationflags=flags)
+                relax_task_power_settings(TASK_NAME)
         else:
             subprocess.run(["schtasks", "/Delete", "/TN", TASK_NAME, "/F"], capture_output=True, creationflags=flags)
         return True
@@ -245,11 +323,16 @@ def admin_guard_install(store):
     if sys.platform != "win32":
         return False, "Windows only."
     try:
-        cmd = " ".join(f'"{c}"' for c in command_line(store))
-        r = subprocess.run(["schtasks", "/Create", "/TN", ADMIN_TASK, "/SC", "ONLOGON", "/RL", "HIGHEST", "/TR", cmd, "/F"],
-                           capture_output=True, text=True, creationflags=0x08000000)
-        if r.returncode != 0:
-            return False, (r.stderr or r.stdout or "schtasks failed").strip()
+        parts = command_line(store)
+        args = " ".join(f'"{c}"' for c in parts[1:])
+        ok, msg = create_task(store, ADMIN_TASK, task_xml(parts[0], args, logon=True, highest=True))
+        if not ok:                                                        # fall back to the plain command
+            cmd = " ".join(f'"{c}"' for c in parts)
+            r = subprocess.run(["schtasks", "/Create", "/TN", ADMIN_TASK, "/SC", "ONLOGON", "/RL", "HIGHEST", "/TR", cmd, "/F"],
+                               capture_output=True, text=True, creationflags=_NO_WINDOW)
+            if r.returncode != 0:
+                return False, (r.stderr or r.stdout or msg or "schtasks failed").strip()
+            relax_task_power_settings(ADMIN_TASK)
         store.p_admin_flag.write_text("1", encoding="utf-8")
         GuardClient(store).stop()
         time.sleep(1.0)
@@ -269,7 +352,9 @@ def admin_task_outdated(store):
         if r.returncode != 0:
             return True
         exe = command_line(store)[0].lower()
-        return exe not in r.stdout.lower()
+        if exe not in r.stdout.lower():
+            return True
+        return task_runs_on_battery(ADMIN_TASK) is False       # created by an older version: refuse to start on battery
     except Exception:
         return False
 
@@ -410,6 +495,9 @@ def run_guard(home=None, interval=1.0):
     clock = TrustedClock()
     per_app, denied, errors = {}, set(), []
     kills_session = 0
+    class_seen, class_check = set(), 0.0     # class reminders shown while the VOIDLOCK window is closed
+    has_classes = [False]
+    sess_sid, sess_rules = None, {}        # rules of the running session (merge-only)
     cur_session = None
     idle_since = time.time()
     mode = "idle"
@@ -602,10 +690,18 @@ def run_guard(home=None, interval=1.0):
                     targets[key] = (kind, name, reason)
 
             kind_of = {a["exe"].strip().lower(): a.get("kind", "app") for a in catalog if a.get("exe")}
-            if mode == "enforcing":
+            # Session rules only ever grow while the session runs (the file can be edited, the UI can be tricked: the
+            # guard keeps what it has seen for this session id).
+            sid_now = st.get("session_id") if state in ("running", "paused") else None
+            if sid_now != sess_sid:
+                sess_sid, sess_rules = sid_now, {}
+            if sid_now:
                 for b in st.get("blocked") or []:
                     if isinstance(b, dict) and b.get("exe"):
-                        want(b["exe"], b.get("kind") or kind_of.get(b["exe"].strip().lower(), "app"), b.get("name", b["exe"]), "session")
+                        sess_rules[b["exe"].strip().lower()] = b
+            if mode == "enforcing":
+                for kx, b in sess_rules.items():
+                    want(b["exe"], b.get("kind") or kind_of.get(kx, "app"), b.get("name", b["exe"]), "session")
             for k, v in active.items():
                 want(k, kind_of.get(k, "app"), v.get("name", k), "lock")
             if cats:
@@ -665,7 +761,28 @@ def run_guard(home=None, interval=1.0):
                         sites_applied = []
                 sites_want = want_sites
 
-            persistent = bool(active or known_w or track or mode in ("enforcing", "paused") or want_sites)
+            if now - class_check >= 10 or class_check == 0.0:
+                class_check = now
+                raw = read_json(store.p_classes, [])
+                cl = clean_classes(raw) if isinstance(raw, list) else []
+                cl = [c for c in cl if c.get("enabled", True)]
+                has_classes[0] = bool(cl)
+                ui_a = _rd(store.p_ui_alive)
+                if cl and time.time() - float(ui_a.get("t", 0) or 0) > 6 and sys.platform == "win32":
+                    ldt_now = datetime.fromtimestamp(tnow)
+                    for c, kind, left in classtools.due_reminders(cl, ldt_now):
+                        key = (c["id"], ldt_now.date().isoformat(), kind)
+                        if key in class_seen or box_busy.is_set():
+                            continue
+                        class_seen.add(key)
+                        place = f" · {c['place']}" if c.get("place") else ""
+                        text = (i18n.tr(f"{c['name']} starts in {left} minutes") if kind == "soon"
+                                else i18n.tr(f"{c['name']} is starting now")) + place
+                        box_busy.set()
+                        threading.Thread(target=lambda t=text: (_show_box(i18n.tr("CLASS SOON"), t), box_busy.clear()),
+                                         daemon=True).start()
+            persistent = bool(active or known_w or track or mode in ("enforcing", "paused") or want_sites
+                              or has_classes[0])
             if persistent:
                 idle_since = now
             publish()
@@ -889,7 +1006,8 @@ class GuardClient:
             release_locks_direct(self.store, exes, windows)
             if not _rd(self.store.p_locks_guard).get("locks") and \
                     not _rd(self.store.p_windows_guard).get("windows") and \
-                    not self.store.settings.get("play_tracking", True):
+                    not self.store.settings.get("play_tracking", True) and \
+                    not any(c.get("enabled", True) for c in self.store.classes):
                 persist_protection(False, self.store)
         self.store.refresh_locks()
         self.store.refresh_windows()

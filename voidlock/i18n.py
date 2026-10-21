@@ -207,6 +207,11 @@ def fmt_remaining(sec):
     return tr(f"{max(1, m)}m")
 
 
+def fmt_in(sec):
+    """'in 25m' / '۲۵ دقیقه دیگر'."""
+    return tr(f"in {fmt_remaining(sec)}")
+
+
 # ------------------------------------------------------------------ Qt hooks
 def install_hooks():
     """Translate text on its way into widgets. Call once, after QApplication exists."""

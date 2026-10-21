@@ -509,17 +509,23 @@ class AppRow(QFrame):
         self.status.set(text, color)
         self.status.setToolTip(tip)
         self.run_pill.setVisible(self.app["exe"].lower() in self.ctx.running)
-        strict = self.ctx.session.strict and self.ctx.session.active
+        sess = self.ctx.session
+        strict = sess.strict and sess.active
         lk = self.ctx.store.lock_for(self.app["exe"])
         if lk:
             self.app["enabled"] = True
+        # While a session runs, what is blocked can grow but never shrink (otherwise the first thing to do mid-session
+        # would be to switch the game off here).
+        held = sess.active and bool(self.app.get("enabled"))
         self.b_lock.setVisible(not lk)
         self.b_ext.setVisible(bool(lk))
         self.b_rel.setVisible(bool(lk))
         self.b_del.setVisible(bool(self.app.get("custom")) and not lk)
-        self.toggle.setEnabled(not strict and not lk)
+        self.toggle.setEnabled(not (strict or lk or held))
         if lk:
             self.toggle.setToolTip("Locked for several days. Use the release button to end the lock early.")
+        elif held:
+            self.toggle.setToolTip("Blocked for the whole session. It can be turned off after the session ends.")
         elif strict:
             self.toggle.setToolTip("Locked during a strict session.")
         else:
@@ -529,6 +535,9 @@ class AppRow(QFrame):
 
     def _toggled(self, on):
         if self.ctx.store.lock_for(self.app["exe"]) and not on:
+            return self.toggle.set_silent(True)
+        if self.ctx.session.active and self.app.get("enabled") and not on:
+            self.ctx.toast("This app stays blocked until the session ends.", "warn")
             return self.toggle.set_silent(True)
         self.app["enabled"] = bool(on)
         self.ctx.store.save_apps()
@@ -776,6 +785,8 @@ class AppsPage(Page):
     def bulk(self, on):
         if self.ctx.session.strict and self.ctx.session.active:
             return self.ctx.toast("Rules are locked during a strict session.", "warn")
+        if not on and self.ctx.session.active:
+            return self.ctx.toast("Nothing can be allowed again until the session ends.", "warn")
         apps = self.visible_apps()
         if not on:
             apps = [a for a in apps if not self.ctx.store.lock_for(a["exe"])]

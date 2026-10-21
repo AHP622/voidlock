@@ -9,16 +9,16 @@ from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QFont
 from PySide6.QtWidgets import (QFileDialog, QHBoxLayout, QLineEdit, QSlider, QVBoxLayout, QWidget)
 
-from . import i18n, messages, rules, sounds
+from . import classes as classtools, i18n, messages, rules, sounds
 from .guard import emergency_recover
 from .pages_a import Page
 from .store import completed_count, fmt_hm, last_days, streak_days, today_focus_sec, uid, week_order
-from .theme import THEME_NAMES
+from .theme import THEME_NAMES, THEME_ORDER
 from .theme import Motion, T
 from .mascot import BlockPopup, Heatmap
 from .study import attempts_report, play_day
 from .viz import BarChart, EmptyState, IconTile
-from .widgets import (AC, Button, Card, Chip, Divider, Pill, ProgressBar, Segmented, Stepper, Ticker, Toggle,
+from .widgets import (AC, Button, Card, Chip, ChipGrid, Divider, ThemePicker, Pill, ProgressBar, Segmented, Stepper, Ticker, Toggle,
                       clear_layout, label, reveal)
 
 
@@ -37,6 +37,17 @@ def setting_row(title, desc, control):
     r.addLayout(col, 1)
     r.addWidget(control, 0, Qt.AlignmentFlag.AlignVCenter)
     return r
+
+
+def setting_block(title, desc, control):
+    """Title and description on top, a wide control (theme cards, many chips) underneath."""
+    col = QVBoxLayout()
+    col.setSpacing(6)
+    col.addWidget(label(title, 14, QFont.Weight.DemiBold))
+    if desc:
+        col.addWidget(label(desc, 12, color=T.text3, wrap=True))
+    col.addWidget(control)
+    return col
 
 
 # ============================================================ STUDY SESSIONS
@@ -213,17 +224,40 @@ class SessionsPage(Page):
 
 
 # ============================================================ SCHEDULE
-class ScheduleForm(QWidget):
-    def __init__(self, entry, week_start):
+class DayChips(QWidget):
+    """Weekday chips. multi=True lets several days be ticked (a session / class can be created for many days at once)."""
+    changed = Signal()
+
+    def __init__(self, week_start, days, multi=True):
         super().__init__()
-        self.deleted = False
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(0, 4, 0, 0)
-        lay.setSpacing(10)
-        self.order = week_order(week_start)
-        lay.addWidget(label("DAY", 10, QFont.Weight.Bold, T.text3, spacing=2))
-        self.day = Segmented([i18n.day_name(d) for d in self.order], self.order.index(entry["day"]))
-        lay.addWidget(self.day)
+        self.multi = multi
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(6)
+        self.chips = {}
+        for d in week_order(week_start):
+            c = Chip(i18n.day_name(d, True) if i18n.is_fa() else i18n.day_name(d))
+            c.set_checked_silent(d in days)
+            c.toggled.connect(lambda on, d=d: self._toggled(d, on))
+            lay.addWidget(c)
+            self.chips[d] = c
+        lay.addStretch(1)
+
+    def _toggled(self, d, on):
+        if not self.multi and on:
+            for k, c in self.chips.items():
+                if k != d:
+                    c.set_checked_silent(False)
+        self.changed.emit()
+
+    def values(self):
+        return [d for d, c in self.chips.items() if c.isChecked()]
+
+
+class _TimeRows:
+    """Start time + duration rows shared by the session and class forms."""
+
+    def _time_rows(self, lay, entry, dur_max=480):
         t = QHBoxLayout()
         t.addWidget(label("Start time", 13, QFont.Weight.DemiBold), 1)
         h, m = [int(x) for x in entry["time"].split(":")]
@@ -234,25 +268,147 @@ class ScheduleForm(QWidget):
         lay.addLayout(t)
         d = QHBoxLayout()
         d.addWidget(label("Duration", 13, QFont.Weight.DemiBold), 1)
-        self.dur = Stepper(entry["minutes"], 1, 480, 1, " min")
+        self.dur = Stepper(entry["minutes"], 1 if dur_max <= 480 else 5, dur_max, 5 if dur_max > 480 else 1, " min")
         d.addWidget(self.dur)
         lay.addLayout(d)
+        for w in (self.hh, self.mm, self.dur):
+            w.valueChanged.connect(lambda _v: self.changed.emit())
+
+    def _warn_label(self, lay):
+        self.warn = label("", 12, color=T.amber, wrap=True)
+        self.warn.setVisible(False)
+        lay.addWidget(self.warn)
+
+    def _show_overlaps(self, classes, sessions, entry):
+        days = self.days.values()
+        hits = []
+        t = f"{self.hh.value():02d}:{self.mm.value():02d}"
+        for d in days:
+            for name, when, kind in classtools.overlap_names(classes, sessions, d, t, self.dur.value(), entry.get("id")):
+                hits.append(f"{name} ({i18n.digits(when)})")
+        self.warn.setVisible(bool(hits))
+        if hits:
+            self.warn.setText(f"Overlaps with: {', '.join(dict.fromkeys(hits))}")
+
+
+class ScheduleForm(QWidget, _TimeRows):
+    changed = Signal()
+
+    def __init__(self, entry, week_start, classes=(), sessions=()):
+        super().__init__()
+        self.deleted = False
+        self._entry, self._classes, self._sessions = entry, list(classes), list(sessions)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 4, 0, 0)
+        lay.setSpacing(10)
+        lay.addWidget(label("DAYS", 10, QFont.Weight.Bold, T.text3, spacing=2))
+        self.days = DayChips(week_start, [entry["day"]], multi=True)
+        lay.addWidget(self.days)
+        self._time_rows(lay, entry)
         self.subject = QLineEdit(entry.get("subject", ""))
         self.subject.setPlaceholderText("Subject (optional)")
         self.subject.setMaxLength(40)
         lay.addWidget(self.subject)
+        a = QHBoxLayout()
+        a.addWidget(label("Start automatically", 13, QFont.Weight.DemiBold), 1)
+        self.auto = Toggle(bool(entry.get("auto_start", False)))
+        self.auto.setToolTip("Starts the session by itself when it is due (no question). Blocking begins right away.")
+        a.addWidget(self.auto)
+        lay.addLayout(a)
         e = QHBoxLayout()
         e.addWidget(label("Enabled", 13, QFont.Weight.DemiBold), 1)
         self.enabled = Toggle(entry.get("enabled", True))
         e.addWidget(self.enabled)
         lay.addLayout(e)
+        self._warn_label(lay)
         self.b_del = Button("Delete this entry", "danger", "trash", height=36)
         self.b_del.setVisible(bool(entry.get("id")))
         lay.addWidget(self.b_del)
+        self.days.changed.connect(self.changed.emit)
+        self.changed.connect(lambda: self._show_overlaps(self._classes, self._sessions, self._entry))
+        self.changed.emit()
+
+    def valid(self):
+        return bool(self.days.values())
 
     def values(self):
-        return {"day": self.order[self.day.current()], "time": f"{self.hh.value():02d}:{self.mm.value():02d}",
-                "minutes": self.dur.value(), "subject": self.subject.text().strip(), "enabled": self.enabled.isChecked()}
+        return {"days": self.days.values(), "time": f"{self.hh.value():02d}:{self.mm.value():02d}",
+                "minutes": self.dur.value(), "subject": self.subject.text().strip(), "enabled": self.enabled.isChecked(),
+                "auto_start": self.auto.isChecked()}
+
+
+class ClassForm(QWidget, _TimeRows):
+    """Body of the 'Add class' dialog: a weekly class with a reminder some minutes before it starts."""
+    changed = Signal()
+
+    def __init__(self, entry, week_start, classes=(), sessions=()):
+        super().__init__()
+        self.deleted = False
+        self._entry, self._classes, self._sessions = entry, list(classes), list(sessions)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 4, 0, 0)
+        lay.setSpacing(10)
+        self.name = QLineEdit(entry.get("name", ""))
+        self.name.setPlaceholderText("Class name, e.g. Math")
+        self.name.setMaxLength(40)
+        lay.addWidget(self.name)
+        self.place = QLineEdit(entry.get("place", ""))
+        self.place.setPlaceholderText("Place or teacher (optional)")
+        self.place.setMaxLength(40)
+        lay.addWidget(self.place)
+        lay.addWidget(label("DAYS", 10, QFont.Weight.Bold, T.text3, spacing=2))
+        self.days = DayChips(week_start, [entry["day"]], multi=True)
+        lay.addWidget(self.days)
+        self._time_rows(lay, entry, dur_max=600)
+        r = QHBoxLayout()
+        r.addWidget(label("Remind me before", 13, QFont.Weight.DemiBold), 1)
+        self.remind = Stepper(int(entry.get("remind", 15)), 0, 120, 5, " min")
+        self.remind.setToolTip("0 = no reminder")
+        r.addWidget(self.remind)
+        lay.addLayout(r)
+        e = QHBoxLayout()
+        e.addWidget(label("Enabled", 13, QFont.Weight.DemiBold), 1)
+        self.enabled = Toggle(entry.get("enabled", True))
+        e.addWidget(self.enabled)
+        lay.addLayout(e)
+        self._warn_label(lay)
+        self.b_del = Button("Delete this class", "danger", "trash", height=36)
+        self.b_del.setVisible(bool(entry.get("id")))
+        lay.addWidget(self.b_del)
+        self.name.textChanged.connect(lambda _t: self.changed.emit())
+        self.days.changed.connect(self.changed.emit)
+        self.changed.connect(lambda: self._show_overlaps(self._classes, self._sessions, self._entry))
+
+    def valid(self):
+        return bool(self.name.text().strip()) and bool(self.days.values())
+
+    def values(self):
+        return {"days": self.days.values(), "name": self.name.text().strip(), "place": self.place.text().strip(),
+                "time": f"{self.hh.value():02d}:{self.mm.value():02d}", "minutes": self.dur.value(),
+                "remind": self.remind.value(), "enabled": self.enabled.isChecked()}
+
+
+def apply_days(items, entry, values, make):
+    """Create / update entries for the ticked days. `entry` is the one being edited (or None when new).
+    If its own day is still ticked it keeps that day, otherwise it moves to the first ticked day; every further ticked
+    day gets a copy. Returns (created, updated)."""
+    days = list(values["days"])
+    base = {k: v for k, v in values.items() if k != "days"}
+    created = updated = 0
+    if entry is not None and entry in items:
+        mine = entry["day"] if entry["day"] in days else days[0]
+        old_time = (entry["day"], entry["time"])
+        entry.update(base)
+        entry["day"] = mine
+        if (entry["day"], entry["time"]) != old_time:
+            entry["last_fired"] = ""
+            entry["rem_done"] = entry["start_done"] = ""
+        updated = 1
+        days = [d for d in days if d != mine]
+    for d in days:
+        items.append(make(d, base))
+        created += 1
+    return created, updated
 
 
 class WindowForm(QWidget):
@@ -326,17 +482,25 @@ def days_text(days, week_start):
 
 
 class EntryChip(Card):
-    def __init__(self, e, on_click):
+    """One block in the weekly grid: a study session (cyan) or a class (violet)."""
+
+    def __init__(self, e, on_click, kind="session"):
         super().__init__(pad=10, hover=True)
         self.e, self._cb = e, on_click
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.lay.setSpacing(1)
         self.setToolTip("Click to edit")
         off = not e.get("enabled", True)
-        self.lay.addWidget(label(e["time"], 15, QFont.Weight.DemiBold, T.text3 if off else T.cyan, mono=True))
-        self.lay.addWidget(label(f"{e['minutes']} min" + (" · off" if off else ""), 11, color=T.text3))
-        if e.get("subject"):
-            self.lay.addWidget(label(e["subject"], 12, color=T.text2 if not off else T.text3))
+        col = T.text3 if off else (T.violet if kind == "class" else T.cyan)
+        self.lay.addWidget(label(e["time"], 15, QFont.Weight.DemiBold, col, mono=True))
+        extra = " · off" if off else (" · auto" if e.get("auto_start") else "")
+        self.lay.addWidget(label(f"{e['minutes']} min" + extra, 11, color=T.text3))
+        title = e.get("name") if kind == "class" else e.get("subject")
+        if title:
+            self.lay.addWidget(label(title, 12, QFont.Weight.DemiBold if kind == "class" else QFont.Weight.Normal,
+                                     T.text2 if not off else T.text3))
+        if kind == "class" and e.get("place"):
+            self.lay.addWidget(label(e["place"], 11, color=T.text3))
 
     def mouseReleaseEvent(self, ev):
         if self.rect().contains(ev.position().toPoint()):
@@ -345,13 +509,28 @@ class EntryChip(Card):
 
 class SchedulePage(Page):
     def __init__(self, ctx):
-        super().__init__(ctx, "Schedule", "Plan recurring weekly sessions")
+        super().__init__(ctx, "Schedule", "Classes, study sessions and lock hours")
         top = QHBoxLayout()
-        self.next_l = label("", 13, color=T.text2)
+        top.setSpacing(10)
+        self.next_l = label("", 13, color=T.text2, wrap=True)
         top.addWidget(self.next_l, 1)
+        self.b_class = Button("Add class", "soft", "book", height=42)
         self.b_add = Button("Add session", "primary", "plus", height=42)
+        top.addWidget(self.b_class)
         top.addWidget(self.b_add)
         self.body.addLayout(top)
+        # today
+        self.today_card = Card(pad=20, accent=T.violet)
+        th = QHBoxLayout()
+        th.addWidget(label("TODAY", 11, QFont.Weight.Bold, T.text3, spacing=2.4), 1)
+        self.week_l = label("", 12, color=T.text3)
+        th.addWidget(self.week_l)
+        self.today_card.lay.addLayout(th)
+        self.today_box = QVBoxLayout()
+        self.today_box.setSpacing(8)
+        self.today_card.lay.addLayout(self.today_box)
+        self.body.addWidget(self.today_card)
+        # lock hours
         self.hours_card = Card(pad=20, accent=T.cyan)
         hh = QHBoxLayout()
         hh.addWidget(label("LOCK HOURS", 11, QFont.Weight.Bold, T.text3, spacing=2.4), 1)
@@ -368,16 +547,20 @@ class SchedulePage(Page):
         self.grid = QHBoxLayout()
         self.grid.setSpacing(12)
         self.body.addLayout(self.grid)
-        self.note = label("Scheduled sessions ask for your confirmation when they are due, while VOIDLOCK is open.",
+        self.note = label("Classes remind you before they start. A scheduled session asks for your confirmation when it is "
+                          "due (or starts by itself if you chose that), while VOIDLOCK is open - up to 30 minutes late.",
                           12, color=T.text3, wrap=True)
         self.body.addWidget(self.note)
-        self.empty = EmptyState("schedule", "Nothing scheduled", "Add a weekly session and VOIDLOCK will remind you "
-                                "to start it on time.", "Add session")
+        self.empty = EmptyState("schedule", "Nothing scheduled", "Add your classes and weekly study sessions. VOIDLOCK "
+                                "reminds you before each class and when a session is due.", "Add session")
         self.body.addWidget(self.empty)
         self.body.addStretch(1)
         self.b_add.clicked.connect(lambda: self.edit({"day": date.today().weekday(), "time": "18:00",
                                                       "minutes": ctx.store.settings["default_minutes"],
                                                       "subject": "", "enabled": True}, new=True))
+        self.b_class.clicked.connect(lambda: self.edit_class({"day": date.today().weekday(), "time": "08:00",
+                                                              "minutes": 90, "name": "", "place": "", "remind": 15,
+                                                              "enabled": True}, new=True))
         self.empty.action.connect(self.b_add.click)
         self._cols = []
 
@@ -408,52 +591,137 @@ class SchedulePage(Page):
             wd.setLayout(row)
             self.hours_box.addWidget(wd)
 
+    # ---- today: classes and sessions in time order
+    def _today_items(self, now):
+        st = self.ctx.store
+        base = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        items = []
+        for s, e, c in classtools.today_list(st.classes, now):
+            items.append((s, e, c["name"], "class", c.get("place", "")))
+        for e in st.schedule:
+            if e.get("enabled", True) and e["day"] == now.weekday():
+                h, m = [int(x) for x in e["time"].split(":")]
+                s = base.replace(hour=h, minute=m)
+                items.append((s, s + timedelta(minutes=int(e["minutes"])), e.get("subject") or "Focus session", "session", ""))
+        items.sort(key=lambda t: t[0])
+        return items
+
+    def _session_done(self, s, e):
+        lo, hi = s.timestamp() - 300, e.timestamp() + 1800
+        return any(lo <= float(r.get("start", 0)) <= hi for r in self.ctx.store.history)
+
+    def _refresh_today(self):
+        clear_layout(self.today_box)
+        now = datetime.now()
+        items = self._today_items(now)
+        if not items:
+            self.today_box.addWidget(label("Nothing planned for today.", 13, color=T.text3))
+            return
+        for s, e, name, kind, place in items:
+            row = QHBoxLayout()
+            row.setSpacing(12)
+            col = T.violet if kind == "class" else T.cyan
+            row.addWidget(label(f"{i18n.digits(s.strftime('%H:%M'))}", 15, QFont.Weight.DemiBold, col, mono=True))
+            mid = QVBoxLayout()
+            mid.setSpacing(0)
+            mid.addWidget(label(name, 14, QFont.Weight.DemiBold))
+            mins = int((e - s).total_seconds() // 60)
+            sub = i18n.tr(f"Class · {mins} min" if kind == "class" else f"Study session · {mins} min") + (f" · {place}" if place else "")
+            mid.addWidget(label(sub, 12, color=T.text3))
+            row.addLayout(mid, 1)
+            if s <= now < e:
+                row.addWidget(Pill("NOW", T.green, dot=True, px=10))
+            elif s > now:
+                row.addWidget(label(i18n.fmt_in((s - now).total_seconds()), 12, color=T.text2))
+            elif kind == "session":
+                done = self._session_done(s, e)
+                row.addWidget(Pill("DONE" if done else "MISSED", T.green if done else T.amber, px=10))
+            else:
+                row.addWidget(label("Finished", 12, color=T.text3))
+            w = QWidget()
+            w.setLayout(row)
+            self.today_box.addWidget(w)
+
     def refresh(self):
         self._refresh_hours()
+        self._refresh_today()
         clear_layout(self.grid)
-        sch = self.ctx.store.schedule
-        self.empty.setVisible(not sch)
+        st = self.ctx.store
+        sch, cls = st.schedule, st.classes
+        self.empty.setVisible(not sch and not cls)
         today = date.today().weekday()
         self._cols = []
-        for d in week_order(self.ctx.store.settings["week_start"]):
+        wk_cls = wk_ses = 0
+        for d in week_order(st.settings["week_start"]):
             col = Card(pad=12, accent=T.cyan if d == today else None)
             col.lay.setSpacing(8)
+            ents = [(e["time"], e, "class") for e in cls if e["day"] == d] + [(e["time"], e, "session") for e in sch if e["day"] == d]
+            ents.sort(key=lambda t: t[0])
+            c_min = sum(int(e["minutes"]) for _t, e, k in ents if k == "class" and e.get("enabled", True))
+            s_min = sum(int(e["minutes"]) for _t, e, k in ents if k == "session" and e.get("enabled", True))
+            wk_cls += c_min
+            wk_ses += s_min
             col.lay.addWidget(label(i18n.day_name(d).upper(), 11, QFont.Weight.Bold, T.cyan if d == today else T.text3,
                                     spacing=2, align=AC))
-            ents = sorted([e for e in sch if e["day"] == d], key=lambda e: e["time"])
-            for e in ents:
-                col.lay.addWidget(EntryChip(e, lambda e: self.edit(e)))
+            if c_min + s_min:
+                col.lay.addWidget(label(fmt_hm((c_min + s_min) * 60), 10, color=T.text3, mono=True, align=AC))
+            for _t, e, kind in ents:
+                col.lay.addWidget(EntryChip(e, (lambda e: self.edit_class(e)) if kind == "class" else (lambda e: self.edit(e)), kind))
             if not ents:
                 col.lay.addWidget(label("-", 14, color=T.border_hi, align=AC))
             col.lay.addStretch(1)
             col.setMinimumHeight(190)
             self.grid.addWidget(col, 1)
             self._cols.append(col)
-        self._reveal = [self.hours_card] + self._cols
-        nxt = self.ctx.next_scheduled()
-        self.next_l.setText(f"Next: {nxt}" if nxt else "No upcoming sessions.")
+        self.week_l.setText(f"This week: {fmt_hm(wk_cls * 60)} classes · {fmt_hm(wk_ses * 60)} study sessions")
+        self._reveal = [self.today_card, self.hours_card] + self._cols
+        self.next_l.setText(self.ctx.schedule_summary())
+
+    # ---- editing
+    def _run_form(self, form, title, new, icon, width=520):
+        m = self.ctx.new_modal().build(title, None, form, "Add" if new else "Save", icon=icon, width=width,
+                                      validator=form.valid)
+        form.changed.connect(m.revalidate)
+        form.b_del.clicked.connect(lambda: (setattr(form, "deleted", True), m.finish(True)))
+        return m.exec_modal()
 
     def edit(self, entry, new=False):
-        form = ScheduleForm(dict(entry), self.ctx.store.settings["week_start"])
-        m = self.ctx.new_modal().build("New scheduled session" if new else "Edit scheduled session", None, form,
-                                      "Add" if new else "Save", icon="schedule", width=500)
-        form.b_del.clicked.connect(lambda: (setattr(form, "deleted", True), m.finish(True)))
-        if not m.exec_modal():
+        st = self.ctx.store
+        form = ScheduleForm(dict(entry), st.settings["week_start"], st.classes, st.schedule)
+        if not self._run_form(form, "New scheduled session" if new else "Edit scheduled session", new, "schedule"):
             return
-        sch = self.ctx.store.schedule
         if form.deleted:
-            self.ctx.store.schedule = [e for e in sch if e["id"] != entry.get("id")]
+            st.schedule = [e for e in st.schedule if e["id"] != entry.get("id")]
             self.ctx.toast("Entry deleted.", "info")
-        elif new:
-            sch.append({"id": uid(), "last_fired": "", **form.values()})
-            self.ctx.toast("Session scheduled.", "success")
         else:
-            for e in sch:
-                if e["id"] == entry["id"]:
-                    e.update(form.values())
-                    e["last_fired"] = ""
-            self.ctx.toast("Entry updated.", "success")
-        self.ctx.store.save_schedule()
+            cur = next((e for e in st.schedule if e["id"] == entry.get("id")), None)
+            made, upd = apply_days(st.schedule, cur, form.values(),
+                                   lambda d, b: {"id": uid(), "last_fired": "", "day": d, **b})
+            self.ctx.toast(("Session scheduled." if new else "Entry updated.") if made + upd == 1 else
+                           f"{made + upd} sessions scheduled.", "success")
+        st.save_schedule()
+        self.refresh()
+        QTimer_stagger(self)
+
+    def edit_class(self, entry, new=False):
+        st = self.ctx.store
+        form = ClassForm(dict(entry), st.settings["week_start"], st.classes, st.schedule)
+        if not self._run_form(form, "New class" if new else "Edit class", new, "book"):
+            return
+        if form.deleted:
+            st.classes = [e for e in st.classes if e["id"] != entry.get("id")]
+            self.ctx.toast("Class deleted.", "info")
+        else:
+            cur = next((e for e in st.classes if e["id"] == entry.get("id")), None)
+            made, upd = apply_days(st.classes, cur, form.values(),
+                                   lambda d, b: {"id": uid(), "rem_done": "", "start_done": "", "day": d, **b})
+            self.ctx.toast("Class saved." if made + upd == 1 else f"{made + upd} classes saved.", "success")
+        st.save_classes()
+        if any(c.get("enabled", True) for c in st.classes):
+            from .guard import persist_protection_async
+            persist_protection_async(True, st)         # the guard also shows class reminders while the window is closed
+            self.ctx.guard.ensure()
+        self.ctx.update_class_pill()
         self.refresh()
         QTimer_stagger(self)
 
@@ -547,7 +815,8 @@ class AnalyticsPage(Page):
         self.y_hours = StatCard("clock", T.cyan, "Study hours")
         self.y_tests = StatCard("check", T.green, "Tests solved")
         self.y_best = StatCard("flame", T.amber, "Best day")
-        for s in (self.y_hours, self.y_tests, self.y_best):
+        self.y_words = StatCard("book", T.violet, "Words learned")
+        for s in (self.y_hours, self.y_tests, self.y_words, self.y_best):
             self.year_stats.addWidget(s, 1)
         self.year_card.lay.addLayout(self.year_stats)
         self.year_card.lay.addWidget(label("Study hours per month", 13, QFont.Weight.DemiBold))
@@ -630,6 +899,7 @@ class AnalyticsPage(Page):
         self.year_title.setText(i18n.tr("Year overview") + f" · {i18n.digits(year)}")
         self.y_hours.set(f"{ys['sec'] // 3600}h", f"{ys['active_days']} active days")
         self.y_tests.set(str(ys["tests"]), "this year")
+        self.y_words.set(str(ys["words"]), "this year")
         bd, bs = ys["best"]
         self.y_best.set(fmt_hm(bs) if bd else "-", bd or "")
         cur_m = (i18n.to_jalali(datetime(today.year, today.month, today.day))[1] if fa else today.month) - 1
@@ -659,6 +929,10 @@ class AnalyticsPage(Page):
 
 
 # ============================================================ SETTINGS
+SOUND_NAMES = {"off": "Off", "soft": "Soft", "bell": "Bell", "chime": "Chime", "marimba": "Marimba", "zen": "Zen",
+               "crystal": "Crystal", "pulse": "Pulse", "arcade": "Arcade", "drop": "Drop"}
+
+
 class SettingsPage(Page):
     def __init__(self, ctx):
         super().__init__(ctx, "Settings", "Preferences, safety and data")
@@ -691,22 +965,26 @@ class SettingsPage(Page):
         c2.lay.addLayout(setting_row("Language", "Persian switches the whole interface to right-to-left with the "
                                      "Jalali calendar. The app restarts to apply it.", self.lang))
         c2.lay.addWidget(Divider())
-        tnames = ["void", "candy", "ocean"]
-        self.theme = Segmented([THEME_NAMES[k] for k in tnames], tnames.index(st.get("theme", "void")) if st.get("theme", "void") in tnames else 0)
-        c2.lay.addLayout(setting_row("Theme", "Void is dark and calm, Candy is light and playful, Ocean is deep blue. The app "
-                                     "restarts to apply it.", self.theme))
+        tnames = list(THEME_ORDER)
+        self.theme = ThemePicker(tnames, THEME_NAMES, tnames.index(st.get("theme", "void")) if st.get("theme", "void") in tnames else 0)
+        c2.lay.addLayout(setting_block("Theme", "Seven dark and two light themes. Click one to choose it; "
+                                       "the app restarts to apply it.", self.theme))
+        c2.lay.addWidget(Divider())
         self.fem = Toggle(bool(st.get("female_mascot", False)))
         c2.lay.addLayout(setting_row("Female character", "Switches the mascot to a girl version (hair, bow, lashes).", self.fem))
         c2.lay.addWidget(Divider())
-        snames = ["off", "soft", "bell"]
-        self.sound = Segmented(["Off", "Soft", "Bell"], snames.index(st.get("sound", "soft")) if st.get("sound", "soft") in snames else 1)
+        snames = list(sounds.STYLE_ORDER)
+        self.sound = ChipGrid([SOUND_NAMES[k] for k in snames], snames.index(st.get("sound", "soft")) if st.get("sound", "soft") in snames else 1,
+                              per_row=5)
         self.b_sound = Button("Test sound", "soft", "bolt", height=34)
         srow = QWidget()
-        sl = QHBoxLayout(srow)
+        sl = QVBoxLayout(srow)
         sl.setContentsMargins(0, 0, 0, 0)
+        sl.setSpacing(8)
         sl.addWidget(self.sound)
-        sl.addWidget(self.b_sound)
-        c2.lay.addLayout(setting_row("Sounds", "A short, gentle sound when a program is closed and when you reach a goal.", srow))
+        sl.addWidget(self.b_sound, 0, Qt.AlignmentFlag.AlignLeft)
+        c2.lay.addLayout(setting_block("Sounds", "A short sound when a program is closed, when a class is about to start and when "
+                                       "you reach a goal. Pick a style and press Test sound.", srow))
         self.body.addWidget(c2)
         # --- goal & personal message
         cg = Card(pad=22, accent=T.amber)
@@ -806,15 +1084,10 @@ class SettingsPage(Page):
         self.body.addWidget(c4)
         cu = Card(pad=22)
         cu.lay.addWidget(section_title("Updates"))
-        self.up_repo = QLineEdit(st.get("update_repo", ""))
-        self.up_repo.setPlaceholderText("owner/repo")
-        self.up_repo.setFixedWidth(260)
         self.up_check = Toggle(st.get("update_check", True))
         self.up_auto = Toggle(st.get("update_auto_install", True))
-        cu.lay.addLayout(setting_row("GitHub repository", "Where new versions are published (Releases). Leave empty to "
-                                     "turn updates off.", self.up_repo))
-        cu.lay.addWidget(Divider())
-        cu.lay.addLayout(setting_row("Check automatically", "Looks for a new version when VOIDLOCK starts.", self.up_check))
+        cu.lay.addLayout(setting_row("Check automatically", "Looks for a new version when VOIDLOCK starts and every few "
+                                     "hours while it is open, and tells you when one is out.", self.up_check))
         cu.lay.addWidget(Divider())
         cu.lay.addLayout(setting_row("Install automatically", "Downloads, verifies (SHA-256) and installs updates when "
                                      "no session is running, then restarts.", self.up_auto))
@@ -854,7 +1127,7 @@ class SettingsPage(Page):
         self.week.currentChanged.connect(lambda i: self._set("week_start", [5, 6, 0][i]))
         self.lang.currentChanged.connect(self._language)
         self.theme.currentChanged.connect(self._theme)
-        self.sound.currentChanged.connect(lambda i: (self._set("sound", ["off", "soft", "bell"][i]), self.ctx.play_sound("close")))
+        self.sound.currentChanged.connect(lambda i: (self._set("sound", sounds.STYLE_ORDER[i]), self.ctx.play_sound("close")))
         self.b_sound.clicked.connect(lambda: self.ctx.play_sound("close"))
         self.tgoal.valueChanged.connect(lambda v: self._set("daily_tests_goal", v))
         self.field.editingFinished.connect(lambda: self._set("target_field", self.field.text().strip()))
@@ -868,7 +1141,6 @@ class SettingsPage(Page):
         self.fri.toggled.connect(lambda v: self._set("game_friday_only", bool(v)))
         self.b_adm_on.clicked.connect(ctx.enable_admin_guard)
         self.b_adm_off.clicked.connect(ctx.disable_admin_guard)
-        self.up_repo.editingFinished.connect(self._save_repo)
         self.up_check.toggled.connect(lambda v: self._set("update_check", bool(v)))
         self.up_auto.toggled.connect(lambda v: self._set("update_auto_install", bool(v)))
         self.b_up_check.clicked.connect(self._check_now)
@@ -949,22 +1221,11 @@ class SettingsPage(Page):
         self.bk_info.setText(f"{len(bks)} automatic backups · last: {last}\nYour data lives outside the program folder, "
                              f"so updating or rebuilding the app never resets it:\n{s.home}")
 
-    def _save_repo(self):
-        from .updater import valid_repo
-        repo = self.up_repo.text().strip()
-        if repo and not valid_repo(repo):
-            return self.ctx.toast("The repository must look like owner/repo.", "error")
-        self.ctx.store.settings["update_repo"] = repo
-        self.ctx.store.settings["update_last_check"] = 0
-        self.ctx.store.save_settings()
-        self.ctx.toast("Update source saved." if repo else "Updates are turned off.", "success")
-
     def _check_now(self):
-        self._save_repo()
         self.ctx.check_updates(manual=True)
 
     def _theme(self, i):
-        code = ["void", "candy", "ocean"][i]
+        code = THEME_ORDER[i]
         if code == self.ctx.store.settings.get("theme"):
             return
         self.ctx.store.settings["theme"] = code
@@ -1017,6 +1278,8 @@ class SettingsPage(Page):
         self.ctx.toast("Backup created." if name else "Backup failed.", "success" if name else "error")
 
     def restore_flow(self):
+        if self.ctx.session.active:
+            return self.ctx.toast("End the current session first.", "warn")
         bks = self.ctx.store.list_backups()[:8]
         if not bks:
             return self.ctx.toast("There are no backups yet.", "warn")
@@ -1056,6 +1319,8 @@ class SettingsPage(Page):
             self.ctx.toast(f"Export failed: {e}", "error")
 
     def import_settings(self):
+        if self.ctx.session.active:
+            return self.ctx.toast("End the current session first.", "warn")
         import json
         f, _ = QFileDialog.getOpenFileName(self, "Import settings", "", "JSON (*.json)")
         if not f:

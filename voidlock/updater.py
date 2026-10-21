@@ -17,6 +17,7 @@ from urllib.parse import urlparse
 
 from . import __version__
 
+REPO = "AHP622/voidlock"                 # the one place releases come from (no longer a setting)
 API = "https://api.github.com/repos/{repo}/releases/latest"
 ASSET = "VoidLock.exe"
 HOSTS = ("github.com", "githubusercontent.com")
@@ -62,7 +63,7 @@ def _safe_url(u):
     return u
 
 
-def check(repo, timeout=10):
+def check(repo=REPO, timeout=10):
     """Returns info dict for a newer release, or None when up to date."""
     if not valid_repo(repo):
         raise UpdateError("Update source must look like owner/repo.")

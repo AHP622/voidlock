@@ -385,3 +385,66 @@ FA = {
     "{x} was damaged and could not be restored; defaults were used.": "فایل {x} آسیب دیده بود و بازیابی نشد؛ مقادیر پیش‌فرض استفاده شد.",
     "Imported your previous data from {x}.": "داده‌های قبلی شما از {x} وارد شد.",
 }
+
+
+# ---------------- 1.4.0: classes, words, updates, themes, sounds, schedule
+FA.update({
+    # settings: character
+    "Female character": "شخصیت دخترانه",
+    "Switches the mascot to a girl version (hair, bow, lashes).": "شخصیت کوچک برنامه را به نسخه‌ی دخترانه (مو، پاپیون، مژه) تغییر می‌دهد.",
+    "Study 10+ minutes to start a streak": "برای شروع روزهای پیاپی، حداقل ۱۰ دقیقه مطالعه کنید",
+    "Help": "راهنما", "Search any feature": "جستجوی هر قابلیت",
+    # study: per subject time + words
+    "Study time and tests by subject": "زمان مطالعه و تست‌ها به تفکیک درس",
+    "Words learned": "لغت‌های یادگرفته‌شده", "Words": "لغت",
+    "Words this day: {num} · year total {num2}": "لغت‌های این روز: {num} · مجموع سال {num2}",
+    "Count words learned (for a language)": "شمردن لغت‌های یادگرفته‌شده (برای زبان)",
+    # schedule / classes
+    "Classes, study sessions and lock hours": "کلاس‌ها، جلسه‌های مطالعه و ساعت‌های قفل",
+    "Add class": "افزودن کلاس", "New class": "کلاس جدید", "Edit class": "ویرایش کلاس",
+    "Class name, e.g. Math": "نام کلاس، مثلاً ریاضی", "Place or teacher (optional)": "مکان یا معلم (اختیاری)",
+    "DAYS": "روزها", "Remind me before": "یادآوری پیش از شروع", "0 = no reminder": "۰ = بدون یادآوری",
+    "Delete this class": "حذف این کلاس", "Class saved.": "کلاس ذخیره شد.", "Class deleted.": "کلاس حذف شد.",
+    "{num} classes saved.": "{num} کلاس ذخیره شد.", "{num} sessions scheduled.": "{num} جلسه برنامه‌ریزی شد.",
+    "Session scheduled.": "جلسه برنامه‌ریزی شد.", "Entry updated.": "مورد به‌روز شد.",
+    "Start automatically": "شروع خودکار",
+    "Starts the session by itself when it is due (no question). Blocking begins right away.": "جلسه در زمان خودش بدون پرسش شروع می‌شود و مسدودسازی بلافاصله آغاز می‌شود.",
+    "Overlaps with: {x}": "هم‌زمان است با: {x}",
+    "Nothing planned for today.": "برای امروز چیزی برنامه‌ریزی نشده.",
+    "Class · {num} min": "کلاس · {num} دقیقه", "Study session · {num} min": "جلسه‌ی مطالعه · {num} دقیقه",
+    "in {x}": "{x} دیگر", "NOW": "اکنون", "DONE": "انجام شد", "MISSED": "از دست رفت", "Finished": "تمام شد",
+    "This week: {x} classes · {y} study sessions": "این هفته: {x} کلاس · {y} جلسه‌ی مطالعه",
+    "Classes remind you before they start. A scheduled session asks for your confirmation when it is due (or starts by itself if you chose that), while VOIDLOCK is open - up to 30 minutes late.":
+        "کلاس‌ها پیش از شروع به شما یادآوری می‌شوند. جلسه‌ی برنامه‌ریزی‌شده در زمانش تأیید می‌گیرد (یا اگر خودکار را انتخاب کرده باشید خودش شروع می‌شود)، تا ۳۰ دقیقه دیرتر هم، تا وقتی VOIDLOCK باز است.",
+    "Add your classes and weekly study sessions. VOIDLOCK reminds you before each class and when a session is due.":
+        "کلاس‌ها و جلسه‌های مطالعه‌ی هفتگی‌تان را اضافه کنید. VOIDLOCK پیش از هر کلاس و هنگام شروع هر جلسه یادآوری می‌کند.",
+    "Next class: {x} · {y}": "کلاس بعدی: {x} · {y}", "Class now: {x} · ends in {y}": "کلاس در جریان: {x} · {y} دیگر تمام می‌شود",
+    "Next session: {x}": "جلسه‌ی بعدی: {x}", "Nothing upcoming.": "چیزی در پیش نیست.",
+    "CLASS SOON": "کلاس نزدیک است", "{x} starts in {num} minutes": "{x} تا {num} دقیقه‌ی دیگر شروع می‌شود",
+    "{x} is starting now": "{x} همین حالا شروع می‌شود",
+    "SESSION STARTING": "شروع جلسه", "{x} · {num} min starts now.": "{x} · {num} دقیقه همین حالا شروع می‌شود.",
+    "{x} · {num} min was due {num2} minutes ago. Start it now?": "{x} · {num} دقیقه، {num2} دقیقه پیش موعدش بود. الان شروع شود؟",
+    # updates
+    "UPDATE AVAILABLE": "به‌روزرسانی موجود است",
+    "Version {x} is out. Installing it now - VOIDLOCK will restart.": "نسخه‌ی {x} منتشر شد. همین حالا نصب می‌شود و VOIDLOCK دوباره راه می‌افتد.",
+    "Version {x} is out. Open Settings to install it.": "نسخه‌ی {x} منتشر شد. برای نصب، تنظیمات را باز کنید.",
+    "Looks for a new version when VOIDLOCK starts and every few hours while it is open, and tells you when one is out.":
+        "هنگام اجرای VOIDLOCK و هر چند ساعت یک‌بار تا وقتی باز است نسخه‌ی جدید را بررسی می‌کند و هنگام انتشار خبر می‌دهد.",
+    "Refresh the administrator guard?": "نگهبان مدیر دوباره تنظیم شود؟",
+    "The administrator guard was set up by an older version. It must be refreshed once so it also starts when the laptop is on battery. Windows will ask for permission.":
+        "نگهبان مدیر با نسخه‌ی قدیمی‌تر ساخته شده است. باید یک‌بار تازه شود تا وقتی لپ‌تاپ روی باتری است هم راه بیفتد. ویندوز اجازه می‌پرسد.",
+    "Refresh": "تازه‌سازی", "Refreshing… accept the Windows prompt.": "در حال تازه‌سازی… پیام ویندوز را تأیید کنید.",
+    # session rules can only grow
+    "This app stays blocked until the session ends.": "این برنامه تا پایان جلسه مسدود می‌ماند.",
+    "Nothing can be allowed again until the session ends.": "تا پایان جلسه چیزی را نمی‌توان دوباره مجاز کرد.",
+    "Blocked for the whole session. It can be turned off after the session ends.": "تا پایان جلسه مسدود است. پس از پایان جلسه می‌توانید آن را خاموش کنید.",
+    "End the current session first.": "ابتدا جلسه‌ی فعلی را تمام کنید.",
+    "Locks are active - the release wait can only be made longer right now.": "قفل‌ها فعال‌اند - فعلاً زمان انتظار آزادسازی را فقط می‌توان بیشتر کرد.",
+    "A session is running - the emergency wait can only be made longer right now.": "جلسه در حال اجراست - فعلاً زمان انتظار اضطراری را فقط می‌توان بیشتر کرد.",
+    # themes / sounds
+    "Theme": "تم", "Forest": "جنگل", "Sunset": "غروب", "Midnight": "نیمه‌شب", "Graphite": "گرافیت", "Paper": "کاغذ", "Mint": "نعنایی",
+    "Seven dark and two light themes. Click one to choose it; the app restarts to apply it.": "هفت تم تیره و دو تم روشن. یکی را انتخاب کنید؛ برنامه برای اعمال آن دوباره راه می‌افتد.",
+    "Chime": "زنگوله", "Marimba": "ماریمبا", "Zen": "ذن", "Crystal": "کریستال", "Pulse": "پالس", "Arcade": "آرکید", "Drop": "قطره",
+    "A short sound when a program is closed, when a class is about to start and when you reach a goal. Pick a style and press Test sound.":
+        "یک صدای کوتاه هنگام بسته شدن برنامه، نزدیک شدن کلاس و رسیدن به هدف. یک سبک انتخاب کنید و «آزمایش صدا» را بزنید.",
+})

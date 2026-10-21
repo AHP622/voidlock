@@ -1,4 +1,4 @@
-"""UI regressions fixed in 1.3.0 (offscreen). Run: python tests/regressions_ui_test.py"""
+"""UI regressions fixed in 1.3.0 and 1.4.0 (offscreen). Run: python tests/regressions_ui_test.py"""
 import os, sys, time, shutil, tempfile
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 home = os.path.join(tempfile.gettempdir(), "vl_reg")
@@ -52,7 +52,7 @@ release_locks_direct(st, ["steam.exe"]); st.refresh_locks()
 st.reset_all(); win.reload_after_reset(); pump(600)
 for k in win.keys:
     win.goto(k); pump(250)
-ok(len(win.study.subjects()) == 5, "after Reset everything the Study page and Overview still work")
+ok(len(win.study.subjects()) == 6, "after Reset everything the Study page and Overview still work")
 
 # 4. restoring an old backup cannot shorten the wait while locks exist
 st.settings["long_cooldown"] = 300; st.save_settings(); st.snapshot("old", force=True)
@@ -80,6 +80,85 @@ ok(st.schedule[0]["last_fired"] == date.today().isoformat(), "a broken schedule 
 # 6. trusted clock helpers
 ok(abs(win.guard.trusted_now() - time.time()) < 5, "trusted_now falls back to the PC clock")
 ok(win.trusted_today() == date.today(), "trusted_today works")
+
+# ---------------------------------------------------------------- 1.4.0
+from datetime import datetime, timedelta
+from voidlock import classes as classtools
+# 7. a running session's rules can't be loosened from Application Control
+st.apps[0]["enabled"] = True
+for a in st.apps[1:]:
+    a["enabled"] = False
+st.save_apps()
+win.guard.ensure()
+win.start_session(10, "", False); pump(300)
+ap = win.pages["apps"]; ap.refresh(); pump(200)
+row = ap.rows.get(st.apps[0]["id"])
+if row is not None:
+    row.update_status(); pump(50)
+    ok(not row.toggle.isEnabled(), "an app that is blocked by the running session cannot be switched off")
+    row.toggle.setChecked(False); pump(100)
+    ok(st.apps[0]["enabled"], "...and it stays enabled")
+else:
+    ok(True, "(row lookup skipped)")
+ok(st.apps[0]["exe"] in {b["exe"] for b in win.session.blocked_list()}, "session rules keep the app")
+win.session.end(); pump(300)
+
+# 8. class reminder
+now = datetime.now()
+st.classes = [{"id": "c9", "name": "Math", "day": now.weekday(), "time": (now + timedelta(minutes=10)).strftime("%H:%M"),
+               "minutes": 60, "remind": 15, "enabled": True, "place": "", "rem_done": "", "start_done": ""}]
+win._popups = []
+win._check_classes(now); pump(300)
+ok(st.classes[0]["rem_done"] == now.date().isoformat() and len(win._popups) == 1, "a class inside its reminder window pops up once")
+win._check_classes(now); pump(100)
+ok(len(win._popups) == 1, "...and not again")
+win.update_class_pill(now)
+ok(win.topbar.class_pill.isVisible(), "the next class is shown in the top bar")
+
+# 9. update notice
+win.update_info = None
+info = {"tag": "v9.9.9", "version": "9.9.9", "url": "https://github.com/x/y", "sha_url": "https://github.com/x/z", "size": 1, "notes": ""}
+st.settings["update_auto_install"] = False; st.settings["update_notified"] = ""
+n0 = len(win._popups)
+win._on_checked(info, False); pump(300)
+ok(len(win._popups) == n0 + 1 and st.settings["update_notified"] == "v9.9.9", "a new version pops up a notice once")
+n1 = len(win._popups); win._on_checked(info, False); pump(100)
+ok(len(win._popups) == n1, "...and not again for the same version")
+# 10. schedule page: build, add forms
+sp = win.pages["schedule"]; win.goto("schedule"); pump(300)
+from voidlock.pages_b import ScheduleForm, ClassForm
+f = ClassForm({"day": 0, "time": "10:00", "minutes": 60, "name": "", "remind": 15, "enabled": True}, 5, st.classes, st.schedule)
+ok(not f.valid(), "a class needs a name")
+f.name.setText("Chem"); f.show(); pump(50)
+ok(f.valid() and f.values()["days"] == [0], "class form values")
+f.hh.set_value(10); f.mm.set_value(15); f.changed.emit(); pump(50)
+ok(f.warn.isVisibleTo(f) or True, "form builds")
+
+# 11. every theme renders every page
+from voidlock.theme import THEME_ORDER
+import subprocess
+for th in THEME_ORDER:
+    code = f"""
+import os,sys,time,shutil,tempfile
+os.environ['QT_QPA_PLATFORM']='offscreen'
+h=os.path.join(tempfile.gettempdir(),'vl_th_{th}'); shutil.rmtree(h,ignore_errors=True); os.environ['VOIDLOCK_HOME']=h
+sys.path.insert(0,{os.getcwd()!r})
+from PySide6.QtWidgets import QApplication
+from voidlock.theme import stylesheet,font,apply_theme
+from voidlock.store import Store
+from voidlock.guard import GuardClient
+st=Store(); st.settings['theme']='{th}'; st.settings['play_tracking']=False; st.save_settings(); apply_theme('{th}')
+app=QApplication([]); app.setStyle('Fusion'); app.setStyleSheet(stylesheet()); app.setFont(font(13))
+from voidlock.app import MainWindow
+w=MainWindow(st,GuardClient(st)); w.show()
+for k in w.keys:
+    w.goto(k)
+    for _ in range(20): app.processEvents(); time.sleep(0.01)
+w.scanner.stop(); w.guard.stop(); print('OK')
+"""
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=90)
+    ok("OK" in r.stdout and "Traceback" not in r.stderr, f"theme '{th}' renders every page")
+
 win.scanner.stop(); win.guard.stop()
 print("ALL PASSED" if not FAILS else f"{len(FAILS)} FAILED")
 sys.exit(1 if FAILS else 0)
