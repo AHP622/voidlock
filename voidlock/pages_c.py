@@ -164,8 +164,10 @@ class CounterRow(QWidget):
         col.setSpacing(0)
         col.addWidget(label(subject["name"] if kind == "tests" else subject["name"] + " · " + i18n.tr("Words"), 13))
         self.time_l = label("", 11, color=T.text2, mono=True)
-        self.time_l.setVisible(with_time)
         col.addWidget(self.time_l)
+        # (setVisible(True) on a widget that has no parent yet opens it as a tiny window of its own for a moment)
+        if not with_time:
+            self.time_l.hide()
         lay.addLayout(col, 1)
         self.b_m = Button("", "soft", "minus", "-1", square=34)
         self.val = label(str(value), 16, QFont.Weight.DemiBold, mono=True, align=AC)

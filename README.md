@@ -36,6 +36,12 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
+## What changed in 1.4.2
+
+- **Stray little window** flashing open and closed when moving between days in the Study tab (introduced by the per-subject time label in 1.4.0:
+  a widget was shown before it had a parent, which makes Windows open it as a window of its own). Same pattern fixed in the schedule / class edit
+  forms and the custom-app row. New test: `tests/flash_windows_test.py` fails if any top-level window appears while navigating.
+
 ## What changed in 1.4.1
 
 - **Update download:** "The downloaded file does not match its checksum" could appear when the connection was cut or filtered (VPN / proxy)

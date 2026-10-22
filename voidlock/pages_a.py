@@ -499,9 +499,9 @@ class AppRow(QFrame):
         self.toggle.toggled.connect(self._toggled)
         lay.addWidget(self.toggle)
         self.b_del = Button("", "icon", "trash", "Remove this custom app", square=34)
-        self.b_del.setVisible(bool(app.get("custom")))
         self.b_del.clicked.connect(lambda: page.remove_app(app))
         lay.addWidget(self.b_del)
+        self.b_del.setVisible(bool(app.get("custom")))
         self.update_status()
 
     def update_status(self):
