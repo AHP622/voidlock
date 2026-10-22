@@ -578,6 +578,22 @@ def test_sounds_and_themes():
         print("SKIP theme check (no Qt)")
 
 
+def test_subject_time_includes_sessions():
+    d = tmp()
+    st = S.Store(d)
+    sl = study.StudyLog(st)
+    math, phys = sl.subjects()[0], sl.subjects()[1]
+    y = date.today() - timedelta(days=1)
+    ts = datetime.combine(y, datetime.min.time()).timestamp() + 36000
+    sl.add_manual(y, math["id"], 30)
+    st.add_record({"id": "a", "start": ts, "focus_sec": 3000, "planned_min": 50, "status": "completed", "subject": "Math"})
+    st.add_record({"id": "b", "start": ts + 4000, "focus_sec": 1500, "planned_min": 25, "status": "completed", "subject": "physics"})
+    st.add_record({"id": "c", "start": ts + 8000, "focus_sec": 600, "planned_min": 10, "status": "completed", "subject": ""})
+    m, p, o = sl.subject_day_sec(y, math["id"]), sl.subject_day_sec(y, phys["id"]), sl.day_unassigned_sec(y)
+    ok(m == 4800 and p == 1500 and o == 600, "a subject's time = timer/manual entries + its focus sessions (by name)")
+    ok(m + p + o == sl.day_sec(y, False), "the subject rows plus 'without a subject' add up to the day total")
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

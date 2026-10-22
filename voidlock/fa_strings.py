@@ -448,3 +448,5 @@ FA.update({
     "A short sound when a program is closed, when a class is about to start and when you reach a goal. Pick a style and press Test sound.":
         "یک صدای کوتاه هنگام بسته شدن برنامه، نزدیک شدن کلاس و رسیدن به هدف. یک سبک انتخاب کنید و «آزمایش صدا» را بزنید.",
 })
+
+FA.update({"Focus sessions without a subject: {x}": "جلسه‌های تمرکز بدون درس: {x}"})

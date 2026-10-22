@@ -36,6 +36,12 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
+## What changed in 1.4.4
+
+- **Study time per subject** in the daily log counted only timer and manual entries, not finished focus sessions (Study Sessions tab) - so a day of
+  sessions showed "-" for every subject. It now adds the sessions of that subject (matched by name); sessions without a subject of the list
+  appear as "Focus sessions without a subject", so the rows always add up to the day total.
+
 ## What changed in 1.4.3 (calmer, smoother interface)
 
 - **Page switches no longer flash.** A page used to appear fully, vanish a moment later and then fade in again card by card (the fade started

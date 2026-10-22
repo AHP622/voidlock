@@ -295,6 +295,8 @@ class StudyPage(Page):
         lg.lay.addWidget(self.tests_bar)
         self.tests_l = label("", 12, color=T.text2)
         lg.lay.addWidget(self.tests_l)
+        self.other_l = label("", 12, color=T.text3)          # focus sessions that name no subject of the list
+        lg.lay.addWidget(self.other_l)
         self.words_box_w = QWidget()                      # language subjects: words learned
         wl = QVBoxLayout(self.words_box_w)
         wl.setContentsMargins(0, 6, 0, 0)
@@ -527,6 +529,9 @@ class StudyPage(Page):
         self.day_total.setText(f"Study time this day: {fmt_hm(sl.day_sec(self.sel, True, now, include_sessions=False))}")
         for sid, row in getattr(self, "rows", {}).items():
             row.set_time(sl.subject_day_sec(self.sel, sid, now))
+        other = sl.day_unassigned_sec(self.sel)
+        self.other_l.setText(f"Focus sessions without a subject: {fmt_hm(other)}" if other >= 60 else "")
+        self.other_l.setVisible(other >= 60)
         if self.word_rows:
             self.words_l.setText(f"Words this day: {sl.day_words(self.sel)} · year total {sl.year_words(self.sel.year)}")
         tests = sl.day_tests(self.sel)

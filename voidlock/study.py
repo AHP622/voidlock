@@ -62,7 +62,7 @@ class StudyLog:
                hist[-1].get("id") if hist and isinstance(hist[-1], dict) else None, self._gen)
         if key == self._ikey:
             return self._idx
-        ent_day, ent_subj, sess_day = {}, {}, {}
+        ent_day, ent_subj, sess_day, sess_subj = {}, {}, {}, {}
         for e in st["entries"]:
             try:
                 k, sec = e["date"], int(e["sec"])
@@ -73,10 +73,14 @@ class StudyLog:
         for r in hist:
             try:
                 k = datetime.fromtimestamp(r["start"]).date().isoformat()
-                sess_day[k] = sess_day.get(k, 0) + int(r.get("focus_sec", 0))
+                fs = int(r.get("focus_sec", 0))
+                sess_day[k] = sess_day.get(k, 0) + fs
+                nm = str(r.get("subject") or "").strip().lower()
+                if nm:
+                    sess_subj[(k, nm)] = sess_subj.get((k, nm), 0) + fs
             except Exception:
                 pass
-        self._ikey, self._idx = key, (ent_day, ent_subj, sess_day)
+        self._ikey, self._idx = key, (ent_day, ent_subj, sess_day, sess_subj)
         return self._idx
 
     def save(self):
@@ -176,11 +180,23 @@ class StudyLog:
     # ---- totals (stopwatch/manual entries + finished countdown sessions)
     def day_entries_sec(self, d, sid=None):
         k = dkey(d)
-        ent_day, ent_subj, _s = self._index()
+        ent_day, ent_subj, _s, _ss = self._index()
         return ent_day.get(k, 0) if sid is None else ent_subj.get((k, sid), 0)
 
-    def day_sessions_sec(self, d):
-        return self._index()[2].get(dkey(d), 0)
+    def day_sessions_sec(self, d, sid=None):
+        """Focus-session time of a day (Study Sessions tab); for one subject when `sid` is given (matched by name)."""
+        idx = self._index()
+        if sid is None:
+            return idx[2].get(dkey(d), 0)
+        s = self.subject(sid)
+        return idx[3].get((dkey(d), str(s["name"]).strip().lower()), 0) if s else 0
+
+    def day_unassigned_sec(self, d):
+        """Focus sessions of the day that name no subject of the list (so no row can show them)."""
+        names = {str(s["name"]).strip().lower() for s in self.subjects()}
+        k = dkey(d)
+        return sum(v for (day, nm), v in self._index()[3].items() if day == k and nm not in names) + \
+            max(0, self._index()[2].get(k, 0) - sum(v for (day, _nm), v in self._index()[3].items() if day == k))
 
     def day_sec(self, d, include_running=True, now=None, include_sessions=True):
         """Study time for a day. Focus sessions (Start on Overview) are left out when include_sessions is False."""
@@ -191,7 +207,9 @@ class StudyLog:
         return tot
 
     def subject_day_sec(self, d, sid, now=None):
-        tot = self.day_entries_sec(d, sid)
+        """Everything studied for one subject on a day: timer + manual entries AND finished focus sessions of that
+        subject (the timer entries alone used to be shown, so a day of sessions looked empty)."""
+        tot = self.day_entries_sec(d, sid) + self.day_sessions_sec(d, sid)
         a = self.d["active"]
         if a and a["subject"] == sid and dkey(d) == date.today().isoformat():
             tot += int(self.elapsed(now))
