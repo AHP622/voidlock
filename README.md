@@ -36,11 +36,12 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
-## What changed in 1.4.4
+## What changed in 1.4.5
 
-- **Study time per subject** in the daily log counted only timer and manual entries, not finished focus sessions (Study Sessions tab) - so a day of
-  sessions showed "-" for every subject. It now adds the sessions of that subject (matched by name); sessions without a subject of the list
-  appear as "Focus sessions without a subject", so the rows always add up to the day total.
+- **Daily log, study time by subject:** a compact summary under "Study time this day" - one stacked bar in the subjects' colours and one line of labels
+  (longest first, only subjects that have time; Persian shows h:mm). Replaces the small grey text under each subject's name in the tests list, which cluttered it.
+  It uses the Study Timer's own definition (timer + manual entries), so it adds up to the day total. (1.4.4 had mixed focus sessions into the subject rows,
+  which made them exceed that total - reverted.)
 
 ## What changed in 1.4.3 (calmer, smoother interface)
 

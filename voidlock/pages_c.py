@@ -3,8 +3,8 @@ import time
 from datetime import date, datetime, timedelta
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPen
-from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QVBoxLayout, QWidget
+from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QVBoxLayout, QWidget
 
 from . import i18n, messages, study as studymod
 from .icons import paint_icon
@@ -150,10 +150,79 @@ class CheckRow(QWidget):
             paint_icon(p, "check", r.adjusted(3, 3, -3, -3), T.on_accent, 2.4)
 
 
+class TimeStrip(QWidget):
+    """Compact 'who got how much time' summary for one day: one stacked bar and one wrapped line of labels.
+    Only subjects with time appear, longest first; nothing is shown for an empty day."""
+
+    def __init__(self):
+        super().__init__()
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 2, 0, 0)
+        lay.setSpacing(8)
+        self.bar = _StackBar()
+        lay.addWidget(self.bar)
+        self.legend = QLabel()
+        self.legend.setTextFormat(Qt.TextFormat.RichText)
+        self.legend.setWordWrap(True)
+        self.legend.setAlignment(Qt.AlignmentFlag.AlignLeading | Qt.AlignmentFlag.AlignVCenter)
+        self.legend.setStyleSheet(f"color:{T.text2}; font-size:12px; background:transparent;")
+        lay.addWidget(self.legend)
+        self.setVisible(False)
+
+    @staticmethod
+    def short(sec):
+        m = int(sec) // 60
+        h, m = divmod(m, 60)
+        if i18n.is_fa():
+            return i18n.digits(f"{h}:{m:02d}") if h else i18n.digits(f"{m}") + " " + i18n.tr("min")
+        return f"{h}h {m:02d}m" if h else f"{m}m"
+
+    def set_items(self, items):
+        """items: [(name, color, seconds)]"""
+        self.setVisible(bool(items))
+        if not items:
+            return
+        self.bar.set_items([(c, v) for _n, c, v in items])
+        gap = "&nbsp;&nbsp;&nbsp;&nbsp;"
+        parts = [f'<span style="color:{c};">&#9679;</span>&nbsp;{i18n.tr(n)}&nbsp;'
+                 f'<span style="color:{T.text3};">{self.short(v)}</span>' for n, c, v in items]
+        html = gap.join(parts)
+        self.legend.setText(f'<div dir="rtl">{html}</div>' if i18n.is_fa() else html)
+
+
+class _StackBar(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.items = []
+        self.setFixedHeight(10)
+
+    def set_items(self, items):
+        self.items = items
+        self.update()
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        p.setRenderHint(AA)
+        w, h = self.width(), self.height()
+        if self.isRightToLeft():
+            p.translate(w, 0)
+            p.scale(-1, 1)
+        path = QPainterPath()
+        path.addRoundedRect(QRectF(0, 0, w, h), h / 2, h / 2)
+        p.setClipPath(path)
+        p.fillRect(QRectF(0, 0, w, h), qc(T.border, 0.9))
+        total = sum(v for _c, v in self.items) or 1
+        x, gap = 0.0, 2.0
+        for k, (c, v) in enumerate(self.items):
+            seg = max(4.0, (w - gap * (len(self.items) - 1)) * v / total)
+            p.fillRect(QRectF(x, 0, seg, h), QColor(c))
+            x += seg + gap
+
+
 class CounterRow(QWidget):
     changed = Signal(int)
 
-    def __init__(self, subject, value, kind="tests", bump=10, with_time=True):
+    def __init__(self, subject, value, kind="tests", bump=10, with_time=False):
         super().__init__()
         self.v, self.bump = value, bump
         lay = QHBoxLayout(self)
@@ -286,8 +355,10 @@ class StudyPage(Page):
         self.day_total = label("", 13, color=T.text2)
         sr.addWidget(self.day_total, 1)
         lg.lay.addLayout(sr)
+        self.strip = TimeStrip()                  # how the day's time was split between subjects
+        lg.lay.addWidget(self.strip)
         lg.lay.addWidget(Divider())
-        lg.lay.addWidget(label("Study time and tests by subject", 14, QFont.Weight.DemiBold))
+        lg.lay.addWidget(label("Tests solved", 14, QFont.Weight.DemiBold))
         self.counters = QVBoxLayout()
         self.counters.setSpacing(2)
         lg.lay.addLayout(self.counters)
@@ -295,8 +366,6 @@ class StudyPage(Page):
         lg.lay.addWidget(self.tests_bar)
         self.tests_l = label("", 12, color=T.text2)
         lg.lay.addWidget(self.tests_l)
-        self.other_l = label("", 12, color=T.text3)          # focus sessions that name no subject of the list
-        lg.lay.addWidget(self.other_l)
         self.words_box_w = QWidget()                      # language subjects: words learned
         wl = QVBoxLayout(self.words_box_w)
         wl.setContentsMargins(0, 6, 0, 0)
@@ -527,11 +596,7 @@ class StudyPage(Page):
                             + (" · " + i18n.tr("Today") if self.sel == today else ""))
         self.b_next.setEnabled(self.sel < today)
         self.day_total.setText(f"Study time this day: {fmt_hm(sl.day_sec(self.sel, True, now, include_sessions=False))}")
-        for sid, row in getattr(self, "rows", {}).items():
-            row.set_time(sl.subject_day_sec(self.sel, sid, now))
-        other = sl.day_unassigned_sec(self.sel)
-        self.other_l.setText(f"Focus sessions without a subject: {fmt_hm(other)}" if other >= 60 else "")
-        self.other_l.setVisible(other >= 60)
+        self.strip.set_items([(s["name"], s["color"], v) for s, v in sl.day_subject_times(self.sel, now)])
         if self.word_rows:
             self.words_l.setText(f"Words this day: {sl.day_words(self.sel)} · year total {sl.year_words(self.sel.year)}")
         tests = sl.day_tests(self.sel)

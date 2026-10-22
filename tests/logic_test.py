@@ -578,20 +578,21 @@ def test_sounds_and_themes():
         print("SKIP theme check (no Qt)")
 
 
-def test_subject_time_includes_sessions():
+def test_day_subject_times():
     d = tmp()
     st = S.Store(d)
     sl = study.StudyLog(st)
-    math, phys = sl.subjects()[0], sl.subjects()[1]
+    math, phys, chem = sl.subjects()[0], sl.subjects()[1], sl.subjects()[2]
     y = date.today() - timedelta(days=1)
-    ts = datetime.combine(y, datetime.min.time()).timestamp() + 36000
     sl.add_manual(y, math["id"], 30)
+    sl.add_manual(y, chem["id"], 195)
+    sl.add_manual(y, math["id"], 15)
+    ts = datetime.combine(y, datetime.min.time()).timestamp() + 36000
     st.add_record({"id": "a", "start": ts, "focus_sec": 3000, "planned_min": 50, "status": "completed", "subject": "Math"})
-    st.add_record({"id": "b", "start": ts + 4000, "focus_sec": 1500, "planned_min": 25, "status": "completed", "subject": "physics"})
-    st.add_record({"id": "c", "start": ts + 8000, "focus_sec": 600, "planned_min": 10, "status": "completed", "subject": ""})
-    m, p, o = sl.subject_day_sec(y, math["id"]), sl.subject_day_sec(y, phys["id"]), sl.day_unassigned_sec(y)
-    ok(m == 4800 and p == 1500 and o == 600, "a subject's time = timer/manual entries + its focus sessions (by name)")
-    ok(m + p + o == sl.day_sec(y, False), "the subject rows plus 'without a subject' add up to the day total")
+    rows = sl.day_subject_times(y)
+    ok([(s["name"], v // 60) for s, v in rows] == [("Chemistry", 195), ("Math", 45)], "per-subject day times: only subjects with time, longest first")
+    ok(sum(v for _s, v in rows) == sl.day_sec(y, False, include_sessions=False), "they add up to the Study Timer's day total (focus sessions are counted separately there)")
+    ok(sl.day_subject_times(date.today() - timedelta(days=30)) == [], "an empty day has no subjects")
 
 
 if __name__ == "__main__":

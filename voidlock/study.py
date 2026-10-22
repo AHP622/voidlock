@@ -191,12 +191,10 @@ class StudyLog:
         s = self.subject(sid)
         return idx[3].get((dkey(d), str(s["name"]).strip().lower()), 0) if s else 0
 
-    def day_unassigned_sec(self, d):
-        """Focus sessions of the day that name no subject of the list (so no row can show them)."""
-        names = {str(s["name"]).strip().lower() for s in self.subjects()}
-        k = dkey(d)
-        return sum(v for (day, nm), v in self._index()[3].items() if day == k and nm not in names) + \
-            max(0, self._index()[2].get(k, 0) - sum(v for (day, _nm), v in self._index()[3].items() if day == k))
+    def day_subject_times(self, d, now=None):
+        """[(subject, seconds)] for the subjects with study time on that day, longest first."""
+        out = [(s, self.subject_day_sec(d, s["id"], now)) for s in self.subjects()]
+        return sorted([(s, v) for s, v in out if v > 0], key=lambda t: -t[1])
 
     def day_sec(self, d, include_running=True, now=None, include_sessions=True):
         """Study time for a day. Focus sessions (Start on Overview) are left out when include_sessions is False."""
@@ -207,9 +205,9 @@ class StudyLog:
         return tot
 
     def subject_day_sec(self, d, sid, now=None):
-        """Everything studied for one subject on a day: timer + manual entries AND finished focus sessions of that
-        subject (the timer entries alone used to be shown, so a day of sessions looked empty)."""
-        tot = self.day_entries_sec(d, sid) + self.day_sessions_sec(d, sid)
+        """Study-timer time of one subject on a day (timer + manual entries) - the same thing the Study Timer tab's
+        day total counts. Focus sessions (Start on the Overview) are counted separately, as everywhere in this tab."""
+        tot = self.day_entries_sec(d, sid)
         a = self.d["active"]
         if a and a["subject"] == sid and dkey(d) == date.today().isoformat():
             tot += int(self.elapsed(now))
