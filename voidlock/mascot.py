@@ -56,8 +56,8 @@ class Mascot(AnimWidget):
         W = self.width()
         t = 0.0 if Motion.reduced else self._t
         st = self.state
-        speed = {"idle": 1.4, "study": 2.4, "happy": 6.0, "sad": 1.0}[st]
-        amp = {"idle": 0.025, "study": 0.03, "happy": 0.09, "sad": 0.012}[st]
+        speed = {"idle": 1.1, "study": 1.7, "happy": 4.0, "sad": 0.8}[st]            # calmer than before
+        amp = {"idle": 0.02, "study": 0.024, "happy": 0.06, "sad": 0.01}[st]
         bounce = math.sin(t * speed) * amp * W
         squash = 1 + math.sin(t * speed + 1.2) * amp * 0.9
         cx, cy = W / 2, W * 0.56 + bounce

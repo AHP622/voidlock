@@ -4,7 +4,7 @@ import time
 from PySide6.QtCore import (QAbstractAnimation, QEasingCurve, QObject, QPointF, QPropertyAnimation,
                             QRectF, QSize, Qt, QTimer, QVariantAnimation, Signal)
 from PySide6.QtGui import (QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen)
-from PySide6.QtWidgets import (QAbstractButton, QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLabel,
+from PySide6.QtWidgets import (QAbstractButton, QScrollArea, QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLabel,
                                QSizePolicy, QVBoxLayout, QWidget)
 
 from .icons import paint_icon
@@ -31,8 +31,14 @@ class Ticker(QObject):
     def __init__(self):
         super().__init__()
         self._timer = QTimer(self)
-        self._timer.setTimerType(Qt.TimerType.PreciseTimer)
+        self._timer.setTimerType(Qt.TimerType.CoarseTimer)
         self._timer.timeout.connect(self._on)
+        try:
+            from PySide6.QtGui import QGuiApplication
+            if QGuiApplication.instance() is not None:
+                QGuiApplication.instance().applicationStateChanged.connect(self._on_app_state)
+        except Exception:
+            pass
         self._n = 0
         self._t0 = time.perf_counter()
 
@@ -50,11 +56,29 @@ class Ticker(QObject):
         self._n = max(0, self._n - 1)
         self.refresh()
 
+    # Ambient animations (the character's breathing, pulsing dots) run at a calm 30 frames per second, and at 5 while
+    # the window is in the background or minimised. They used to run at 60 all the time, which kept the CPU busy and made
+    # everything feel restless. Short transitions (toggles, bars, fades) have their own animators and stay smooth.
+    FRAME_MS, BACKGROUND_MS, REDUCED_MS = 33, 200, 250
+
+    def _on_app_state(self, _state=None):
+        self.refresh()
+
     def refresh(self):
-        if self._n > 0:
-            self._timer.start(250 if Motion.reduced else 16)
-        else:
+        if self._n <= 0:
             self._timer.stop()
+            return
+        if Motion.reduced:
+            ms = self.REDUCED_MS
+        else:
+            try:
+                from PySide6.QtGui import QGuiApplication
+                active = QGuiApplication.applicationState() == Qt.ApplicationState.ApplicationActive
+            except Exception:
+                active = True
+            ms = self.FRAME_MS if active else self.BACKGROUND_MS
+        if self._timer.interval() != ms or not self._timer.isActive():
+            self._timer.start(ms)
 
 
 class AnimWidget(QWidget):
@@ -118,42 +142,51 @@ def tween(owner, a, b, ms, cb, easing=QEasingCurve.Type.OutCubic, done=None, ove
     return an
 
 
-def reveal(widget, delay=0, dy=14, ms=420):
-    """Staggered entrance: fade + rise. Safe under layouts (restores the final position)."""
+def reveal(widget, delay=0, dy=0, ms=240):
+    """Gentle fade-in, optionally staggered by `delay`.
+
+    The widget is hidden at once (opacity 0) and only the fade is delayed. (It used to be shown fully, then switched off
+    and faded in again after the delay: every page flashed on arrival. It also slid by a few pixels, which fought with the
+    layout whenever a value changed during the animation and made things jitter.) `dy` is kept for old callers and ignored."""
     if Motion.reduced or widget is None:
         return
-
-    def go():
-        if not widget.isVisible():
-            return
+    old = widget.graphicsEffect()
+    if old is not None and getattr(old, "_vl_reveal", False):
+        old.setOpacity(0.0)                       # restart: reuse the effect that is already there
+        eff = old
+    else:
         eff = QGraphicsOpacityEffect(widget)
+        eff._vl_reveal = True
         eff.setOpacity(0.0)
         widget.setGraphicsEffect(eff)
-        end = widget.pos()
-        widget.move(end.x(), end.y() + dy)
-        grp_done = {"n": 0}
+    gen = getattr(eff, "_vl_gen", 0) + 1
+    eff._vl_gen = gen
 
-        def fin():
-            grp_done["n"] += 1
-            if grp_done["n"] == 2:
-                widget.setGraphicsEffect(None)
-
-        a = QPropertyAnimation(eff, b"opacity", widget)
-        a.setDuration(ms)
+    def go():
+        if getattr(eff, "_vl_gen", 0) != gen:
+            return                                # a newer reveal took over
+        try:
+            a = QPropertyAnimation(eff, b"opacity", eff)
+        except RuntimeError:
+            return                                # the widget was deleted meanwhile
+        a.setDuration(Motion.ms(ms))
         a.setStartValue(0.0)
         a.setEndValue(1.0)
-        a.setEasingCurve(QEasingCurve.Type.OutCubic)
-        a.finished.connect(fin)
-        b = QPropertyAnimation(widget, b"pos", widget)
-        b.setDuration(ms)
-        b.setStartValue(QPointF(end.x(), end.y() + dy).toPoint())
-        b.setEndValue(end)
-        b.setEasingCurve(QEasingCurve.Type.OutCubic)
-        b.finished.connect(fin)
-        a.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
-        b.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
+        a.setEasingCurve(QEasingCurve.Type.OutQuad)
 
-    QTimer.singleShot(max(0, delay), go)
+        def fin():
+            try:
+                if widget.graphicsEffect() is eff and getattr(eff, "_vl_gen", 0) == gen:
+                    widget.setGraphicsEffect(None)   # no effect left behind: it would re-render the widget on every paint
+            except RuntimeError:
+                pass
+        a.finished.connect(fin)
+        a.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
+
+    if delay <= 0:
+        QTimer.singleShot(0, go)
+    else:
+        QTimer.singleShot(int(delay), go)
 
 
 def label(text="", px=13, weight=QFont.Weight.Normal, color=T.text, mono=False, spacing=0.0,
@@ -866,3 +899,27 @@ class ThemePicker(QWidget):
 def i18n_tr(s):
     from .i18n import tr
     return tr(s)
+
+
+class SmoothScrollArea(QScrollArea):
+    """Scroll area whose mouse wheel glides instead of jumping a whole notch at once."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._target = None
+        self._anim = QVariantAnimation(self)
+        self._anim.setDuration(170)
+        self._anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._anim.valueChanged.connect(lambda v: self.verticalScrollBar().setValue(int(v)))
+
+    def wheelEvent(self, e):
+        bar = self.verticalScrollBar()
+        if Motion.reduced or bar.maximum() == 0 or e.angleDelta().y() == 0 or e.modifiers() != Qt.KeyboardModifier.NoModifier:
+            return super().wheelEvent(e)
+        base = self._target if (self._target is not None and self._anim.state() == QAbstractAnimation.State.Running) else bar.value()
+        self._target = max(bar.minimum(), min(bar.maximum(), base - e.angleDelta().y() * 0.75))
+        self._anim.stop()
+        self._anim.setStartValue(float(bar.value()))
+        self._anim.setEndValue(float(self._target))
+        self._anim.start()
+        e.accept()

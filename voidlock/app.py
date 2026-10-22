@@ -280,13 +280,12 @@ class Sidebar(QWidget):
 
 
 class FadeStack(QStackedWidget):
+    """Switches pages. The page itself does not fade as a whole - its cards fade in one after another (Page.stagger),
+    which is calmer than two animations running over each other."""
+
     def show_index(self, i, animate=True):
-        if i == self.currentIndex():
-            return
-        self.setCurrentIndex(i)
-        if animate:
-            w = self.currentWidget()
-            QTimer.singleShot(0, lambda: reveal(w, 0, dy=14, ms=300))
+        if i != self.currentIndex():
+            self.setCurrentIndex(i)
 
 
 class Root(QWidget):
@@ -457,10 +456,8 @@ class MainWindow(QMainWindow):
         self.topbar.sub.setText(pg.subtitle)
         self.sidebar.set_active(key)
         pg.on_show()
-        self.stack.show_index(i, animate and not self._first)
+        self.stack.show_index(i)
         self._first = False
-        if key == "overview" and animate is False:
-            QTimer.singleShot(60, pg.stagger)
 
     def current_key(self):
         return self.keys[self.stack.currentIndex()]

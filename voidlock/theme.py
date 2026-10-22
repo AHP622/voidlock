@@ -101,6 +101,8 @@ def font(px=13, weight=QFont.Weight.Normal, mono=False, spacing=0.0, keep_mono=F
     f.setFamilies((T.mono_font + ui) if (mono and (keep_mono or not fa)) else ui)
     f.setPixelSize(int(px))
     f.setWeight(weight)
+    f.setHintingPreference(QFont.HintingPreference.PreferNoHinting)     # steady glyph spacing while things move / fade
+    f.setStyleStrategy(QFont.StyleStrategy.PreferAntialias)
     if spacing and not fa:
         f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, spacing)
     return f

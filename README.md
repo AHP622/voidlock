@@ -36,6 +36,17 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
+## What changed in 1.4.3 (calmer, smoother interface)
+
+- **Page switches no longer flash.** A page used to appear fully, vanish a moment later and then fade in again card by card (the fade started
+  *after* a delay, and the page also slid 14 px while its cards slid separately). Measured: old = full -> empty -> fade over ~650 ms; now = hidden
+  from the first frame and a quiet fade of ~300 ms. Cards fade in with a short even cascade (45 ms apart, max 6 steps); nothing slides, so a value changing during
+  the animation can no longer make things jitter.
+- **Idle animations at 30 fps** (were 60) and 5 fps while the window is in the background or minimised. The character is a little calmer.
+- **Smooth mouse-wheel scrolling** (glides instead of jumping a whole notch).
+- **Steadier text** while things fade or move (no font hinting, anti-aliased).
+- Graphics effects are removed after each fade, so they do not slow down later painting.
+
 ## What changed in 1.4.2
 
 - **Stray little window** flashing open and closed when moving between days in the Study tab (introduced by the per-subject time label in 1.4.0:

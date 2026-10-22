@@ -16,7 +16,7 @@ from .store import CATEGORIES, fmt_hm, streak_days, today_focus_sec, uid
 from .theme import T, font, qc
 from .mascot import Mascot
 from .viz import EmptyState, IconTile, LockIcon, RingTimer, Skeleton
-from .widgets import (AA, AC, Button, Card, Chip, Divider, Pill, ProgressBar, Segmented, Toggle, clear_layout,
+from .widgets import (AA, AC, Button, Card, Chip, Divider, Pill, ProgressBar, Segmented, SmoothScrollArea, Toggle, clear_layout,
                       label, reveal, set_label_color, tween)
 
 
@@ -26,7 +26,7 @@ class Page(QWidget):
         self.ctx, self.title, self.subtitle = ctx, title, subtitle
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
-        self.scroll = QScrollArea()
+        self.scroll = SmoothScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setFrameShape(QFrame.Shape.NoFrame)
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -41,11 +41,11 @@ class Page(QWidget):
 
     def stagger(self, widgets=None):
         for i, w in enumerate(widgets or self._reveal):
-            reveal(w, delay=70 * i)
+            reveal(w, delay=45 * min(i, 5))          # a short, even cascade; nothing waits more than a quarter of a second
 
     def on_show(self):
         self.refresh()
-        QTimer.singleShot(30, self.stagger)
+        self.stagger()                               # synchronous: the cards are hidden before the first paint
 
     def refresh(self):
         pass
@@ -700,8 +700,8 @@ class AppsPage(Page):
         self.skel.hide()
         self.list_w.show()
         self.apply_filter()
-        QTimer.singleShot(20, lambda: [reveal(r, 30 * i, dy=10, ms=300) for i, r in enumerate(list(self.rows.values())[:9])
-                                       if r.isVisible()])
+        for i, r in enumerate([r for r in self.rows.values() if not r.isHidden()][:8]):
+            reveal(r, 25 * i)
 
     def add_site(self):
         a = self.ctx.site_flow()
@@ -711,7 +711,7 @@ class AppsPage(Page):
         self.list_box.insertWidget(0, row)
         self.rows[a["id"]] = row
         self.apply_filter()
-        reveal(row, 0, dy=10, ms=300)
+        reveal(row)
 
     def refresh(self):
         g = self.ctx.session.gstat
@@ -860,5 +860,5 @@ class AppsPage(Page):
         self.list_box.insertWidget(0, row)
         self.rows[a["id"]] = row
         self.apply_filter()
-        reveal(row, 0, dy=10, ms=300)
+        reveal(row)
         self.ctx.toast(f"{a['name']} added and blocked.", "success")
