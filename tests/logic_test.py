@@ -595,6 +595,36 @@ def test_day_subject_times():
     ok(sl.day_subject_times(date.today() - timedelta(days=30)) == [], "an empty day has no subjects")
 
 
+def test_upgrade_from_old_data():
+    """Data written by an older version (hand-made files in the old formats) must open unchanged in this one."""
+    d = tmp()
+    today = date.today()
+    (d).mkdir(exist_ok=True)
+    S.write_json(d / "settings.json", {"daily_goal_min": 200, "language": "fa", "theme": "ocean", "sound": "soft", "week_start": 5,
+                                       "update_repo": "x/y", "long_cooldown": 900, "target_field": "Medicine",
+                                       "exam_date": [1406, 4, 10], "play_tracking": True})
+    S.write_json(d / "study.json", {"subjects": [{"id": "m", "name": "Math", "color": "#fff"}, {"id": "e", "name": "English", "color": "#000"}],
+                                    "entries": [{"id": "1", "date": today.isoformat(), "subject": "m", "sec": 1800, "source": "manual", "t": 1}],
+                                    "tests": {today.isoformat(): {"m": 25}}, "todos": [{"id": "t", "date": today.isoformat(), "text": "x", "done": False}],
+                                    "active": None})
+    S.write_json(d / "history.json", [{"id": "h1", "start": time.time() - 3600, "focus_sec": 1500, "planned_min": 25, "status": "completed"}])
+    S.write_json(d / "schedule.json", [{"id": "s", "day": 2, "time": "18:00", "minutes": 50, "subject": "Physics", "enabled": True, "last_fired": ""}])
+    S.write_json(d / "points.json", {"balance": 77, "ledger": [], "rewards": [], "tickets": []})
+    S.write_json(d / "locks.json", {"version": 1, "locks": [{"exe": "steam.exe", "name": "Steam", "until": time.time() + 86400}]})
+    st = S.Store(d)
+    sl = study.StudyLog(st)
+    P = study.Points(st)
+    ok(st.settings["daily_goal_min"] == 200 and st.settings["language"] == "fa" and st.settings["theme"] == "ocean" and st.settings["long_cooldown"] == 900
+       and st.settings["target_field"] == "Medicine" and st.settings["close_to_tray"] is True and st.settings["tray_at_login"] is False,
+       "old settings are kept; new ones get their defaults (tray on, start-with-Windows off)")
+    ok(len(sl.subjects()) == 2 and sl.day_entries_sec(today) == 1800 and sl.day_tests(today) == 25 and len(sl.todos(today)) == 1, "old study data is untouched")
+    ok(sl.tracks_words("e") and sl.day_words(today) == 0, "the old English subject gets the words counter automatically")
+    ok(len(st.history) == 1 and len(st.schedule) == 1 and st.schedule[0].get("auto_start") in (None, False), "history and schedule are untouched")
+    ok(P.balance == 77 and len(st.active_locks()) == 1, "points and day locks are untouched")
+    ok(st.classes == [], "classes start empty")
+    ok(any(b["name"].endswith("start") for b in st.list_backups()), "a backup is taken when the new version starts")
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

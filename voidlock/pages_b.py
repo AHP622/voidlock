@@ -1082,6 +1082,16 @@ class SettingsPage(Page):
         self.data_l = label("", 12, color=T.text3)
         c4.lay.addWidget(self.data_l)
         self.body.addWidget(c4)
+        cs = Card(pad=22)
+        cs.lay.addWidget(section_title("Window & tray"))
+        self.to_tray = Toggle(st.get("close_to_tray", True))
+        self.tray_login = Toggle(st.get("tray_at_login", False))
+        cs.lay.addLayout(setting_row("Keep running in the tray", "The window's close button hides VOIDLOCK next to the clock "
+                                     "instead of quitting. Class reminders and checks keep working. Quit from the tray menu.", self.to_tray))
+        cs.lay.addWidget(Divider())
+        cs.lay.addLayout(setting_row("Start in the tray with Windows", "VOIDLOCK starts quietly when you sign in. The window does "
+                                     "not open by itself - click the tray icon when you want it.", self.tray_login))
+        self.body.addWidget(cs)
         cu = Card(pad=22)
         cu.lay.addWidget(section_title("Updates"))
         self.up_check = Toggle(st.get("update_check", True))
@@ -1142,6 +1152,8 @@ class SettingsPage(Page):
         self.b_adm_on.clicked.connect(ctx.enable_admin_guard)
         self.b_adm_off.clicked.connect(ctx.disable_admin_guard)
         self.up_check.toggled.connect(lambda v: self._set("update_check", bool(v)))
+        self.to_tray.toggled.connect(lambda v: self._set("close_to_tray", bool(v)))
+        self.tray_login.toggled.connect(self._tray_login)
         self.up_auto.toggled.connect(lambda v: self._set("update_auto_install", bool(v)))
         self.b_up_check.clicked.connect(self._check_now)
         self.b_up_install.clicked.connect(ctx.install_update)
@@ -1252,6 +1264,11 @@ class SettingsPage(Page):
         title, body = messages.block_message(self.ctx.store.settings, "eFootball", "window")
         self.ctx.play_sound("close")
         self.ctx._popups.append(BlockPopup(title, body, 7000))
+
+    def _tray_login(self, on):
+        from .guard import tray_autostart
+        self._set("tray_at_login", bool(on))
+        tray_autostart(bool(on), self.ctx.store)
 
     def _tracking(self, on):
         self._set("play_tracking", bool(on))

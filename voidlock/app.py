@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 
 from PySide6.QtCore import QPoint, QRectF, QSize, Qt, QTimer
 from PySide6.QtGui import QFont, QKeySequence, QLinearGradient, QPainter, QPen, QShortcut
-from PySide6.QtWidgets import (QAbstractButton, QFrame, QHBoxLayout, QLineEdit, QMainWindow, QStackedWidget,
+from PySide6.QtWidgets import (QAbstractButton, QApplication, QFrame, QHBoxLayout, QLineEdit, QMainWindow, QStackedWidget,
                                QVBoxLayout, QWidget)
 
 from . import __version__
@@ -374,6 +374,9 @@ class MainWindow(QMainWindow):
         self.scanner.scanned.connect(self._scanned)
         self.scanner.failed.connect(self._scan_failed)
         self.scanner.start()
+        self._quitting = False
+        self.tray = None
+        self._setup_tray()
         self.tick = QTimer(self)
         self.tick.timeout.connect(self._second)
         self.tick.start(1000)
@@ -435,18 +438,102 @@ class MainWindow(QMainWindow):
                 pass
         return super().nativeEvent(eventType, message)
 
+    # ------------------------------------------------------------ tray
+    def _setup_tray(self):
+        """An icon next to the clock. The window's close button then only hides the window (setting), so reminders and
+        checks keep working; the menu has Open / Start session / Pause / Quit."""
+        from PySide6.QtGui import QAction
+        from PySide6.QtWidgets import QMenu, QSystemTrayIcon
+        try:
+            if not QSystemTrayIcon.isSystemTrayAvailable():
+                return
+        except Exception:
+            return
+        t = QSystemTrayIcon(QApplication.windowIcon(), self)
+        menu = QMenu()
+        self._tray_menu = menu
+        self.act_open = QAction(i18n.tr("Open VOIDLOCK"), menu)
+        self.act_class = QAction("", menu)
+        self.act_class.setEnabled(False)
+        self.act_start = QAction(i18n.tr("Start focus session"), menu)
+        self.act_pause = QAction(i18n.tr("Pause"), menu)
+        self.act_quit = QAction(i18n.tr("Quit VOIDLOCK"), menu)
+        for a in (self.act_open, self.act_class, None, self.act_start, self.act_pause, None, self.act_quit):
+            menu.addSeparator() if a is None else menu.addAction(a)
+        self.act_open.triggered.connect(self.bring_to_front)
+        self.act_start.triggered.connect(self._tray_start)
+        self.act_pause.triggered.connect(self._toggle_run)
+        self.act_quit.triggered.connect(self.quit_app)
+        menu.aboutToShow.connect(self._refresh_tray_menu)
+        t.setContextMenu(menu)
+        t.activated.connect(lambda r: self.bring_to_front() if r in (QSystemTrayIcon.ActivationReason.Trigger,
+                                                                      QSystemTrayIcon.ActivationReason.DoubleClick) else None)
+        t.setToolTip("VOIDLOCK")
+        t.show()
+        self.tray = t
+
+    def _refresh_tray_menu(self):
+        s = self.session
+        st = self.class_status()
+        self.act_class.setText(st[0] if st else i18n.tr("No classes planned"))
+        self.act_class.setVisible(True)
+        self.act_start.setEnabled(not s.active and s.state in ("idle", "completed"))
+        self.act_pause.setVisible(s.active)
+        self.act_pause.setEnabled(s.active and not (s.strict and s.state == "running"))
+        self.act_pause.setText(i18n.tr("Resume") if s.state == "paused" else i18n.tr("Pause"))
+
+    def _tray_start(self):
+        if self.session.active:
+            return
+        self.session.dismiss()
+        self.quick_start_default()
+
+    def _update_tray_tip(self):
+        if not self.tray:
+            return
+        s = self.session
+        if s.active:
+            line = i18n.tr("Focus session") + " · " + i18n.digits(fmt_clock(s.remaining))
+        else:
+            st = self.class_status()
+            line = st[0] if st else i18n.tr("Standby")
+        self.tray.setToolTip(f"VOIDLOCK\n{line}")
+
+    def bring_to_front(self):
+        """Show the window again (from the tray, or when a second copy of the program is started)."""
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def quit_app(self):
+        self._quitting = True
+        self.close()                       # (closeEvent asks first when a session is running, and resets the flag on "no")
+
     def closeEvent(self, e):
+        if self.tray is not None and self.store.settings.get("close_to_tray", True) and not self._quitting:
+            e.ignore()
+            self.hide()
+            if not self.store.settings.get("tray_hint_shown"):
+                self.store.settings["tray_hint_shown"] = True
+                self.store.save_settings()
+                self.tray.showMessage("VOIDLOCK", i18n.tr("Still running in the tray. Click the icon to open it, right-click to quit."),
+                                      self.tray.MessageIcon.Information, 6000)
+            return
         if self.session.active:
             ok = self.confirm("Close VOIDLOCK?", "Your session keeps running: the guard process continues blocking "
                               "in the background until the timer ends. Reopen VOIDLOCK any time to manage it.",
                               "Close window", False, "info")
             if not ok:
+                self._quitting = False
                 e.ignore()
                 return
         self.study.heartbeat()
         self.scanner.stop()
         self.store.snapshot("exit")
+        if self.tray is not None:
+            self.tray.hide()
         super().closeEvent(e)
+        QTimer.singleShot(0, QApplication.quit)       # (quit-on-last-window is off so a hidden window does not end the program)
 
     # ------------------------------------------------------------ navigation
     def goto(self, key, animate=True):
@@ -485,7 +572,7 @@ class MainWindow(QMainWindow):
         if now - self._last_hb > 2:
             self._last_hb = now
             # visible=False when minimised or hidden: the guard then shows its own box so the message is not lost
-            write_json(self.store.p_ui_alive, {"t": now, "visible": bool(self.isVisible() and not self.isMinimized())})
+            write_json(self.store.p_ui_alive, {"t": now, "visible": bool((self.isVisible() and not self.isMinimized()) or self.tray)})
             if self.study.active() and int(now) % 10 < 2:
                 self.study.heartbeat(now)
         self._poll_events()
@@ -500,6 +587,8 @@ class MainWindow(QMainWindow):
         self.topbar.clock.setText(i18n.fmt_clock_line(now))
         self._check_classes(now)
         self.update_class_pill(now)
+        if self.tray and now.second % 10 == 0:
+            self._update_tray_tip()
         if self.current_key() == "schedule" and now.second == 0:
             self.pages["schedule"].refresh()               # "in 25m" / NOW / DONE stay current
         # (a QTimer drifts: "second % 15 == 0" could be skipped several times in a row)
@@ -1063,6 +1152,8 @@ class MainWindow(QMainWindow):
         except Exception as e:
             return self.toast(f"Could not restart: {e}", "error")
         self.scanner.stop()
+        if self.tray is not None:
+            self.tray.hide()
         from PySide6.QtWidgets import QApplication
         QApplication.quit()
 

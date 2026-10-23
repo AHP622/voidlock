@@ -125,6 +125,9 @@ DEFAULT_SETTINGS = {
     "game_friday_only": True,    # the play pass (1.5-2 h of gaming) can only be used on Fridays
     "play_tolerance_min": 5,     # minutes of play that still count as a "clean" day
     "daily_tests_goal": 50,
+    "close_to_tray": True,       # the window's close button hides it in the tray (the program keeps running)
+    "tray_at_login": False,      # start hidden in the tray when Windows starts (the window does NOT open)
+    "tray_hint_shown": False,
     "update_check": True,
     "update_auto_install": True,
     "update_last_check": 0,
@@ -158,7 +161,8 @@ _INT_RANGES = {
 }
 _ENUMS = {"reduce_motion": ("auto", "on", "off"), "language": ("en", "fa"), "theme": THEME_KEYS,
           "sound": STYLE_ORDER, "week_start": (5, 6, 0)}
-_BOOLS = ("female_mascot", "strict_default", "play_tracking", "game_friday_only", "update_check", "update_auto_install")
+_BOOLS = ("female_mascot", "strict_default", "play_tracking", "game_friday_only", "update_check", "update_auto_install",
+          "close_to_tray", "tray_at_login", "tray_hint_shown")
 # never taken from an imported file: they decide where code comes from
 _NOT_IMPORTED = ("update_last_check", "update_last_tag", "update_notified")
 

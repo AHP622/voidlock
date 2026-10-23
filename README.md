@@ -36,6 +36,18 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
+## What changed in 1.5.0
+
+- **Tray icon:** VOIDLOCK sits next to the clock. Left click opens the window; right click: Open, next class, Start focus session, Pause / Resume, Quit.
+  The window's close button hides it in the tray (Settings -> Window & tray -> "Keep running in the tray"; turn it off to make the button quit again). A
+  second copy started from a shortcut now just shows the running window instead of saying "already running".
+- **No window at start-up:** Windows never opens the window by itself. Optional: "Start in the tray with Windows" (off by default) starts only the tray icon.
+- **Installer:** the release now also contains `VoidLock-Setup.exe` (Inno Setup, per-user, no administrator rights): Start menu shortcut, optional
+  desktop shortcut, uninstall from Windows Settings (removes the scheduled tasks / sign-in entries and the website block; asks whether to delete your data).
+  Build it yourself with `iscc /DAppVersion=1.5.0 installer\voidlock.iss` after building `dist\VoidLock.exe`. `VoidLock.exe` is still published for the auto-updater.
+- **Your data:** it lives in `%APPDATA%\VoidLock` and is never touched by updating, installing or uninstalling (unless you answer "yes" when the uninstaller asks).
+  New test `test_upgrade_from_old_data` opens data in the old formats with the new version.
+
 ## What changed in 1.4.5
 
 - **Daily log, study time by subject:** a compact summary under "Study time this day" - one stacked bar in the subjects' colours and one line of labels

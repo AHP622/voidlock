@@ -159,6 +159,33 @@ w.scanner.stop(); w.guard.stop(); print('OK')
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=90)
     ok("OK" in r.stdout and "Traceback" not in r.stderr, f"theme '{th}' renders every page")
 
+
+# ---------------------------------------------------------------- tray (1.5.0)
+class FakeTray:
+    class MessageIcon: Information = 1
+    def __init__(self): self.msgs = []; self.hidden = False
+    def showMessage(self, *a): self.msgs.append(a)
+    def hide(self): self.hidden = True
+    def setToolTip(self, t): self.tip = t
+win.tray = FakeTray(); st.settings["close_to_tray"] = True; st.settings["tray_hint_shown"] = False
+win.show(); pump(100)
+win.close(); pump(100)
+ok(not win.isVisible() and win.tray.msgs and st.settings["tray_hint_shown"], "the close button hides the window in the tray (with a one-time hint)")
+win.bring_to_front(); pump(100)
+ok(win.isVisible(), "bring_to_front shows the window again")
+win.tray.msgs.clear(); win.close(); pump(100)
+ok(not win.isVisible() and not win.tray.msgs, "...the hint is shown only once")
+win.bring_to_front(); pump(50)
+st.settings["close_to_tray"] = False
+import PySide6.QtWidgets as _qw
+quit_calls = []
+_orig_quit = _qw.QApplication.quit
+_qw.QApplication.quit = staticmethod(lambda: quit_calls.append(1))
+win.close(); pump(200)
+ok(win.tray.hidden and quit_calls, "with 'keep running in the tray' off, closing really quits")
+_qw.QApplication.quit = _orig_quit
+win.tray = None
+
 win.scanner.stop(); win.guard.stop()
 print("ALL PASSED" if not FAILS else f"{len(FAILS)} FAILED")
 sys.exit(1 if FAILS else 0)

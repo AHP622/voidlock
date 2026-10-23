@@ -25,9 +25,20 @@ jobs:
         run: |
           $h = (Get-FileHash dist/VoidLock.exe -Algorithm SHA256).Hash.ToLower()
           "$h  VoidLock.exe" | Out-File -Encoding ascii dist/VoidLock.exe.sha256
+      - name: Installer (Inno Setup) - optional, a failure here does not stop the release
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          $v = (Select-String -Path voidlock/__init__.py -Pattern '__version__ = "(.+)"').Matches[0].Groups[1].Value
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$v" installer\voidlock.iss
+          $h = (Get-FileHash dist/VoidLock-Setup.exe -Algorithm SHA256).Hash.ToLower()
+          "$h  VoidLock-Setup.exe" | Out-File -Encoding ascii dist/VoidLock-Setup.exe.sha256
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/VoidLock.exe
             dist/VoidLock.exe.sha256
+            dist/VoidLock-Setup.exe
+            dist/VoidLock-Setup.exe.sha256
           generate_release_notes: true

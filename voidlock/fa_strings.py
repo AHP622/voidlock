@@ -450,3 +450,17 @@ FA.update({
 })
 
 FA.update({"Focus sessions without a subject: {x}": "جلسه‌های تمرکز بدون درس: {x}"})
+
+# ---------------- 1.5.0: tray
+FA.update({
+    "Open VOIDLOCK": "باز کردن VOIDLOCK", "Start focus session": "شروع جلسه‌ی تمرکز", "Quit VOIDLOCK": "خروج از VOIDLOCK",
+    "No classes planned": "کلاسی برنامه‌ریزی نشده", "Focus session": "جلسه‌ی تمرکز",
+    "Still running in the tray. Click the icon to open it, right-click to quit.": "هنوز در سینی ویندوز در حال اجراست. برای باز کردن روی آیکن کلیک کنید، برای خروج راست‌کلیک کنید.",
+    "Window & tray": "پنجره و سینی ویندوز",
+    "Keep running in the tray": "ماندن در سینی ویندوز",
+    "The window's close button hides VOIDLOCK next to the clock instead of quitting. Class reminders and checks keep working. Quit from the tray menu.":
+        "دکمه‌ی بستن پنجره، VOIDLOCK را کنار ساعت پنهان می‌کند و خارج نمی‌شود. یادآوری کلاس‌ها و بررسی‌ها ادامه پیدا می‌کنند. خروج از منوی آیکن سینی انجام می‌شود.",
+    "Start in the tray with Windows": "شروع در سینی همراه ویندوز",
+    "VOIDLOCK starts quietly when you sign in. The window does not open by itself - click the tray icon when you want it.":
+        "VOIDLOCK هنگام ورود به ویندوز بی‌صدا شروع می‌شود. پنجره خودش باز نمی‌شود؛ هر وقت خواستید روی آیکن سینی کلیک کنید.",
+})

@@ -159,6 +159,29 @@ def autostart(enable, store):
         return False
 
 
+UI_RUN_NAME = "VoidLockTray"
+
+
+def tray_autostart(enable, store):
+    """Optional: start VOIDLOCK hidden in the tray at sign-in (no window opens). Off unless the person turns it on."""
+    if sys.platform != "win32":
+        return False
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE) as k:
+            if enable:
+                parts = [c for c in command_line(store) if c != "--guard"] + ["--tray"]
+                winreg.SetValueEx(k, UI_RUN_NAME, 0, winreg.REG_SZ, " ".join(f'"{c}"' for c in parts))
+            else:
+                try:
+                    winreg.DeleteValue(k, UI_RUN_NAME)
+                except FileNotFoundError:
+                    pass
+        return True
+    except Exception:
+        return False
+
+
 TASK_NAME = "VoidLockWatchdog"
 ADMIN_TASK = "VoidLockGuardAdmin"
 

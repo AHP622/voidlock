@@ -18,6 +18,7 @@ def main():
     ap.add_argument("--install-admin-guard", action="store_true")
     ap.add_argument("--remove-admin-guard", action="store_true")
     ap.add_argument("--clean-hosts", action="store_true")
+    ap.add_argument("--tray", action="store_true")           # start hidden in the tray (login autostart option)
     args, _ = ap.parse_known_args()
 
     if args.version:
@@ -111,16 +112,44 @@ def main():
     i18n.install_hooks()
     if i18n.is_fa():
         app.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+    # Only one copy runs. Starting a second one (a shortcut, the installer's "Launch") asks the running copy - which may be
+    # hidden in the tray - to show its window, instead of complaining.
+    import hashlib
+    from PySide6.QtNetwork import QLocalServer, QLocalSocket
+    pipe = "voidlock-" + hashlib.sha1(str(store.home).encode("utf-8")).hexdigest()[:12]
+    probe = QLocalSocket()
+    probe.connectToServer(pipe)
+    if probe.waitForConnected(400):
+        probe.write(b"show")
+        probe.waitForBytesWritten(400)
+        probe.disconnectFromServer()
+        return 0
     lock = QLockFile(str(store.home / "ui.lock"))
     lock.setStaleLockTime(5000)
     if not lock.tryLock(100):
         QMessageBox.information(None, "VOIDLOCK", "VOIDLOCK is already running.")
         return 0
+    app.setQuitOnLastWindowClosed(False)         # a window hidden in the tray must not end the program
     win = MainWindow(store, GuardClient(store))
-    win.show()
+    server = QLocalServer()
+    QLocalServer.removeServer(pipe)
+    server.listen(pipe)
+
+    def _client():
+        sock = server.nextPendingConnection()
+        if sock:
+            sock.waitForReadyRead(200)
+            win.bring_to_front()
+            sock.disconnectFromServer()
+    server.newConnection.connect(_client)
+    if args.tray and win.tray is not None:
+        pass                                      # start quietly: only the tray icon
+    else:
+        win.show()
     if store.notices:
         QTimer.singleShot(900, lambda: [win.toast(n, "info") for n in store.notices])
     code = app.exec()
+    server.close()
     lock.unlock()
     return code
 
