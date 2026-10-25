@@ -19,7 +19,17 @@ jobs:
         run: |
           $v = (Select-String -Path voidlock/__init__.py -Pattern '__version__ = "(.+)"').Matches[0].Groups[1].Value
           if ("v$v" -ne "${{ github.ref_name }}") { Write-Error "Tag ${{ github.ref_name }} does not match __version__ $v"; exit 1 }
-      - run: python -m PyInstaller --noconsole --onefile --name VoidLock --icon assets/icon.ico --add-data "assets;assets" main.py
+      - name: Build the exe (with the Visual C++ runtime inside)
+        shell: pwsh
+        run: |
+          # Qt needs these DLLs. A PC without the "Visual C++ Redistributable" failed with
+          # "DLL load failed while importing QtCore", so they are shipped inside the exe.
+          $bins = @()
+          foreach ($n in 'vcruntime140.dll','vcruntime140_1.dll','msvcp140.dll','msvcp140_1.dll','msvcp140_2.dll','msvcp140_codecvt_ids.dll','concrt140.dll') {
+            $p = Join-Path $env:SystemRoot "System32\$n"
+            if (Test-Path $p) { $bins += @('--add-binary', "$p;.") } else { Write-Host "not found: $n" }
+          }
+          python -m PyInstaller --noconsole --onefile --name VoidLock --icon assets/icon.ico --add-data "assets;assets" @bins main.py
       - name: SHA-256 checksum
         shell: pwsh
         run: |

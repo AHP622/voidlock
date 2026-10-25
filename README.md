@@ -36,6 +36,12 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
+## What changed in 1.5.1
+
+- **"DLL load failed while importing QtCore"** on another PC: Qt needs the Microsoft Visual C++ runtime, which a clean Windows does not always have. The release
+  workflow now packs those DLLs into `VoidLock.exe`. If Qt still cannot load, a plain message explains it (and the link to install the runtime) instead of a stack trace.
+  VOIDLOCK needs **64-bit Windows 10 or 11** (Qt 6); on Windows 7 / 8 it cannot run. The installer refuses older Windows.
+
 ## What changed in 1.5.0
 
 - **Tray icon:** VOIDLOCK sits next to the clock. Left click opens the window; right click: Open, next class, Start focus session, Pause / Resume, Quit.

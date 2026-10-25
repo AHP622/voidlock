@@ -7,6 +7,23 @@ import argparse
 import sys
 
 
+def _startup_failure(err):
+    """Qt could not be loaded (usually: the Microsoft Visual C++ runtime is missing, or Windows is too old / 32-bit).
+    No Qt here, so the message is a plain Windows box instead of a stack trace."""
+    text = (f"VOIDLOCK could not start: the Qt libraries failed to load.\n({err})\n\n"
+            "Most likely the Microsoft Visual C++ Redistributable is missing on this PC. Install it from\n"
+            "https://aka.ms/vs/17/release/vc_redist.x64.exe\nand start VOIDLOCK again. "
+            "VOIDLOCK needs 64-bit Windows 10 or 11.\n\n"
+            "VOIDLOCK اجرا نشد: کتابخانه‌های Qt بارگذاری نشدند.\n"
+            "به احتمال زیاد «Microsoft Visual C++ Redistributable» روی این کامپیوتر نصب نیست. از آدرس بالا نصبش کنید و دوباره "
+            "اجرا کنید. VOIDLOCK ویندوز ۱۰ یا ۱۱ ۶۴ بیتی لازم دارد.")
+    try:
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(0, text, "VOIDLOCK", 0x10)
+    except Exception:
+        print(text, file=sys.stderr)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--guard", action="store_true")
@@ -77,9 +94,13 @@ def main():
         while psutil.pid_exists(args.after) and time.time() < end:
             time.sleep(0.2)
 
-    from PySide6.QtCore import QLockFile, QTimer, Qt
-    from PySide6.QtGui import QFont
-    from PySide6.QtWidgets import QApplication, QMessageBox
+    try:
+        from PySide6.QtCore import QLockFile, QTimer, Qt
+        from PySide6.QtGui import QFont
+        from PySide6.QtWidgets import QApplication, QMessageBox
+    except ImportError as e:                      # "DLL load failed while importing QtCore"
+        _startup_failure(e)
+        return 1
 
     from voidlock import i18n
     from voidlock.guard import GuardClient
