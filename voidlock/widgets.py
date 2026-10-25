@@ -923,3 +923,52 @@ class SmoothScrollArea(QScrollArea):
         self._anim.setEndValue(float(self._target))
         self._anim.start()
         e.accept()
+
+
+class DateField(QWidget):
+    """Year / month / day steppers: Jalali in Persian, Gregorian in English; an invalid day (31 Shahrivar...) is pulled back."""
+    changed = Signal()
+
+    def __init__(self, d=None):
+        super().__init__()
+        from datetime import date as _date, datetime as _dt
+        from . import i18n
+        self._i18n, self._dt, self._date = i18n, _dt, _date
+        self.jalali = i18n.is_fa()
+        d = d or _date.today()
+        y, m, dd = i18n.to_jalali(_dt(d.year, d.month, d.day)) if self.jalali else (d.year, d.month, d.day)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(6)
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        self.y = Stepper(y, 1300 if self.jalali else 2000, 1500 if self.jalali else 2100, 1)
+        self.m = Stepper(m, 1, 12, 1)
+        self.d = Stepper(dd, 1, 31, 1)
+        for w in (self.y, self.m, self.d):
+            row.addWidget(w)
+            w.valueChanged.connect(self._changed)
+        row.addStretch(1)
+        lay.addLayout(row)
+        self.hint = label("", 12, color=T.text3)
+        lay.addWidget(self.hint)
+        self._changed()
+
+    def value(self):
+        y, m, d = self.y.value(), self.m.value(), self.d.value()
+        if self.jalali:
+            for dd in range(d, 0, -1):
+                try:
+                    g = self._i18n.from_jalali(y, m, dd)
+                    if self._i18n.to_jalali(self._dt(*g)) == (y, m, dd):
+                        return self._date(*g)
+                except ValueError:
+                    continue
+            return self._date.today()
+        import calendar
+        return self._date(y, m, min(d, calendar.monthrange(y, m)[1]))
+
+    def _changed(self, _v=None):
+        v = self.value()
+        self.hint.setText(self._i18n.fmt_when(self._dt(v.year, v.month, v.day), with_time=False))
+        self.changed.emit()

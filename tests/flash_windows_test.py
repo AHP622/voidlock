@@ -53,6 +53,10 @@ seen.clear()
 st.apps.append({"id": "cu", "name": "Mine", "exe": "mine.exe", "category": "Other", "enabled": False, "custom": True, "path": ""})
 st.save_apps(); win.goto("apps"); win.pages["apps"].refresh(); pump(600)
 ok(not seen, f"the apps list with a custom app opens no stray window ({seen[:3]})")
+from voidlock.pages_c import ExamEditor, SubjectForm
+seen.clear()
+SubjectForm(); SubjectForm({"id": "x", "name": "A", "color": "#fff"}); ExamEditor(win.study, lambda: None); pump(100)
+ok(not seen, f"the subject and exam forms open no stray window ({seen[:3]})")
 for key in win.keys:
     seen.clear(); win.goto(key); pump(250)
     ok(not seen, f"opening '{key}' opens no stray window ({seen[:3]})")

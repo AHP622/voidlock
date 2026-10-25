@@ -14,7 +14,7 @@ from .store import fmt_hm
 from .study import SUBJECT_COLORS, play_day
 from .theme import Motion, T, font, qc
 from .viz import EmptyState, IconTile
-from .widgets import (AA, AC, Button, Card, Chip, Divider, Pill, ProgressBar, Stepper, Toggle, clear_layout,
+from .widgets import (AA, AC, Button, Card, Chip, DateField, Divider, Pill, ProgressBar, Stepper, Toggle, clear_layout,
                       label, set_label_color, tween)
 
 
@@ -53,9 +53,147 @@ class ColorPicker(QWidget):
                 p.drawEllipse(QPointF(18 + i * 36, 18), 15, 15)
 
 
+class SubjectForm(QWidget):
+    """Add / edit a subject: name, colour, whether it appears in 'Tests solved', whether it counts words."""
+    changed = Signal()
+
+    def __init__(self, s=None):
+        super().__init__()
+        s = s or {}
+        self.is_new = not s.get("id")
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 4, 0, 0)
+        lay.setSpacing(10)
+        self.name = QLineEdit(s.get("name", ""))
+        self.name.setPlaceholderText("Subject name, e.g. Math")
+        self.name.setMaxLength(24)
+        lay.addWidget(self.name)
+        self.cp = ColorPicker()
+        if s.get("color") in self.cp.colors:
+            self.cp.cur = self.cp.colors.index(s["color"])
+        lay.addWidget(self.cp)
+        r1 = QHBoxLayout()
+        r1.addWidget(label("Show in Tests solved", 13), 1)
+        self.tests = Toggle(s.get("tests", True))
+        r1.addWidget(self.tests)
+        lay.addLayout(r1)
+        r2 = QHBoxLayout()
+        r2.addWidget(label("Count words learned (for a language)", 13), 1)
+        self.words = Toggle(studymod.StudyLog.tracks_words(None, s) if s else False)
+        r2.addWidget(self.words)
+        lay.addLayout(r2)
+        self.name.textChanged.connect(self._name)
+
+    def _name(self, t):
+        if self.is_new:
+            self.words.set_silent(bool(studymod._WORDS_NAME.search(t)))         # English / زبان ...
+        self.changed.emit()
+
+    def valid(self):
+        return bool(self.name.text().strip())
+
+    def values(self):
+        return {"name": self.name.text().strip(), "color": self.cp.color(), "tests": self.tests.isChecked(),
+                "words": self.words.isChecked()}
+
+
+class ExamEditor(QWidget):
+    """List of exams with an inline form. Every change is saved at once."""
+
+    def __init__(self, sl, on_change):
+        super().__init__()
+        self.sl, self.on_change, self.editing = sl, on_change, None
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 4, 0, 0)
+        lay.setSpacing(10)
+        self.box = QVBoxLayout()
+        self.box.setSpacing(4)
+        lay.addLayout(self.box)
+        lay.addWidget(Divider())
+        self.name = QLineEdit()
+        self.name.setPlaceholderText("Exam name, e.g. Mock exam 3")
+        self.name.setMaxLength(40)
+        lay.addWidget(self.name)
+        self.date = DateField(date.today() + timedelta(days=7))
+        lay.addWidget(self.date)
+        self.b_add = Button("Add exam", "primary", "plus", height=38)
+        lay.addWidget(self.b_add)
+        self.b_add.clicked.connect(self.save)
+        self.name.returnPressed.connect(self.save)
+        self.render()
+
+    def render(self):
+        clear_layout(self.box)
+        today = date.today()
+        exams = self.sl.exams()
+        if not exams:
+            self.box.addWidget(label("No exams yet. Add the days of your exams below.", 12, color=T.text3))
+        for e in exams:
+            d = date.fromisoformat(e["date"])
+            left = (d - today).days
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            col = QVBoxLayout()
+            col.setSpacing(0)
+            col.addWidget(label(e["name"], 13, QFont.Weight.DemiBold, T.text if left >= 0 else T.text3))
+            when = ("Today" if left == 0 else "Tomorrow" if left == 1 else f"in {left} days" if left > 1 else "Passed")
+            col.addWidget(label(f"{i18n.fmt_when(datetime(d.year, d.month, d.day), with_time=False)} · {i18n.tr(when)}", 11,
+                                color=T.amber if 0 <= left <= 3 else T.text3))
+            row.addLayout(col, 1)
+            b_e = Button("", "icon", "edit", "Edit", square=30)
+            b_e.clicked.connect(lambda _=False, e=e: self.load(e))
+            b_d = Button("", "icon", "trash", "Delete", square=30)
+            b_d.clicked.connect(lambda _=False, e=e: self.remove(e))
+            row.addWidget(b_e)
+            row.addWidget(b_d)
+            w = QWidget()
+            w.setLayout(row)
+            self.box.addWidget(w)
+
+    def load(self, e):
+        self.editing = e["id"]
+        self.name.setText(e["name"])
+        d = date.fromisoformat(e["date"])
+        i18n_y = self.date
+        # put the saved day into the three steppers
+        if self.date.jalali:
+            y, m, dd = i18n.to_jalali(datetime(d.year, d.month, d.day))
+        else:
+            y, m, dd = d.year, d.month, d.day
+        self.date.y.set_value(y, emit=False)
+        self.date.m.set_value(m, emit=False)
+        self.date.d.set_value(dd, emit=False)
+        self.date._changed()
+        self.b_add.setText("Save changes")
+
+    def save(self):
+        name = self.name.text().strip()
+        if not name:
+            return
+        if self.editing:
+            self.sl.update_exam(self.editing, name, self.date.value())
+        else:
+            self.sl.add_exam(name, self.date.value())
+        self.editing = None
+        self.name.clear()
+        self.b_add.setText("Add exam")
+        self.render()
+        self.on_change()
+
+    def remove(self, e):
+        self.sl.remove_exam(e["id"])
+        if self.editing == e["id"]:
+            self.editing = None
+            self.name.clear()
+            self.b_add.setText("Add exam")
+        self.render()
+        self.on_change()
+
+
 class SubjectTile(Card):
     clicked = Signal()
     delete = Signal()
+    edit = Signal()
 
     def __init__(self, subject):
         super().__init__(None, pad=14, hover=True)
@@ -69,6 +207,10 @@ class SubjectTile(Card):
         top.addWidget(IconTile(subject["name"], subject["color"], 34))
         self.name_l = label(subject["name"], 14, QFont.Weight.DemiBold)
         top.addWidget(self.name_l, 1)
+        self.b_edit = Button("", "icon", "edit", "Edit this subject", square=30)
+        self.b_edit.hide()
+        self.b_edit.clicked.connect(self.edit.emit)
+        top.addWidget(self.b_edit)
         self.b_del = Button("", "icon", "trash", "Delete this subject", square=30)
         self.b_del.hide()
         self.b_del.clicked.connect(self.delete.emit)
@@ -231,7 +373,9 @@ class CounterRow(QWidget):
         lay.addWidget(IconTile(subject["name"], subject["color"], 28))
         col = QVBoxLayout()
         col.setSpacing(0)
-        col.addWidget(label(subject["name"] if kind == "tests" else subject["name"] + " · " + i18n.tr("Words"), 13))
+        nm = label(subject["name"] if kind == "tests" else subject["name"] + " · " + i18n.tr("Words"), 13)
+        nm.setAlignment(Qt.AlignmentFlag.AlignLeading | Qt.AlignmentFlag.AlignVCenter)     # a Latin name stays on the row's start side
+        col.addWidget(nm)
         self.time_l = label("", 11, color=T.text2, mono=True)
         col.addWidget(self.time_l)
         # (setVisible(True) on a widget that has no parent yet opens it as a tiny window of its own for a moment)
@@ -299,6 +443,12 @@ class StudyPage(Page):
         dd.addWidget(self.dday_l, 0, Qt.AlignmentFlag.AlignRight)
         self.streak_l = label("", 12, color=T.amber)
         dd.addWidget(self.streak_l, 0, Qt.AlignmentFlag.AlignRight)
+        self.exam_l = label("", 12, color=T.amber, wrap=True)       # the next exam, in one small line
+        self.exam_l.setMaximumWidth(280)
+        self.exam_l.setAlignment(Qt.AlignmentFlag.AlignRight)
+        dd.addWidget(self.exam_l, 0, Qt.AlignmentFlag.AlignRight)
+        self.b_exams = Button("Exams", "ghost", "schedule", height=30)
+        dd.addWidget(self.b_exams, 0, Qt.AlignmentFlag.AlignRight)
         hr.addLayout(dd)
         hero.lay.addLayout(hr)
         self.body.addWidget(hero)
@@ -325,12 +475,20 @@ class StudyPage(Page):
         row.addWidget(sc, 3)
         pc = Card(pad=20)
         ph = QHBoxLayout()
-        ph.addWidget(label("TODAY'S PLAN", 11, QFont.Weight.Bold, T.text3, spacing=2.4), 1)
+        ph.setSpacing(6)
+        self.plan_title = label("TODAY'S PLAN", 11, QFont.Weight.Bold, T.text3, spacing=2.4)
+        ph.addWidget(self.plan_title, 1)
         self.plan_l = label("", 12, color=T.text2)
         ph.addWidget(self.plan_l)
+        self.b_pprev = Button("", "icon", "chev-l", "Previous day", square=28)
+        self.b_pnext = Button("", "icon", "chev-r", "Next day", square=28)
+        self.b_ptoday = Button("Today", "ghost", height=28)
+        ph.addWidget(self.b_pprev)
+        ph.addWidget(self.b_pnext)
+        ph.addWidget(self.b_ptoday)
         pc.lay.addLayout(ph)
         self.todo_in = QLineEdit()
-        self.todo_in.setPlaceholderText("Add a task and press Enter…")
+        self.todo_in.setPlaceholderText("Add a task for this day and press Enter…")
         self.todo_in.setMaxLength(80)
         pc.lay.addWidget(self.todo_in)
         self.todo_box = QVBoxLayout()
@@ -355,6 +513,8 @@ class StudyPage(Page):
         self.day_total = label("", 13, color=T.text2)
         sr.addWidget(self.day_total, 1)
         lg.lay.addLayout(sr)
+        self.exam_tag = label("", 12, QFont.Weight.DemiBold, T.amber)       # "Exam day: ..." when the shown day has one
+        lg.lay.addWidget(self.exam_tag)
         self.strip = TimeStrip()                  # how the day's time was split between subjects
         lg.lay.addWidget(self.strip)
         lg.lay.addWidget(Divider())
@@ -366,6 +526,8 @@ class StudyPage(Page):
         lg.lay.addWidget(self.tests_bar)
         self.tests_l = label("", 12, color=T.text2)
         lg.lay.addWidget(self.tests_l)
+        self.orphan_l = label("", 12, color=T.text3)
+        lg.lay.addWidget(self.orphan_l)
         self.words_box_w = QWidget()                      # language subjects: words learned
         wl = QVBoxLayout(self.words_box_w)
         wl.setContentsMargins(0, 6, 0, 0)
@@ -379,21 +541,24 @@ class StudyPage(Page):
         wl.addWidget(self.words_l)
         lg.lay.addWidget(self.words_box_w)
         lg.lay.addWidget(Divider())
-        lg.lay.addWidget(label("Add study time manually", 14, QFont.Weight.DemiBold))
+        lg.lay.addWidget(label("Add or remove study time manually", 14, QFont.Weight.DemiBold))
         self.man_chips = QHBoxLayout()
         self.man_chips.setSpacing(8)
         lg.lay.addLayout(self.man_chips)
         mr = QHBoxLayout()
         self.man_min = Stepper(30, 5, 600, 5, " min")
         self.b_man = Button("Add time", "primary", "plus", height=38)
+        self.b_man_rm = Button("Remove time", "soft", "minus", height=38)
         mr.addWidget(self.man_min)
         mr.addWidget(self.b_man)
+        mr.addWidget(self.b_man_rm)
         mr.addStretch(1)
         lg.lay.addLayout(mr)
         self.body.addWidget(lg)
         self.body.addStretch(1)
         self.man_sid = None
         self.manage = False
+        self.plan_day = None                      # None = follow today
         self.rows, self.word_rows = {}, {}
 
         self.b_add.clicked.connect(self.add_subject)
@@ -403,6 +568,11 @@ class StudyPage(Page):
         self.b_next.clicked.connect(lambda: self.goto_day(min(date.today(), self.sel + timedelta(days=1))))
         self.b_today.clicked.connect(lambda: self.goto_day(date.today()))
         self.b_man.clicked.connect(self.add_manual)
+        self.b_man_rm.clicked.connect(self.remove_manual)
+        self.b_exams.clicked.connect(self.exams_flow)
+        self.b_pprev.clicked.connect(lambda: self.goto_plan((self.plan_day or date.today()) - timedelta(days=1)))
+        self.b_pnext.clicked.connect(lambda: self.goto_plan((self.plan_day or date.today()) + timedelta(days=1)))
+        self.b_ptoday.clicked.connect(lambda: self.goto_plan(None))
         self._reveal = [hero, sc, pc, lg]
         self.build_tiles()
 
@@ -434,7 +604,9 @@ class StudyPage(Page):
             t = SubjectTile(s)
             t.clicked.connect(lambda s=s: self.toggle_subject(s["id"]))
             t.delete.connect(lambda s=s: self.delete_subject(s))
+            t.edit.connect(lambda s=s: self.edit_subject(s))
             t.b_del.setVisible(self.manage)
+            t.b_edit.setVisible(self.manage)
             r.addWidget(t, 1)
             self.tiles[s["id"]] = t
         if len(subs) % 2 == 1:
@@ -444,7 +616,7 @@ class StudyPage(Page):
         clear_layout(self.counters)
         clear_layout(self.words)
         self.rows, self.word_rows = {}, {}
-        for s in self.sl.subjects():
+        for s in [x for x in self.sl.subjects() if self.sl.shows_tests(x)]:
             cr = CounterRow(s, self.sl.day_tests(self.sel, s["id"]))
             cr.changed.connect(lambda v, s=s: self.set_tests(s["id"], v))
             self.counters.addWidget(cr)
@@ -488,44 +660,55 @@ class StudyPage(Page):
         self.manage = not self.manage
         for t in self.tiles.values():
             t.b_del.setVisible(self.manage)
+            t.b_edit.setVisible(self.manage)
 
     def add_subject(self):
-        ed = QLineEdit()
-        ed.setPlaceholderText("Subject name, e.g. Math")
-        ed.setMaxLength(24)
-        cp = ColorPicker()
-        body = QWidget()
-        lay = QVBoxLayout(body)
-        lay.setContentsMargins(0, 4, 0, 0)
-        lay.setSpacing(10)
-        lay.addWidget(ed)
-        lay.addWidget(cp)
-        wrow = QHBoxLayout()
-        wrow.addWidget(label("Count words learned (for a language)", 13), 1)
-        wt = Toggle(False)
-        wrow.addWidget(wt)
-        lay.addLayout(wrow)
-        ed.textChanged.connect(lambda t: wt.set_silent(bool(studymod._WORDS_NAME.search(t))))   # English / زبان ...
-        m = self.ctx.new_modal().build("Add subject", None, body, "Add", validator=lambda: bool(ed.text().strip()), icon="book")
-        ed.textChanged.connect(lambda _t: m.revalidate())
+        form = SubjectForm()
+        m = self.ctx.new_modal().build("Add subject", None, form, "Add", validator=form.valid, icon="book")
+        form.changed.connect(m.revalidate)
         if m.exec_modal():
-            self.sl.add_subject(ed.text(), cp.color(), words=wt.isChecked())
-            self.build_tiles()
-            self.build_log()
-            self.refresh()
+            v = form.values()
+            self.sl.add_subject(v["name"], v["color"], words=v["words"], tests=v["tests"])
+            self._rebuild_subjects()
+
+    def edit_subject(self, s):
+        form = SubjectForm(s)
+        m = self.ctx.new_modal().build("Edit subject", "Renaming keeps all the hours and tests recorded for it.", form, "Save",
+                                      validator=form.valid, icon="edit")
+        form.changed.connect(m.revalidate)
+        if m.exec_modal():
+            v = form.values()
+            self.sl.edit_subject(s["id"], v["name"], v["color"], words=v["words"], tests=v["tests"])
+            self._rebuild_subjects()
+
+    def _rebuild_subjects(self):
+        self.build_tiles()
+        self.build_log()
+        self.refresh()
+        self.ctx.after_study_change()
 
     def delete_subject(self, s):
-        if self.ctx.confirm("Delete subject?", f"“{s['name']}” will be removed from the list. Time already recorded stays in your totals.",
+        if self.ctx.confirm("Delete subject?", f"“{s['name']}” will be removed from the list. Its past hours and tests stay in "
+                            "your log (shown as a deleted subject) and come back to it if you add a subject with the same name again.",
                             "Delete", True, "trash"):
             self.sl.remove_subject(s["id"])
-            self.build_tiles()
-            self.build_log()
-            self.refresh()
+            self._rebuild_subjects()
+
+    def exams_flow(self):
+        body = ExamEditor(self.sl, lambda: (self.refresh(), self.ctx.after_study_change()))
+        self.ctx.new_modal().build("Exams", "The next exam is shown on this page, and you get a reminder the day before and on the day.",
+                                   body, "Done", "Close", icon="schedule", width=520).exec_modal()
+        self.refresh()
+
+    def goto_plan(self, d):
+        self.plan_day = d if d and d != date.today() else None
+        self._sig = None
+        self.refresh()
 
     def add_todo(self):
         t = self.todo_in.text().strip()
         if t:
-            self.sl.add_todo(date.today(), t)
+            self.sl.add_todo(self.plan_day or date.today(), t)
             self.todo_in.clear()
             self.refresh()
 
@@ -544,6 +727,16 @@ class StudyPage(Page):
             return self.ctx.toast("Add a subject first.", "warn")
         self.sl.add_manual(self.sel, self.man_sid, self.man_min.value())
         self.ctx.toast(f"Added {self.man_min.value()} min.", "success")
+        self.refresh()
+        self.ctx.after_study_change()
+
+    def remove_manual(self):
+        if not self.man_sid:
+            return self.ctx.toast("Add a subject first.", "warn")
+        got = self.sl.remove_time(self.sel, self.man_sid, self.man_min.value())
+        if got <= 0:
+            return self.ctx.toast("This subject has no recorded time on this day.", "warn")
+        self.ctx.toast(f"Removed {fmt_hm(got)}.", "success")
         self.refresh()
         self.ctx.after_study_change()
 
@@ -577,9 +770,21 @@ class StudyPage(Page):
             act = bool(a and a["subject"] == sid)
             t.set_state(fmt_hms(sl.subject_day_sec(today, sid, now)), act)
         self.running_l.setText(f"Running: {sl.subject(a['subject'])['name']}" if a and sl.subject(a["subject"]) else "No timer is running.")
-        # plan
-        todos = sl.todos(today)
-        sig = tuple((t["id"], t["done"]) for t in todos)
+        # next exam (one small line)
+        ex, dleft = sl.next_exam(today)
+        if ex:
+            d_ = date.fromisoformat(ex["date"])
+            when = "today" if dleft == 0 else "tomorrow" if dleft == 1 else f"in {dleft} days"
+            self.exam_l.setText(f"Next exam: {ex['name']} · {i18n.tr(when)}")
+            self.exam_l.setToolTip(i18n.fmt_when(datetime(d_.year, d_.month, d_.day), with_time=False))
+            set_label_color(self.exam_l, T.red if dleft <= 1 else T.amber)
+        else:
+            self.exam_l.setText("No exam added yet")
+            set_label_color(self.exam_l, T.text3)
+        # plan (any day: today by default)
+        pday = self.plan_day or today
+        todos = sl.todos(pday)
+        sig = (pday, tuple((t["id"], t["done"]) for t in todos))
         if sig != self._sig:
             self._sig = sig
             clear_layout(self.todo_box)
@@ -590,13 +795,25 @@ class StudyPage(Page):
                 self.todo_box.addWidget(r)
             if not todos:
                 self.todo_box.addWidget(label("Nothing planned yet - add your first task.", 12, color=T.text3))
+        self.plan_title.setText("TODAY'S PLAN" if pday == today else
+                                i18n.tr("PLAN") + " · " + i18n.fmt_when(datetime(pday.year, pday.month, pday.day), with_time=False))
+        self.b_ptoday.setVisible(pday != today)
         self.plan_l.setText(f"{sum(1 for t in todos if t['done'])}/{len(todos)} done" if todos else "")
         # daily log header
         self.date_l.setText(i18n.fmt_when(datetime(self.sel.year, self.sel.month, self.sel.day), with_time=False)
                             + (" · " + i18n.tr("Today") if self.sel == today else ""))
         self.b_next.setEnabled(self.sel < today)
         self.day_total.setText(f"Study time this day: {fmt_hm(sl.day_sec(self.sel, True, now, include_sessions=False))}")
-        self.strip.set_items([(s["name"], s["color"], v) for s, v in sl.day_subject_times(self.sel, now)])
+        names = [(i18n.tr("Deleted subjects") if (s.get("ghost") and s["name"] == "Deleted subjects") else
+                  (f"{s['name']} · {i18n.tr('deleted')}" if s.get("ghost") else s["name"]), s["color"], v)
+                 for s, v in sl.day_subject_times(self.sel, now)]
+        self.strip.set_items(names)
+        exs = sl.exam_on(self.sel)
+        self.exam_tag.setText((f"Exam day: {', '.join(e['name'] for e in exs)}") if exs else "")
+        self.exam_tag.setVisible(bool(exs))
+        orph = sl.day_orphan_tests(self.sel)
+        self.orphan_l.setText(f"From deleted subjects: {orph} tests" if orph else "")
+        self.orphan_l.setVisible(bool(orph))
         if self.word_rows:
             self.words_l.setText(f"Words this day: {sl.day_words(self.sel)} · year total {sl.year_words(self.sel.year)}")
         tests = sl.day_tests(self.sel)

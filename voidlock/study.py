@@ -43,6 +43,8 @@ class StudyLog:
         st.setdefault("entries", [])      # {id,date,subject,sec,source,t}
         st.setdefault("tests", {})        # {date: {subject_id: count}}
         st.setdefault("words", {})        # {date: {subject_id: count}}  (language subjects)
+        st.setdefault("gone", {})         # {subject_id: {name, color}} of deleted subjects: their hours keep a name
+        st.setdefault("exams", [])        # {id, name, date, time, notified}
         st.setdefault("todos", [])        # {id,date,text,done}
         st.setdefault("active", None)     # {subject, started, last_seen}
         if fresh and not st["subjects"]:
@@ -93,22 +95,112 @@ class StudyLog:
     def subject(self, sid):
         return next((s for s in self.subjects() if s["id"] == sid), None)
 
-    def add_subject(self, name, color=None, words=False):
+    @staticmethod
+    def _same(a, b):
+        return str(a).strip().casefold() == str(b).strip().casefold()
+
+    def add_subject(self, name, color=None, words=False, tests=True):
+        """A subject with the name of a deleted one gets that subject's id back, so its old hours, tests and words
+        belong to it again (deleting a subject and adding it again used to cut the history off)."""
+        name = name.strip()
         color = color or SUBJECT_COLORS[len(self.subjects()) % len(SUBJECT_COLORS)]
-        s = {"id": uid(), "name": name.strip(), "color": color}
+        sid = next((k for k, g in self.d["gone"].items() if self._same(g.get("name", ""), name)), None)
+        s = {"id": sid or uid(), "name": name, "color": color}
+        if sid:
+            self.d["gone"].pop(sid, None)
         if words:
             s["words"] = True
+        if not tests:
+            s["tests"] = False
         self.subjects().append(s)
         self._gen += 1
         self.save()
         return s
 
+    def edit_subject(self, sid, name=None, color=None, words=None, tests=None):
+        s = self.subject(sid)
+        if not s:
+            return None
+        if name is not None and name.strip():
+            s["name"] = name.strip()
+        if color:
+            s["color"] = color
+        if words is not None:
+            s["words"] = bool(words)
+        if tests is not None:
+            s["tests"] = bool(tests)
+        self._gen += 1
+        self.save()
+        return s
+
+    def shows_tests(self, subject):
+        s = subject if isinstance(subject, dict) else self.subject(subject)
+        return bool(s) and s.get("tests", True)
+
     def remove_subject(self, sid):
         if self.d["active"] and self.d["active"]["subject"] == sid:
             self.stop()                    # keep the time that was running (it used to be thrown away)
+        s = self.subject(sid)
+        if s:
+            self.d["gone"][sid] = {"name": s["name"], "color": s.get("color", "#8A8F9C")}
         self.d["subjects"] = [s for s in self.subjects() if s["id"] != sid]
         self._gen += 1
         self.save()
+
+    # ---- hours / tests that belong to subjects that no longer exist
+    def orphan_ids(self):
+        known = {s["id"] for s in self.subjects()}
+        ids = set()
+        for e in self.d["entries"]:
+            ids.add(e.get("subject"))
+        for key in ("tests", "words"):
+            for day in self.d[key].values():
+                ids.update(day.keys())
+        return {i for i in ids if i and i not in known}
+
+    def ghost(self, sid):
+        """A subject-like record for an id that is not in the list any more (name from the 'gone' notes if known)."""
+        g = self.d["gone"].get(sid)
+        return {"id": sid, "name": (g or {}).get("name") or "Deleted subjects", "color": (g or {}).get("color") or "#8A8F9C",
+                "ghost": True}
+
+    def repair_subjects(self, backups):
+        """`backups`: study.json dicts (newest first). Hours of subjects that were deleted *and added again by hand*
+        (so they got a new id) are given back to the subject with the same name; the others get their old name from the
+        newest backup that knew them, or stay as 'Deleted subjects'. Returns (relinked_ids, named_ids)."""
+        orphans = self.orphan_ids() - set(self.d["gone"])
+        if not orphans:
+            return 0, 0
+        found = {}
+        for b in backups:
+            for s in (b.get("subjects") or []) if isinstance(b, dict) else []:
+                if isinstance(s, dict) and s.get("id") in orphans and s["id"] not in found:
+                    found[s["id"]] = {"name": str(s.get("name", "")), "color": s.get("color") or "#8A8F9C"}
+        relinked = named = 0
+        for old, info in found.items():
+            tgt = next((s for s in self.subjects() if self._same(s["name"], info["name"])), None)
+            if tgt:
+                self._relink(old, tgt["id"])
+                relinked += 1
+            else:
+                self.d["gone"][old] = info
+                named += 1
+        if found:
+            self._gen += 1
+            self.save()
+        return relinked, named
+
+    def _relink(self, old, new):
+        for e in self.d["entries"]:
+            if e.get("subject") == old:
+                e["subject"] = new
+        for key in ("tests", "words"):
+            for day in self.d[key].values():
+                if old in day:
+                    day[new] = day.get(new, 0) + day.pop(old)
+        a = self.d["active"]
+        if a and a.get("subject") == old:
+            a["subject"] = new
 
     # ---- stopwatch (one subject at a time)
     def active(self):
@@ -192,9 +284,85 @@ class StudyLog:
         return idx[3].get((dkey(d), str(s["name"]).strip().lower()), 0) if s else 0
 
     def day_subject_times(self, d, now=None):
-        """[(subject, seconds)] for the subjects with study time on that day, longest first."""
+        """[(subject, seconds)] for every subject with study time on that day, longest first. Time of deleted subjects is
+        included (as ghosts, grouped by name), so the list always adds up to the day's total."""
         out = [(s, self.subject_day_sec(d, s["id"], now)) for s in self.subjects()]
+        k = dkey(d)
+        known = {s["id"] for s in self.subjects()}
+        ghosts = {}
+        for (day, sid), v in self._index()[1].items():
+            if day == k and sid not in known and v > 0:
+                g = self.ghost(sid)
+                slot = ghosts.setdefault(g["name"].strip().casefold(), [g, 0])
+                slot[1] += v
+        out += [(g, v) for g, v in ghosts.values()]
         return sorted([(s, v) for s, v in out if v > 0], key=lambda t: -t[1])
+
+    def day_orphan_tests(self, d):
+        known = {s["id"] for s in self.subjects()}
+        return sum(c for sid, c in self.d["tests"].get(dkey(d), {}).items() if sid not in known)
+
+    # ---- manual corrections
+    def remove_time(self, d, sid, minutes):
+        """Takes up to `minutes` away from one subject's timer / manual entries of a day (newest entries first).
+        Returns the seconds actually removed."""
+        want = int(minutes * 60)
+        left = want
+        k = dkey(d)
+        for e in sorted((e for e in self.d["entries"] if e["date"] == k and e.get("subject") == sid),
+                        key=lambda e: e.get("t", 0), reverse=True):
+            if left <= 0:
+                break
+            cut = min(left, int(e["sec"]))
+            e["sec"] = int(e["sec"]) - cut
+            left -= cut
+        self.d["entries"] = [e for e in self.d["entries"] if int(e["sec"]) > 0]
+        if left != want:
+            self._gen += 1
+            self.save()
+        return want - left
+
+    # ---- exams
+    def exams(self):
+        return sorted(self.d["exams"], key=lambda e: (e["date"], e.get("time", "")))
+
+    def add_exam(self, name, d, time_s=""):
+        e = {"id": uid(), "name": name.strip()[:40], "date": dkey(d), "time": time_s, "notified": ""}
+        self.d["exams"].append(e)
+        self.save()
+        return e
+
+    def update_exam(self, eid, name=None, d=None, time_s=None):
+        for e in self.d["exams"]:
+            if e["id"] == eid:
+                if name is not None and name.strip():
+                    e["name"] = name.strip()[:40]
+                if d is not None:
+                    if dkey(d) != e["date"]:
+                        e["notified"] = ""
+                    e["date"] = dkey(d)
+                if time_s is not None:
+                    e["time"] = time_s
+        self.save()
+
+    def remove_exam(self, eid):
+        self.d["exams"] = [e for e in self.d["exams"] if e["id"] != eid]
+        self.save()
+
+    def next_exam(self, today=None):
+        """(exam, days_left) of the nearest exam that is today or later, or (None, None)."""
+        today = today or date.today()
+        for e in self.exams():
+            try:
+                dd = (date.fromisoformat(e["date"]) - today).days
+            except ValueError:
+                continue
+            if dd >= 0:
+                return e, dd
+        return None, None
+
+    def exam_on(self, d):
+        return [e for e in self.d["exams"] if e["date"] == dkey(d)]
 
     def day_sec(self, d, include_running=True, now=None, include_sessions=True):
         """Study time for a day. Focus sessions (Start on Overview) are left out when include_sessions is False."""

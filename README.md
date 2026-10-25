@@ -36,6 +36,18 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
+## What changed in 1.6.0
+
+- **Bug: the daily bar lost hours of deleted subjects.** Deleting a subject (and typing it in again) cut its hours off from the day bar, and with every subject deleted the bar
+  disappeared. Now: a deleted subject's hours and tests stay in the log under its old name ("... · deleted", and "From deleted subjects" for tests); adding a subject with the
+  same name gives the whole history back; and at start the program matches hours of already re-created subjects to the same-name subject using the backups. The bar always adds up to the day total.
+- **Exams:** `Exams` button on the Study page - add exam days (Jalali dates in Persian). The nearest one is written on the page ("Next exam: ... in 3 days"), the daily log marks exam days,
+  and a reminder pops up the day before and on the day.
+- **Subjects:** choose whether a new subject appears in "Tests solved"; **Manage** now has Edit (name, colour, tests, words) as well as Delete; renaming keeps all history.
+- **Manual time:** "Remove time" next to "Add time" (takes from the newest entries of that subject on that day, never below zero).
+- **Plan for other days:** the plan card has arrows and a Today button, so you can write tomorrow's (or any day's) plan.
+- **Help** rewritten: every feature, Persian and English, with troubleshooting.
+
 ## What changed in 1.5.1
 
 - **"DLL load failed while importing QtCore"** on another PC: Qt needs the Microsoft Visual C++ runtime, which a clean Windows does not always have. The release

@@ -186,6 +186,47 @@ ok(win.tray.hidden and quit_calls, "with 'keep running in the tray' off, closing
 _qw.QApplication.quit = _orig_quit
 win.tray = None
 
+
+# ---------------------------------------------------------------- study page (1.6.0)
+from datetime import date, timedelta
+from voidlock.pages_c import ExamEditor, SubjectForm
+sp = win.pages["study"]; win.goto("study"); pump(300)
+sl = win.study
+# subject form: language names switch the words counter on, editing keeps the id
+f = SubjectForm(); f.name.setText("English grammar"); pump(30)
+ok(f.words.isChecked() and f.tests.isChecked() and f.valid(), "the add-subject form: a language name turns the words counter on")
+f.tests.set_silent(False)
+sub = sl.add_subject(f.values()["name"], f.values()["color"], words=f.values()["words"], tests=f.values()["tests"])
+sp._rebuild_subjects(); pump(100)
+ok(sub["id"] not in sp.rows and sub["id"] in sp.word_rows, "a subject without 'Tests solved' has no tests row but has a words row")
+e = SubjectForm(sl.subject(sub["id"]))
+ok(e.name.text() == "English grammar" and not e.tests.isChecked() and e.words.isChecked(), "the edit form shows the subject's current settings")
+# manual add / remove
+y = date.today() - timedelta(days=1)
+sp.goto_day(y); sp.man_sid = sub["id"]; sp.man_min.set_value(60)
+sp.add_manual(); sp.man_min.set_value(25); sp.remove_manual(); pump(50)
+ok(sl.subject_day_sec(y, sub["id"]) == 35 * 60, "Add time / Remove time buttons work on the shown day")
+# plan for another day
+tomorrow = date.today() + timedelta(days=1)
+sp.goto_plan(tomorrow); sp.todo_in.setText("Read chapter 7"); sp.add_todo(); pump(50)
+ok(len(sl.todos(tomorrow)) == 1 and len(sl.todos(date.today())) == 0 and sp.b_ptoday.isVisibleTo(sp), "a task can be planned for tomorrow")
+sp.goto_plan(None); pump(50)
+ok(not sp.b_ptoday.isVisibleTo(sp), "'Today' returns to today's plan")
+# exams
+ed = ExamEditor(sl, lambda: None)
+ed.name.setText("Mock 5"); ed.save()
+ok(len(sl.exams()) == 1 and sl.exams()[0]["name"] == "Mock 5", "exam editor adds an exam")
+ed.load(sl.exams()[0]); ed.name.setText("Mock 5b"); ed.save()
+ok(len(sl.exams()) == 1 and sl.exams()[0]["name"] == "Mock 5b", "...and edits it")
+sl.add_exam("Tomorrow's", date.today() + timedelta(days=1)); win._popups = []
+win._check_exams(datetime.now()); pump(100)
+ok(len(win._popups) == 1, "an exam tomorrow pops up a reminder")
+win._check_exams(datetime.now()); pump(50)
+ok(len(win._popups) == 1, "...only once")
+sp.refresh(); pump(50)
+ok("Tomorrow's" in sp.exam_l.text(), "the next exam is written on the Study page")
+ed.remove(sl.exams()[0]); sl.remove_exam(sl.exams()[0]["id"])
+
 win.scanner.stop(); win.guard.stop()
 print("ALL PASSED" if not FAILS else f"{len(FAILS)} FAILED")
 sys.exit(1 if FAILS else 0)

@@ -625,6 +625,89 @@ def test_upgrade_from_old_data():
     ok(any(b["name"].endswith("start") for b in st.list_backups()), "a backup is taken when the new version starts")
 
 
+def test_deleted_subjects_keep_their_hours():
+    """The reported bug: subjects deleted and typed in again lost their history and the day's bar showed only some of it."""
+    d = tmp()
+    st = S.Store(d)
+    sl = study.StudyLog(st)
+    names = [s["name"] for s in sl.subjects()]
+    y = date.today() - timedelta(days=1)
+    for s in sl.subjects():
+        sl.add_manual(y, s["id"], 60)
+        sl.set_tests(y, s["id"], 5)
+    total = sl.day_sec(y, False, include_sessions=False)
+    st.snapshot("before-delete", force=True)
+    old = {s["name"]: s["id"] for s in sl.subjects()}
+    for s in list(sl.subjects()):
+        sl.remove_subject(s["id"])
+    rows = sl.day_subject_times(y)
+    ok(len(rows) == len(names) and all(s.get("ghost") for s, _v in rows) and sum(v for _s, v in rows) == total,
+       "after deleting every subject the day's bar still shows all the time (with the old names)")
+    ok({s["name"] for s, _v in rows} == set(names), "ghosts keep the deleted subjects' names")
+    # re-adding a subject with the same name brings its history back
+    s_new = sl.add_subject(names[0])
+    ok(s_new["id"] == old[names[0]] and sl.subject_day_sec(y, s_new["id"]) == 3600 and sl.day_tests(y, s_new["id"]) == 5,
+       "adding a subject with a deleted one's name gives its history back")
+    # the other path (typed in again before this fix): new ids, history found through the backups
+    d2 = tmp()
+    st2 = S.Store(d2)
+    sl2 = study.StudyLog(st2)
+    old2 = {s["name"]: s["id"] for s in sl2.subjects()}
+    for s in sl2.subjects():
+        sl2.add_manual(y, s["id"], 30)
+        sl2.set_tests(y, s["id"], 2)
+    st2.snapshot("keep", force=True)
+    st2.study["subjects"] = []          # what the old version did: removed, nothing noted
+    st2.study["gone"] = {}
+    for n in names[:3]:
+        sl2.add_subject(n)              # typed in again: brand new ids
+    sl2.add_subject("Brand new")
+    ok(len(sl2.orphan_ids()) == len(names), "(before repair) the old ids are orphans")
+    backups = [S.read_json(b["path"] / "study.json") for b in st2.list_backups()]
+    rel, named = sl2.repair_subjects([b for b in backups if isinstance(b, dict)])
+    ok(rel == 3 and named == len(names) - 3, f"repair: {rel} relinked to same-name subjects, {named} named as deleted")
+    ok(not [1 for s, _v in sl2.day_subject_times(y) if s.get("ghost") and s["name"] == "Deleted subjects"], "no anonymous leftovers when backups know the names")
+    ok(sum(v for _s, v in sl2.day_subject_times(y)) == 30 * 60 * len(names), "all the hours are still there")
+    ok(sl2.day_tests(y, next(s["id"] for s in sl2.subjects() if s["name"] == names[0])) == 2, "tests are relinked too")
+
+
+def test_subject_flags_edit_remove_time():
+    d = tmp()
+    st = S.Store(d)
+    sl = study.StudyLog(st)
+    s = sl.add_subject("History", tests=False)
+    ok(not sl.shows_tests(s) and sl.shows_tests(sl.subjects()[0]), "a subject can be hidden from 'Tests solved'")
+    sl.edit_subject(s["id"], name="World history", color="#fff", tests=True, words=True)
+    ok(sl.subject(s["id"])["name"] == "World history" and sl.shows_tests(s["id"]) and sl.tracks_words(s["id"]), "editing a subject keeps its id")
+    y = date.today() - timedelta(days=2)
+    sl.add_manual(y, s["id"], 60)
+    sl.add_manual(y, s["id"], 30)
+    got = sl.remove_time(y, s["id"], 45)
+    ok(got == 45 * 60 and sl.subject_day_sec(y, s["id"]) == 45 * 60, "removing time takes from the newest entries first")
+    got = sl.remove_time(y, s["id"], 500)
+    ok(got == 45 * 60 and sl.subject_day_sec(y, s["id"]) == 0 and not [e for e in st.study["entries"] if e["date"] == y.isoformat()], "it never goes below zero")
+    ok(sl.remove_time(y, s["id"], 10) == 0, "nothing to remove -> 0")
+
+
+def test_exams():
+    d = tmp()
+    st = S.Store(d)
+    sl = study.StudyLog(st)
+    today = date.today()
+    sl.add_exam("Mock 2", today + timedelta(days=9))
+    e1 = sl.add_exam("Mock 1", today + timedelta(days=3))
+    sl.add_exam("Old", today - timedelta(days=4))
+    ex, left = sl.next_exam(today)
+    ok(ex["name"] == "Mock 1" and left == 3, "the next exam is the nearest one that has not passed")
+    ok(sl.exam_on(today + timedelta(days=3))[0]["name"] == "Mock 1", "exam_on finds an exam day")
+    sl.update_exam(e1["id"], d=today + timedelta(days=1))
+    ok(sl.next_exam(today)[1] == 1, "editing the date works")
+    sl.remove_exam(e1["id"])
+    ok(sl.next_exam(today)[0]["name"] == "Mock 2" and len(sl.exams()) == 2, "removing an exam")
+    st2 = S.Store(d)
+    ok(len(study.StudyLog(st2).exams()) == 2, "exams persist")
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

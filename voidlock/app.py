@@ -321,6 +321,7 @@ class MainWindow(QMainWindow):
         self._popups = []
         self._last_hb = 0.0
         self._last_sched = 0.0
+        self._last_exam = 0.0
         self._last_points = 0.0
         self.running, self.scan_ready, self.scan_error = set(), False, None
         s = store.settings
@@ -392,6 +393,7 @@ class MainWindow(QMainWindow):
         if (self.store.active_locks() or self.store.windows or self.store.settings.get("play_tracking", True)
                 or any(c.get("enabled", True) for c in self.store.classes)):
             QTimer.singleShot(2500, lambda: persist_protection_async(True, self.store))   # exe may have moved/rebuilt
+        QTimer.singleShot(1500, self._repair_subjects)
         QTimer.singleShot(20000, self.guard.ensure)      # swaps a guard that still runs older code after an update
         QTimer.singleShot(3500, self.process_points)
 
@@ -586,6 +588,9 @@ class MainWindow(QMainWindow):
         now = datetime.now()
         self.topbar.clock.setText(i18n.fmt_clock_line(now))
         self._check_classes(now)
+        if time.monotonic() - self._last_exam >= 60:
+            self._last_exam = time.monotonic()
+            self._check_exams(now)
         self.update_class_pill(now)
         if self.tray and now.second % 10 == 0:
             self._update_tray_tip()
@@ -1216,6 +1221,42 @@ class MainWindow(QMainWindow):
             finally:
                 self._sched_busy = False
             return
+
+    # ------------------------------------------------------------ study data
+    def _repair_subjects(self):
+        """Hours of subjects that were deleted and added again by hand lost their subject (new id). The old names are in
+        the backups: give those hours back to the subject with the same name."""
+        try:
+            backups = [read_json(b["path"] / "study.json", None) for b in self.store.list_backups()]
+            rel, named = self.study.repair_subjects([b for b in backups if isinstance(b, dict)])
+        except Exception:
+            return
+        if rel or named:
+            self.toast(i18n.tr(f"Restored the hours of {rel + named} deleted subjects."), "success")
+            pg = self.pages.get("study")
+            if pg:
+                pg.build_tiles()
+                pg.build_log()
+                pg.refresh()
+
+    def _check_exams(self, now):
+        """A reminder the day before an exam and on its day (once each)."""
+        today = now.date()
+        changed = False
+        for e in self.study.exams():
+            try:
+                left = (date.fromisoformat(e["date"]) - today).days
+            except ValueError:
+                continue
+            kind = "today" if left == 0 else "tomorrow" if left == 1 else None
+            if not kind or e.get("notified") == f"{kind}:{today.isoformat()}":
+                continue
+            e["notified"] = f"{kind}:{today.isoformat()}"
+            changed = True
+            self.notify_popup("EXAM TODAY" if kind == "today" else "EXAM TOMORROW", e["name"], 12000)
+            self.play_sound("done")
+        if changed:
+            self.study.save()
 
     # ------------------------------------------------------------ classes
     def _check_classes(self, now):

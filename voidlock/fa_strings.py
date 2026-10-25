@@ -464,3 +464,26 @@ FA.update({
     "VOIDLOCK starts quietly when you sign in. The window does not open by itself - click the tray icon when you want it.":
         "VOIDLOCK هنگام ورود به ویندوز بی‌صدا شروع می‌شود. پنجره خودش باز نمی‌شود؛ هر وقت خواستید روی آیکن سینی کلیک کنید.",
 })
+
+# ---------------- 1.6.0: subjects, exams, plan days, help
+FA.update({
+    "Show in Tests solved": "نمایش در تست‌های حل‌شده", "Edit subject": "ویرایش درس", "Edit this subject": "ویرایش این درس",
+    "Renaming keeps all the hours and tests recorded for it.": "تغییر نام هیچ‌کدام از ساعت‌ها و تست‌های ثبت‌شده را از بین نمی‌برد.",
+    "Delete subject?": "درس حذف شود؟",
+    "“{x}” will be removed from the list. Its past hours and tests stay in your log (shown as a deleted subject) and come back to it if you add a subject with the same name again.":
+        "«{x}» از فهرست برداشته می‌شود. ساعت‌ها و تست‌های گذشته‌اش در گزارش می‌مانند (به‌عنوان درس حذف‌شده) و اگر دوباره درسی با همین نام بسازید به آن برمی‌گردند.",
+    "Exams": "آزمون‌ها", "Done": "تمام", "Close": "بستن",
+    "The next exam is shown on this page, and you get a reminder the day before and on the day.": "آزمون بعدی در همین صفحه نوشته می‌شود و یک روز قبل و در روز آزمون یادآوری می‌گیرید.",
+    "No exams yet. Add the days of your exams below.": "هنوز آزمونی ثبت نشده. روز آزمون‌هایتان را پایین اضافه کنید.",
+    "Exam name, e.g. Mock exam 3": "نام آزمون، مثلاً آزمون جامع ۳", "Add exam": "افزودن آزمون", "Save changes": "ذخیره‌ی تغییرات",
+    "Today": "امروز", "Tomorrow": "فردا", "today": "امروز", "tomorrow": "فردا", "Passed": "گذشته", "in {num} days": "{num} روز دیگر",
+    "Next exam: {x} · {y}": "آزمون بعدی: {x} · {y}", "No exam added yet": "هنوز آزمونی ثبت نشده", "Exam day: {x}": "روز آزمون: {x}",
+    "EXAM TODAY": "آزمون امروز", "EXAM TOMORROW": "آزمون فردا",
+    "From deleted subjects: {num} tests": "از درس‌های حذف‌شده: {num} تست", "Deleted subjects": "درس‌های حذف‌شده", "deleted": "حذف‌شده",
+    "PLAN": "برنامه", "Add a task for this day and press Enter…": "برای این روز کاری اضافه کنید و Enter بزنید…",
+    "Add or remove study time manually": "افزودن یا کم کردن دستی زمان مطالعه", "Remove time": "کم کردن زمان",
+    "This subject has no recorded time on this day.": "این درس در این روز زمان ثبت‌شده‌ای ندارد.", "Removed {x}.": "{x} کم شد.",
+    "Restored the hours of {num} deleted subjects.": "ساعت‌های {num} درس حذف‌شده بازگردانده شد.",
+    "Rename": "تغییر نام",
+})
+FA.update({"Edit": "ویرایش", "English · Words": "English · لغت"})
