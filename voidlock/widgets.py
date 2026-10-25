@@ -600,7 +600,7 @@ class Stepper(QWidget):
     """[-] value [+]  with hold-free click steps, wheel and keyboard (Up/Down)."""
     valueChanged = Signal(int)
 
-    def __init__(self, value=50, lo=1, hi=999, step=5, suffix="", parent=None):
+    def __init__(self, value=50, lo=1, hi=999, step=5, suffix="", parent=None, label_w=78):
         super().__init__(parent)
         self.lo, self.hi, self.step, self.suffix = lo, hi, step, suffix
         try:
@@ -614,7 +614,7 @@ class Stepper(QWidget):
         self.b_minus = Button("", "soft", "minus", "Decrease", square=36)
         self.b_plus = Button("", "soft", "plus", "Increase", square=36)
         self.lbl = label("", 15, QFont.Weight.DemiBold, mono=True, align=AC)
-        self.lbl.setMinimumWidth(78)
+        self.lbl.setMinimumWidth(label_w)
         lay.addWidget(self.b_minus)
         lay.addWidget(self.lbl)
         lay.addWidget(self.b_plus)
@@ -942,9 +942,10 @@ class DateField(QWidget):
         lay.setSpacing(6)
         row = QHBoxLayout()
         row.setSpacing(8)
-        self.y = Stepper(y, 1300 if self.jalali else 2000, 1500 if self.jalali else 2100, 1)
-        self.m = Stepper(m, 1, 12, 1)
-        self.d = Stepper(dd, 1, 31, 1)
+        # compact: three full-size steppers (510 px) were wider than a dialog and got squashed
+        self.y = Stepper(y, 1300 if self.jalali else 2000, 1500 if self.jalali else 2100, 1, label_w=56)
+        self.m = Stepper(m, 1, 12, 1, label_w=34)
+        self.d = Stepper(dd, 1, 31, 1, label_w=34)
         for w in (self.y, self.m, self.d):
             row.addWidget(w)
             w.valueChanged.connect(self._changed)

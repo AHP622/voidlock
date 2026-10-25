@@ -148,6 +148,7 @@ class ExamEditor(QWidget):
             row.addWidget(b_d)
             w = QWidget()
             w.setLayout(row)
+            w.setMinimumHeight(46)
             self.box.addWidget(w)
 
     def load(self, e):

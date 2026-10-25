@@ -36,6 +36,12 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
+## What changed in 1.6.1
+
+- **Exams dialog was squashed:** the date row (three steppers, 510 px) was wider than the dialog, so Qt squeezed it and cut the buttons in half; list rows overlapped. The date steppers are
+  compact now (390 px), rows have a minimum height, and any dialog whose content is wider than its panel makes the panel wider. New test `tests/modal_layout_test.py` opens every form dialog in
+  English and Persian at two window sizes and fails if anything is smaller than its minimum or sticks out (with a control that proves it can detect the problem).
+
 ## What changed in 1.6.0
 
 - **Bug: the daily bar lost hours of deleted subjects.** Deleting a subject (and typing it in again) cut its hours off from the day bar, and with every subject deleted the bar

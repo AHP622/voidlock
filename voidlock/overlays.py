@@ -48,6 +48,12 @@ class Modal(QWidget):
         if body is not None:
             self.body = body
             self.v.addWidget(body)
+        if body is not None:
+            # a body wider than the panel would be squashed (and the panel's height computed for the wrong width)
+            m = self.v.contentsMargins()
+            need = body.minimumSizeHint().width() + m.left() + m.right()
+            if need > width:
+                self.panel.setFixedWidth(need + 4)
         self.v.addSpacing(6)
         row = QHBoxLayout()
         row.addStretch(1)
