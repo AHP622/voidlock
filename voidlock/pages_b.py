@@ -828,6 +828,23 @@ class AnalyticsPage(Page):
         self.m_tests.setMinimumHeight(180)
         self.year_card.lay.addWidget(self.m_tests)
         self.body.addWidget(self.year_card)
+        # export buttons
+        self.export_card = Card(pad=20)
+        self.export_card.lay.addWidget(section_title("Export study history"))
+        export_row = QHBoxLayout()
+        export_row.setSpacing(10)
+        self.btn_csv = Button("Export CSV", variant="soft")
+        self.btn_csv.clicked.connect(self.export_csv)
+        self.btn_html = Button("Export HTML", variant="soft")
+        self.btn_html.clicked.connect(self.export_html)
+        self.btn_pdf = Button("Export PDF", variant="soft")
+        self.btn_pdf.clicked.connect(self.export_pdf)
+        export_row.addWidget(self.btn_csv)
+        export_row.addWidget(self.btn_html)
+        export_row.addWidget(self.btn_pdf)
+        export_row.addStretch(1)
+        self.export_card.lay.addLayout(export_row)
+        self.body.addWidget(self.export_card)
         # sessions
         self.recent_card = Card(pad=20)
         self.recent_card.lay.addWidget(section_title("Recent sessions"))
@@ -926,6 +943,30 @@ class AnalyticsPage(Page):
             self.recent_box.addWidget(w)
             if i < min(8, len(h)) - 1:
                 self.recent_box.addWidget(Divider())
+
+    def _do_export(self, ext, fn):
+        from PySide6.QtWidgets import QMessageBox
+        from .export import export_csv, export_html, export_pdf
+        path, _ = QFileDialog.getSaveFileName(self, "Export", f"study_history.{ext}", f"*.{ext}")
+        if not path:
+            return
+        try:
+            fn(self.ctx.store, self.ctx.study, path)
+            QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+        except Exception as e:
+            QMessageBox.warning(self, "Export failed", str(e))
+
+    def export_csv(self):
+        from .export import export_csv
+        self._do_export("csv", export_csv)
+
+    def export_html(self):
+        from .export import export_html
+        self._do_export("html", export_html)
+
+    def export_pdf(self):
+        from .export import export_pdf
+        self._do_export("pdf", export_pdf)
 
 
 # ============================================================ SETTINGS
