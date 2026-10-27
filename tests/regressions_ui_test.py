@@ -227,6 +227,42 @@ sp.refresh(); pump(50)
 ok("Tomorrow's" in sp.exam_l.text(), "the next exam is written on the Study page")
 ed.remove(sl.exams()[0]); sl.remove_exam(sl.exams()[0]["id"])
 
+
+# ---------------------------------------------------------------- report export (1.7.0)
+from voidlock import report_ui, report
+import tempfile as _tf
+win.show(); win.resize(1280, 860); pump(300)         # (the tray tests above left the window hidden)
+rf = report_ui.ReportForm(win); rf.show(); pump(50)
+rf.period.set_current(0)
+ok(rf.anchor.isVisibleTo(rf) and not rf.d_from.isVisibleTo(rf), "report form: a day period shows one date")
+rf.period.set_current(5)
+ok(rf.d_from.isVisibleTo(rf) and not rf.anchor.isVisibleTo(rf), "...a custom period shows from / to")
+rf.period.set_current(4)
+ok(not rf.anchor.isVisibleTo(rf) and not rf.d_from.isVisibleTo(rf), "...all time shows none")
+rf.period.set_current(2); rf.name.setText("Test Student"); rf.lang.set_current(0); pump(50)
+v = rf.values()
+ok(v["kind"] == "month" and v["lang"] == "fa" and v["start"] <= v["end"], "report form values")
+Rr = report_ui.build_report(win, v)
+out = _tf.mkdtemp()
+for fmt in ("html", "csv", "pdf"):
+    for lng in ("fa", "en"):
+        v2 = dict(v, lang=lng, fmt=fmt)
+        p = os.path.join(out, f"r_{lng}.{fmt}")
+        report_ui.write_report(report_ui.build_report(win, v2), fmt, p)
+        data = open(p, "rb").read()
+        good = (data.startswith(b"%PDF") if fmt == "pdf" else (b"<!DOCTYPE html>" in data[:40] if fmt == "html" else data.startswith(b"\xef\xbb\xbf")))
+        ok(good and len(data) > 500, f"{fmt.upper()} report written ({lng})")
+# the form fits its dialog
+from voidlock.overlays import Modal
+m = win.new_modal().build("Export study report", "x", report_ui.ReportForm(win), "Choose file…", icon="download", width=540)
+m.open(); pump(400)
+bad = []
+for w_ in m.panel.findChildren(__import__("PySide6.QtWidgets", fromlist=["QWidget"]).QWidget):
+    if w_.isVisibleTo(m.panel) and (w_.geometry().height() + 1 < w_.minimumSizeHint().height()) and not (hasattr(w_, "wordWrap") and w_.wordWrap()):
+        bad.append(f"{type(w_).__name__} {w_.geometry().width()}x{w_.geometry().height()} < {w_.minimumSizeHint().width()}x{w_.minimumSizeHint().height()} text={getattr(w_, 'text', lambda: '')() if hasattr(w_, 'text') else ''}")
+ok(not bad, f"the export dialog is not squashed {bad[:3]}")
+m.finish(False); pump(200)
+
 win.scanner.stop(); win.guard.stop()
 print("ALL PASSED" if not FAILS else f"{len(FAILS)} FAILED")
 sys.exit(1 if FAILS else 0)

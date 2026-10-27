@@ -23,6 +23,7 @@ from voidlock.overlays import Modal
 from voidlock.pages_c import ExamEditor, SubjectForm
 from voidlock.pages_b import ScheduleForm, ClassForm
 from voidlock.widgets import Stepper
+from voidlock.report_ui import ReportForm
 
 FAILS = []
 def ok(c, m):
@@ -55,6 +56,7 @@ for W, H in ((900, 640), (1280, 800)):
         "subject-new": (lambda: SubjectForm(), "Add subject", None, 460),
         "subject-edit": (lambda: SubjectForm(win.study.subjects()[0]), "Edit subject", "Renaming keeps all the hours and tests recorded for it.", 460),
         "session": (lambda: ScheduleForm({"day": 0, "time": "10:00", "minutes": 50, "subject": "", "enabled": True, "id": "x"}, 5, [], []), "New scheduled session", None, 520),
+        "report": (lambda: ReportForm(win), "Export study report", "For your advisor or parents: total study time, time per subject, a day-by-day table and the focus sessions.", 540),
         "class": (lambda: ClassForm({"day": 0, "time": "10:00", "minutes": 50, "name": "A", "remind": 15, "enabled": True, "id": "x"}, 5, [], []), "New class", None, 520),
     }
     for name, (mk, title, msg, width) in cases.items():

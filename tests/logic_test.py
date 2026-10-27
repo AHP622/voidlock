@@ -708,6 +708,66 @@ def test_exams():
     ok(len(study.StudyLog(st2).exams()) == 2, "exams persist")
 
 
+def test_report():
+    from voidlock import report
+    d = tmp()
+    st = S.Store(d)
+    sl = study.StudyLog(st)
+    st.study["subjects"] = []
+    math, eng = sl.add_subject("ریاضی"), sl.add_subject("English", words=True)
+    today = date.today()
+    for k in range(0, 40):
+        sl.add_manual(today - timedelta(days=k), math["id"], 60)
+    sl.add_manual(today - timedelta(days=2), eng["id"], 30)
+    sl.set_tests(today - timedelta(days=2), math["id"], 20)
+    sl.set_words(today - timedelta(days=2), eng["id"], 45)
+    gone = sl.add_subject("هندسه")
+    sl.add_manual(today - timedelta(days=5), gone["id"], 40)
+    sl.remove_subject(gone["id"])
+    sl.add_exam("آزمون جامع", today - timedelta(days=4))
+    ts = datetime.combine(today - timedelta(days=1), datetime.min.time()).timestamp() + 40000
+    st.add_record({"id": "s1", "start": ts, "focus_sec": 2400, "planned_min": 45, "status": "completed", "subject": "ریاضی", "blocked_count": 3})
+    a, b = today - timedelta(days=9), today
+    R = report.collect(st, sl, a, b, "علی <b>رضایی</b>", "fa", goal_min=60)
+    s = R["summary"]
+    ok(s["total"] == 10 * 3600 + 30 * 60 + 40 * 60 and s["period_days"] == 10 and s["active_days"] == 10, "report totals = timer + manual time (sessions are not added)")
+    ok(s["tests"] == 20 and s["words"] == 45 and s["sessions"] == 1 and s["sessions_sec"] == 2400, "tests, words and sessions are counted separately")
+    ok(abs(sum(r["sec"] for r in R["subjects"]) - s["total"]) < 1, "the subject totals add up to the total (deleted subjects included)")
+    ok(any(r["ghost"] and r["name"] == "هندسه" for r in R["subjects"]), "a deleted subject keeps its name in the report")
+    ok(s["goal_days"] == 10 and s["streak"] == 10 and s["best"]["sec"] == 100 * 60, "goal days, streak and the best day (60 min of maths + 40 min of a deleted subject)")
+    h = report.render_html(R)
+    ok('dir="rtl"' in h and 'lang="fa"' in h and "<style>" in h and "<script" not in h.replace("onclick", ""), "the HTML is a single file: right-to-left, CSS inside")
+    ok("<link" not in h and "http://" not in h and "https://" not in h.replace("https://www.w3.org", ""), "no external resources")
+    ok("&lt;b&gt;" in h and "<b>رضایی" not in h, "names are escaped (no HTML injection)")
+    ok("۱۰ ساعت" in h or "۱۱ ساعت" in h, "Persian digits and units")
+    ok("@media print" in h and "@page" in h and "thead{display:table-header-group}" in h, "printable: print CSS, repeated table headers")
+    for heading in ("خلاصه", "جمع هر درس", "جدول روزانه", "جدول جلسه‌های تمرکز"):
+        ok(heading in h, f"section '{heading}' is present")
+    c = report.render_csv(R)
+    ok(c.splitlines()[0].startswith("گزارش مطالعه") and "ریاضی" in c and "هندسه" in c, "CSV has the sections and Persian text")
+    import csv as _csv, io as _io
+    rows = list(_csv.reader(_io.StringIO(c)))
+    ok(any(r and r[0] == today.isoformat() for r in rows), "CSV daily rows carry ISO dates")
+    # long periods -> monthly table; periods
+    R3 = report.collect(st, sl, today - timedelta(days=100), today, "", "en")
+    ok(not R3["daily_rows"] and R3["monthly"] and "Monthly table" in report.render_html(R3), "a long period gets a month-by-month table")
+    ok(report.render_html(R3).startswith("<!DOCTYPE html>") and 'dir="ltr"' in report.render_html(R3), "English report is left-to-right")
+    # empty period
+    R4 = report.collect(st, sl, today + timedelta(days=5), today + timedelta(days=9), "", "fa")
+    ok(R4["days"] == [] and "در این بازه داده‌ای ثبت نشده است" in report.render_html(R4), "an empty / future period says so instead of failing")
+    # period ranges
+    wk = report.period_range("week", date(2026, 10, 21), 5, "fa")      # Wednesday, week starts Saturday
+    ok(wk == (date(2026, 10, 17), date(2026, 10, 23)), "week range starts on the chosen weekday")
+    m = report.period_range("month", date(2026, 10, 21), 5, "fa")      # 29 Mehr 1405
+    ok(m == (date(2026, 9, 23), date(2026, 10, 22)), "Jalali month range (Mehr 1405)")
+    ok(report.period_range("month", date(2026, 10, 21), 5, "en") == (date(2026, 10, 1), date(2026, 10, 31)), "Gregorian month range")
+    y = report.period_range("year", date(2026, 10, 21), 5, "fa")
+    ok(y == (date(2026, 3, 21), date(2027, 3, 20)), "Jalali year range (1405)")
+    ok(report.period_range("all", date.today(), 5, "fa", first=date(2026, 1, 1)) == (date(2026, 1, 1), date.today()), "all time starts at the first record")
+    ok(report.first_recorded_day(sl, st) == today - timedelta(days=39), "first recorded day")
+    ok(report.fmt_dur(3 * 3600 + 5 * 60, "fa") == "۳ ساعت و ۵ دقیقه" and report.fmt_dur(50 * 60, "en") == "50 min" and report.fmt_dur(7200, "en") == "2h 00m", "duration formats")
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

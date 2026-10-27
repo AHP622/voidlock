@@ -125,6 +125,7 @@ DEFAULT_SETTINGS = {
     "game_friday_only": True,    # the play pass (1.5-2 h of gaming) can only be used on Fridays
     "play_tolerance_min": 5,     # minutes of play that still count as a "clean" day
     "daily_tests_goal": 50,
+    "report_name": "",           # student name printed on the study report
     "close_to_tray": True,       # the window's close button hides it in the tray (the program keeps running)
     "tray_at_login": False,      # start hidden in the tray when Windows starts (the window does NOT open)
     "tray_hint_shown": False,
@@ -183,7 +184,7 @@ def sanitize_settings(s):
     for k in _BOOLS:
         out[k] = bool(out.get(k))
     out.pop("update_repo", None)             # fixed in the program now (updater.REPO)
-    for k in ("target_field", "custom_message", "last_subject"):
+    for k in ("target_field", "custom_message", "last_subject", "report_name"):
         if not isinstance(out.get(k), str):
             out[k] = ""
     ex = out.get("exam_date")

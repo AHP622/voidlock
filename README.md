@@ -36,6 +36,18 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
+## What changed in 1.7.0
+
+- **Study report for an advisor or parents** (Analytics -> *Export report…*, or Settings -> Data): pick the period (day, week, Jalali month, year, all time or a custom range), the student's name,
+  the language (Persian or English) and the format:
+  - **HTML** - one self-contained file (CSS and the SVG charts are inside, nothing is loaded from the internet), right-to-left Persian or left-to-right English, tables scroll sideways on a phone,
+    clean when printed (`@page` A4, repeated table headers, no page-breaks inside rows). Contains the summary (total, days studied, averages, best day, tests, words, streak, goal days),
+    time per subject (deleted subjects keep their names), a chart, the daily table (or a month-by-month table for periods over 62 days) and the focus-session table.
+  - **PDF** - drawn with Qt (`report_pdf.py`), A4, page numbers, selectable Persian text, same sections.
+  - **CSV** - UTF-8 with BOM so Excel shows Persian correctly; sections: summary, subjects, daily (with one column per subject, Gregorian and Jalali dates) or monthly, sessions, exams.
+  "Study time" is the Study Timer's definition (subject timer + manual entries); focus sessions are listed in their own table and are not added to the total.
+- The data and both text formats live in `voidlock/report.py` (no Qt, covered by `tests/logic_test.py::test_report`); the dialog is `report_ui.py`.
+
 ## What changed in 1.6.1
 
 - **Exams dialog was squashed:** the date row (three steppers, 510 px) was wider than the dialog, so Qt squeezed it and cut the buttons in half; list rows overlapped. The date steppers are

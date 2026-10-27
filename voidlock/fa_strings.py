@@ -487,3 +487,19 @@ FA.update({
     "Rename": "تغییر نام",
 })
 FA.update({"Edit": "ویرایش", "English · Words": "English · لغت"})
+
+# ---------------- 1.7.0: study report
+FA.update({
+    "Report for your advisor or parents": "گزارش برای مشاور یا والدین",
+    "Study time, time per subject, a day-by-day table and the focus sessions - as an HTML page, a PDF or a CSV file.":
+        "زمان مطالعه، زمان هر درس، جدول روزبه‌روز و جلسه‌های تمرکز - به‌صورت صفحه‌ی HTML، فایل PDF یا CSV.",
+    "Export report…": "خروجی گزارش…", "Study report (HTML / PDF / CSV)…": "گزارش مطالعه (HTML / PDF / CSV)…",
+    "Export study report": "خروجی گزارش مطالعه",
+    "For your advisor or parents: total study time, time per subject, a day-by-day table and the focus sessions.":
+        "برای مشاور یا والدین: مجموع مطالعه، زمان هر درس، جدول روزبه‌روز و جلسه‌های تمرکز.",
+    "Choose file…": "انتخاب فایل…", "Student name (shown on the report)": "نام دانش‌آموز (روی گزارش نوشته می‌شود)",
+    "PERIOD": "بازه", "FORMAT": "قالب", "Day": "روز", "Week": "هفته", "Month": "ماه", "Year": "سال", "All time": "همه‌ی زمان‌ها", "Custom": "دلخواه",
+    "A day inside the period": "یک روز از بازه", "From": "از", "To": "تا", "Report language": "زبان گزارش",
+    "HTML (web page)": "HTML (صفحه‌ی وب)", "CSV (Excel)": "CSV (اکسل)", "Save report": "ذخیره‌ی گزارش",
+    "Could not save the report: {x}": "گزارش ذخیره نشد: {x}", "Report saved.": "گزارش ذخیره شد.",
+})

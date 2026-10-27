@@ -64,6 +64,10 @@ TOPICS_FA = [
      "گرفته می‌شه، پس عوض کردن ساعت ویندوز فایده‌ای نداره."),
     # ---- تحلیل
     ("تحلیل‌ها", "آمار و گزارش", "مطالعه‌ی امروز، هدف روزانه، زنجیره‌ی روزها، نمودار هفتگی، نمای سال (ساعت، تست، لغت)، تقویم مطالعه و گزارش تلاش برای باز کردن بازی‌ها."),
+    ("تحلیل‌ها", "گزارش برای مشاور یا والدین", "دکمه‌ی «Export report» بالای صفحه‌ی تحلیل‌ها (یا از تنظیمات ← داده): بازه رو انتخاب کن (روز، هفته، ماه شمسی، سال، همه‌ی زمان‌ها یا دلخواه)، "
+     "اسم دانش‌آموز رو بنویس و قالب رو بزن. HTML یه فایل تک‌صفحه‌ایه که همه‌چیزش (CSS و نمودار) داخلشه، راست‌به‌چپ و فارسی، با چاپ تمیز و قابل فرستادن توی تلگرام یا واتس‌اپ. "
+     "PDF آماده‌ی چاپه و CSV برای اکسله. گزارش شامل خلاصه، جمع هر درس (با درس‌های حذف‌شده)، جدول روزانه یا ماهانه و جدول جلسه‌های تمرکز است. زمان مطالعه همون تعریف تب تایمر رو داره؛ "
+     "جلسه‌ها جدا فهرست می‌شن تا دوبار شمرده نشن."),
     # ---- تنظیمات
     ("تنظیمات", "تم و صدا", "نُه تم (هفت تیره و دو روشن) با پیش‌نمایش و ده سبک صدا. با تغییر تم، برنامه دوباره راه می‌افته. دکمه‌ی «Test sound» صدا رو پخش می‌کنه."),
     ("تنظیمات", "زبان و تقویم", "فارسی کل برنامه رو راست‌به‌چپ و با تقویم شمسی می‌کنه. زبان با راه‌اندازی دوباره اعمال می‌شه."),
@@ -120,6 +124,9 @@ TOPICS_EN = [
     ("Rewards", "Points and rewards", "Each day without gaming earns points, with a bonus for streaks. Spend points on play time, a film or your own rewards. Days the guard watched for less than an hour do not count."),
     ("Rewards", "Play pass", "A play ticket unlocks games for a while; by default only on Fridays (changeable). The day comes from the guard's internet time, so changing the Windows clock does not help."),
     ("Analytics", "Statistics", "Today's study, daily goal, streak, weekly chart, year overview (hours, tests, words), study calendar and the report of attempts to open games."),
+    ("Analytics", "Report for advisor or parents", "The 'Export report' button at the top of Analytics (or Settings -> Data): choose the period (day, week, Jalali month, year, all time or custom), type the student's name and pick a format. "
+     "HTML is one self-contained page (CSS and charts inside), right-to-left Persian or English, clean to print and easy to send by chat. PDF is ready to print and CSV opens in Excel. The report has a summary, time per subject "
+     "(deleted subjects included), a daily or monthly table and the focus-session table. Study time uses the Study Timer's definition; sessions are listed separately so nothing is counted twice."),
     ("Settings", "Themes and sounds", "Nine themes (seven dark, two light) with preview cards and ten sound styles. Changing the theme restarts the program. 'Test sound' plays the chosen style."),
     ("Settings", "Language and calendar", "Persian turns the whole interface right-to-left with the Jalali calendar. The language applies after a restart."),
     ("Settings", "Updates", "The program checks the official repository (AHP622/voidlock) at start and every few hours and tells you about a new version. With 'Install automatically' it installs and restarts when no session "
