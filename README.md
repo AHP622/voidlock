@@ -36,6 +36,11 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
+## What changed in 1.7.1
+
+- **Release build failed (v1.7.0):** the new report tests print Persian section names, and the Windows CI console (cp1252) cannot encode them, so the test step crashed with `UnicodeEncodeError`
+  and no release was built. The tests now switch stdout to UTF-8 (and the workflow sets `PYTHONUTF8=1`). No change to the program itself.
+
 ## What changed in 1.7.0
 
 - **Study report for an advisor or parents** (Analytics -> *Export report…*, or Settings -> Data): pick the period (day, week, Jalali month, year, all time or a custom range), the student's name,

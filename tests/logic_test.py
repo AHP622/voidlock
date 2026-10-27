@@ -5,6 +5,12 @@ import os
 import shutil
 import subprocess
 import sys
+
+# a Windows console (cp1252) cannot print Persian test names: never let printing fail a test
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
 import tempfile
 import time
 from datetime import date, datetime, timedelta
