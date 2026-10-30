@@ -765,7 +765,7 @@ class AnalyticsPage(Page):
         col = QVBoxLayout()
         col.setSpacing(2)
         col.addWidget(label("Report for your advisor or parents", 14, QFont.Weight.DemiBold))
-        col.addWidget(label("Study time, time per subject, a day-by-day table and the focus sessions - as an HTML page, a PDF or a CSV file.",
+        col.addWidget(label("Study time, charts, exam results and progress, the weekly timetable and the focus sessions - as an HTML page, a PDF or a CSV file.",
                             12, color=T.text3, wrap=True))
         er.addLayout(col, 1)
         self.b_report = Button("Export report…", "primary", "download", height=40)

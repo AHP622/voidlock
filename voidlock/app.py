@@ -23,6 +23,7 @@ from .mascot import BlockPopup, Confetti
 from .pages_a import AppsPage, OverviewPage
 from .pages_b import AnalyticsPage, SchedulePage, SessionsPage, SettingsPage
 from .pages_c import RewardsPage, StudyPage
+from .pages_exam import ExamsPage
 from .pages_help import HelpPage
 from .study import Points, StudyLog
 from .store import Store, fmt_clock, read_json, write_json
@@ -32,7 +33,7 @@ from .widgets import AA, AC, AnimWidget, Button, Pill, Stepper, Ticker, Toggle, 
 
 NAV = [("overview", "Overview", "overview"), ("study", "Study Timer", "stopwatch"),
        ("apps", "Application Control", "apps"), ("sessions", "Study Sessions", "sessions"),
-       ("schedule", "Schedule", "schedule"), ("rewards", "Rewards", "star"),
+       ("schedule", "Schedule", "schedule"), ("exams", "Exams", "check"), ("rewards", "Rewards", "star"),
        ("analytics", "Analytics", "analytics"), ("settings", "Settings", "settings"),
        ("help", "Help", "book")]
 
@@ -352,7 +353,7 @@ class MainWindow(QMainWindow):
         right.addWidget(self.stack, 1)
         self.pages = {}
         for key, cls in (("overview", OverviewPage), ("study", StudyPage), ("apps", AppsPage),
-                         ("sessions", SessionsPage), ("schedule", SchedulePage), ("rewards", RewardsPage),
+                         ("sessions", SessionsPage), ("schedule", SchedulePage), ("exams", ExamsPage), ("rewards", RewardsPage),
                          ("analytics", AnalyticsPage), ("settings", SettingsPage),
                          ("help", HelpPage)):
             pg = cls(self)

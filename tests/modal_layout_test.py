@@ -7,7 +7,7 @@ os.environ["VOIDLOCK_HOME"] = home
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from datetime import date, timedelta
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QLabel, QWidget, QVBoxLayout, QHBoxLayout
+from PySide6.QtWidgets import QApplication, QLabel, QScrollArea, QWidget, QVBoxLayout, QHBoxLayout
 from voidlock import i18n
 from voidlock.store import Store
 st = Store(); st.settings["play_tracking"] = False; st.save_settings()
@@ -24,6 +24,7 @@ from voidlock.pages_c import ExamEditor, SubjectForm
 from voidlock.pages_b import ScheduleForm, ClassForm
 from voidlock.widgets import Stepper
 from voidlock.report_ui import ReportForm
+from voidlock.pages_exam import ExamForm, ExamResultForm
 
 FAILS = []
 def ok(c, m):
@@ -44,6 +45,8 @@ def problems(root):
         if g.height() + 1 < mh.height() or g.width() + 1 < mh.width():
             out.append(f"{type(w).__name__} squashed {g.width()}x{g.height()} < {mh.width()}x{mh.height()}")
         p = w.parentWidget()
+        if p is not None and isinstance(p.parentWidget(), QScrollArea):
+            continue                                  # the content of a scroll area is meant to be larger than its window
         if p is not None and not isinstance(p, QLabel) and (g.right() > p.width() + 2 or g.bottom() > p.height() + 2):
             out.append(f"{type(w).__name__} sticks out of {type(p).__name__}")
     return out
@@ -56,6 +59,8 @@ for W, H in ((900, 640), (1280, 800)):
         "subject-new": (lambda: SubjectForm(), "Add subject", None, 460),
         "subject-edit": (lambda: SubjectForm(win.study.subjects()[0]), "Edit subject", "Renaming keeps all the hours and tests recorded for it.", 460),
         "session": (lambda: ScheduleForm({"day": 0, "time": "10:00", "minutes": 50, "subject": "", "enabled": True, "id": "x"}, 5, [], []), "New scheduled session", None, 520),
+        "exam": (lambda: ExamForm(), "Add exam", None, 520),
+        "exam-results": (lambda: ExamResultForm(win.study, win.study.exams()[0]), "Results", "Fill in what you know. Percent and taraz are per subject; leave the rest empty.", 540),
         "report": (lambda: ReportForm(win), "Export study report", "For your advisor or parents: total study time, time per subject, a day-by-day table and the focus sessions.", 540),
         "class": (lambda: ClassForm({"day": 0, "time": "10:00", "minutes": 50, "name": "A", "remind": 15, "enabled": True, "id": "x"}, 5, [], []), "New class", None, 520),
     }

@@ -5,7 +5,7 @@ from PySide6.QtCore import QMarginsF, QPointF, QRectF, QSizeF, Qt, QUrl
 from PySide6.QtGui import (QBrush, QColor, QFont, QImage, QPageLayout, QPageSize, QPainter, QPainterPath, QPdfWriter,
                            QPen, QTextDocument, QTextOption)
 
-from . import i18n, report
+from . import charts_qt, i18n, report
 
 DPI = 96
 MARGIN_MM = 14
@@ -50,48 +50,6 @@ def _share_image(R, width):
     return img
 
 
-def _daily_image(R, width, height=190):
-    scale = 2
-    img = QImage(int(width * scale), int(height * scale), QImage.Format.Format_ARGB32)
-    img.setDevicePixelRatio(scale)
-    img.fill(Qt.GlobalColor.transparent)
-    p = QPainter(img)
-    p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    p.setRenderHint(QPainter.RenderHint.TextAntialiasing)
-    lang = R["lang"]
-    rtl = lang == "fa"
-    mode, series = report.chart_series(R)
-    goal = R["goal_sec"] if mode == "day" else 0
-    pad_b, pad_t = 22, 8
-    mx = max(max((v for _l, v, _e in series), default=0), goal or 0, 1)
-    n = max(1, len(series))
-    slot = width / n
-    bw = max(2.0, min(22.0 if mode == "day" else 50.0, slot * 0.68))
-    p.setFont(_font(7.5))
-    step = (1 if n <= 14 else (2 if n <= 31 else 7)) if mode == "day" else 1
-    for i, (lab, v, exam) in enumerate(series):
-        cx = (width - (i + 0.5) * slot) if rtl else (i + 0.5) * slot
-        hh = (height - pad_b - pad_t) * v / mx
-        color = ("#0e7490" if (goal and v >= goal) else "#7c9cd6") if mode == "day" else "#0e7490"
-        if exam:
-            color = "#d97706"
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QBrush(QColor(color)))
-        if hh > 0:
-            p.drawRoundedRect(QRectF(cx - bw / 2, height - pad_b - hh, bw, hh), 2, 2)
-        if i % step == 0:
-            p.setPen(QColor("#64748b"))
-            p.drawText(QRectF(cx - max(14, slot / 2), height - pad_b + 4, max(28, slot), 14), Qt.AlignmentFlag.AlignCenter, lab)
-    if goal:
-        gy = pad_t + (height - pad_b - pad_t) * (1 - goal / mx)
-        pen = QPen(QColor("#a855f7"), 1.2)
-        pen.setStyle(Qt.PenStyle.DashLine)
-        p.setPen(pen)
-        p.drawLine(QPointF(0, gy), QPointF(width, gy))
-    p.end()
-    return img
-
-
 def write_pdf(R, path):
     """Writes the report to `path`. Returns the number of pages."""
     lang = R["lang"]
@@ -111,7 +69,8 @@ def write_pdf(R, path):
     opt.setTextDirection(Qt.LayoutDirection.RightToLeft if rtl else Qt.LayoutDirection.LeftToRight)
     doc.setDefaultTextOption(opt)
     doc.addResource(QTextDocument.ResourceType.ImageResource, QUrl("chart_share"), _share_image(R, width - 4))
-    doc.addResource(QTextDocument.ResourceType.ImageResource, QUrl("chart_daily"), _daily_image(R, width - 4))
+    for name, sc in report.pdf_scenes(R, width - 8).items():
+        doc.addResource(QTextDocument.ResourceType.ImageResource, QUrl(name), charts_qt.scene_image(sc, 2.0))
     doc.setHtml(report.render_pdf_html(R))
     body_h = height - FOOTER_PX
     doc.setPageSize(QSizeF(width, body_h))

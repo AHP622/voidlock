@@ -263,6 +263,46 @@ for w_ in m.panel.findChildren(__import__("PySide6.QtWidgets", fromlist=["QWidge
 ok(not bad, f"the export dialog is not squashed {bad[:3]}")
 m.finish(False); pump(200)
 
+
+# ---------------------------------------------------------------- exams tab (1.8.0)
+from voidlock.pages_exam import ExamsPage, ExamForm, ExamResultForm, KINDS
+from voidlock import charts_qt, report as _rp
+win.show(); win.resize(1280, 860); pump(300)
+sl = win.study
+for e_ in list(sl.exams()):
+    sl.remove_exam(e_["id"])
+ep = win.pages["exams"]; win.goto("exams"); pump(300)
+ok(not ep.chart_card.isVisibleTo(ep) and ep.empty.isVisibleTo(ep), "no results yet: the empty state is shown")
+ex1 = sl.add_exam("Mock A", date.today() - timedelta(days=20)); ex2 = sl.add_exam("Mock B", date.today() - timedelta(days=5))
+f = ExamResultForm(sl, ex1); f.show(); pump(50)
+subj0 = sl.subjects()[0]
+row = next(r for r in f.rows if r[0]["id"] == subj0["id"])
+f.total.setText("۷٬۲۰۰"); f.rank.setText("18 500"); row[1].setText("۵۵٫۵"); row[2].setText("6900")
+v = f.values()
+ok(f.valid() and v["taraz"] == 7200 and v["rank"] == 18500 and v["subjects"] and v["subjects"][0]["pct"] == 55.5 and v["subjects"][0]["taraz"] == 6900,
+   "the result form reads Persian digits, separators and spaces")
+f.total.setText("abc"); ok(not f.valid() and f.err.text(), "a bad number is reported")
+f.total.setText("99999"); ok(not f.valid(), "out-of-range taraz is rejected")
+f.total.setText(""); row[1].setText("-40"); ok(not f.valid(), "percent below -33.4 is rejected")
+row[1].setText("-12.5"); ok(f.valid() and f.values()["subjects"][0]["pct"] == -12.5, "negative percent (negative marking) is accepted")
+sl.set_exam_result(ex1["id"], 7200, 18500, [{"sid": subj0["id"], "pct": 55.5, "taraz": 6900}])
+sl.set_exam_result(ex2["id"], 7450, 15000, [{"sid": subj0["id"], "pct": 62, "taraz": 7300}])
+ep.refresh(); pump(300)
+ok(ep.chart_card.isVisibleTo(ep) and not ep.empty.isVisibleTo(ep), "with results the progress chart is shown")
+for i, kind in enumerate(KINDS):
+    ep.kind_seg.set_current(i); pump(150)
+    ok(ep.chart._sc is not None, f"chart '{kind}' builds")
+img = charts_qt.scene_image(_rp.exam_chart(_rp.results_data(sl, None, "en"), "taraz", "en", w=600, h=240), 1.0)
+ok(img.width() == 600 and any(img.pixelColor(x_, y_).alpha() > 0 for x_ in range(0, 600, 20) for y_ in range(0, 240, 20)), "a chart scene paints real pixels with QPainter")
+n_cards = ep.list_box.count()
+ok(n_cards == 2, "both exams are listed")
+ep.delete_exam.__func__  # (the confirm dialog itself is covered by the modal test)
+for e_ in list(sl.exams()):
+    sl.remove_exam(e_["id"])
+ep.refresh(); pump(100)
+fm = ExamForm({"name": "X", "date": date.today().isoformat()}); fm.show(); pump(30)
+ok(fm.valid() and fm.values()["name"] == "X", "exam form")
+
 win.scanner.stop(); win.guard.stop()
 print("ALL PASSED" if not FAILS else f"{len(FAILS)} FAILED")
 sys.exit(1 if FAILS else 0)

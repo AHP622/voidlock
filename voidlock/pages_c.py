@@ -696,10 +696,7 @@ class StudyPage(Page):
             self._rebuild_subjects()
 
     def exams_flow(self):
-        body = ExamEditor(self.sl, lambda: (self.refresh(), self.ctx.after_study_change()))
-        self.ctx.new_modal().build("Exams", "The next exam is shown on this page, and you get a reminder the day before and on the day.",
-                                   body, "Done", "Close", icon="schedule", width=520).exec_modal()
-        self.refresh()
+        self.ctx.goto("exams")                     # exams, results and progress have their own tab now
 
     def goto_plan(self, d):
         self.plan_day = d if d and d != date.today() else None
@@ -912,6 +909,12 @@ class RewardsPage(Page):
     def P(self):
         return self.ctx.points
 
+    def _set_bal(self, text):
+        try:
+            self.bal.setText(text)
+        except RuntimeError:
+            pass                      # the balance label was rebuilt while the number was still counting up
+
     def on_show(self):
         self.ctx.process_points()
         self._sig = None
@@ -923,7 +926,7 @@ class RewardsPage(Page):
         bal = P.balance
         if bal != self._shown:
             a, b = self._shown, bal
-            tween(self, a, b, 700, lambda v: self.bal.setText(str(int(round(v)))), done=lambda: self.bal.setText(str(b)))
+            tween(self, a, b, 700, lambda v: self._set_bal(str(int(round(v)))), done=lambda: self._set_bal(str(b)))
             self._shown = b
         today_rec = play_day(st, date.today())
         played = int(today_rec["total"] // 60)

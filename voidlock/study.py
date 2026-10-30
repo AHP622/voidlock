@@ -14,6 +14,24 @@ DEFAULT_SUBJECTS = [("Math", "#8B5CF6"), ("Physics", "#00C2FF"), ("Chemistry", "
 _WORDS_NAME = re.compile(r"english|انگلیسی|زبان|language|vocab|لغت|واژه", re.I)
 
 
+_FA = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩٫٬،/", "01234567890123456789.,,.")
+
+
+def parse_number(text):
+    """'۷۵٫۵', '75,5', '-12.3', '8 120' -> float (None when empty or not a number). Persian / Arabic digits are accepted."""
+    t = str(text or "").translate(_FA).replace(" ", "").replace("\u200c", "").replace("\u200f", "").replace("\u200e", "")
+    if not t:
+        return None
+    if t.count(",") == 1 and "." not in t and len(t.split(",")[1]) <= 2:
+        t = t.replace(",", ".")                    # decimal comma
+    t = t.replace(",", "")
+    t = t.replace("\u2212", "-")                  # a typographic minus sign
+    try:
+        return float(t)
+    except ValueError:
+        return None
+
+
 def dkey(d):
     if isinstance(d, str):
         return d
@@ -363,6 +381,75 @@ class StudyLog:
 
     def exam_on(self, d):
         return [e for e in self.d["exams"] if e["date"] == dkey(d)]
+
+    # ---- exam results: percent and taraz per subject, total taraz and rank
+    PCT_RANGE, TARAZ_MAX, RANK_MAX = (-33.4, 100.0), 20000, 5_000_000
+
+    def set_exam_result(self, eid, taraz=None, rank=None, subjects=(), note=""):
+        """Stores what you got in an exam. subjects: [{"sid", "pct", "taraz"}]; empty values are dropped. Returns False when
+        nothing usable was given (the result is removed then)."""
+        e = next((x for x in self.d["exams"] if x["id"] == eid), None)
+        if not e:
+            return False
+        rows = []
+        for r in subjects:
+            pct = r.get("pct")
+            tz = r.get("taraz")
+            pct = None if pct is None else max(self.PCT_RANGE[0], min(self.PCT_RANGE[1], float(pct)))
+            tz = None if tz is None else max(0, min(self.TARAZ_MAX, int(round(float(tz)))))
+            if pct is None and tz is None:
+                continue
+            sub = self.subject(r.get("sid")) if r.get("sid") else None
+            rows.append({"sid": r.get("sid") or "", "name": (sub["name"] if sub else str(r.get("name") or "")).strip(),
+                         "pct": None if pct is None else round(pct, 2), "taraz": tz})
+        taraz = None if taraz is None else max(0, min(self.TARAZ_MAX, int(round(float(taraz)))))
+        rank = None if rank is None else max(1, min(self.RANK_MAX, int(round(float(rank)))))
+        if taraz is None and rank is None and not rows:
+            e.pop("result", None)
+            self.save()
+            return False
+        e["result"] = {"taraz": taraz, "rank": rank, "subjects": rows, "note": str(note or "").strip()[:200]}
+        self.save()
+        return True
+
+    def clear_exam_result(self, eid):
+        for e in self.d["exams"]:
+            if e["id"] == eid:
+                e.pop("result", None)
+        self.save()
+
+    def exams_with_results(self, upto=None):
+        """Exams that have a result, oldest first (optionally only up to a date)."""
+        out = [e for e in self.exams() if e.get("result")]
+        if upto is not None:
+            out = [e for e in out if e["date"] <= dkey(upto)]
+        return out
+
+    def subject_key(self, row):
+        """Series key of a result row: the subject id while it exists, otherwise the saved name."""
+        sid = row.get("sid")
+        if sid and self.subject(sid):
+            return sid
+        return "n:" + str(row.get("name", "")).strip().casefold()
+
+    def exam_progress(self, upto=None):
+        """Data for the progress charts.
+        {"exams": [{id,name,date,taraz,rank,pct_avg,note}], "subjects": [{key,name,color,points:[(i,pct,taraz)]}]}"""
+        ex = self.exams_with_results(upto)
+        subj = {}
+        out = []
+        for i, e in enumerate(ex):
+            r = e["result"]
+            pcts = [x["pct"] for x in r.get("subjects", []) if x.get("pct") is not None]
+            out.append({"id": e["id"], "name": e["name"], "date": e["date"], "taraz": r.get("taraz"), "rank": r.get("rank"),
+                        "pct_avg": (sum(pcts) / len(pcts)) if pcts else None, "note": r.get("note", "")})
+            for row in r.get("subjects", []):
+                key = self.subject_key(row)
+                s = self.subject(row.get("sid")) if row.get("sid") else None
+                rec = subj.setdefault(key, {"key": key, "name": s["name"] if s else row.get("name") or "?",
+                                            "color": (s or {}).get("color", "#8A8F9C"), "points": []})
+                rec["points"].append((i, row.get("pct"), row.get("taraz")))
+        return {"exams": out, "subjects": sorted(subj.values(), key=lambda r: r["name"])}
 
     def day_sec(self, d, include_running=True, now=None, include_sessions=True):
         """Study time for a day. Focus sessions (Start on Overview) are left out when include_sessions is False."""

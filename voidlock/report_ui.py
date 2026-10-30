@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLineEdit, QVBoxLayout, 
 
 from . import i18n, report
 from .theme import T
-from .widgets import ChipGrid, DateField, Segmented, label
+from .widgets import ChipGrid, DateField, Segmented, Toggle, label
 
 PERIODS = ["day", "week", "month", "year", "all", "custom"]
 PERIOD_NAMES = ["Day", "Week", "Month", "Year", "All time", "Custom"]
@@ -51,6 +51,13 @@ class ReportForm(QWidget):
         lay.addWidget(label("FORMAT", 10, QFont.Weight.Bold, T.text3, spacing=2))
         self.fmt = ChipGrid(FORMAT_NAMES, 0, per_row=3)
         lay.addWidget(self.fmt)
+        for attr, text in (("inc_exams", "Include exam results and progress"), ("inc_sched", "Include the weekly timetable (classes and study)")):
+            r = QHBoxLayout()
+            r.addWidget(label(text, 13), 1)
+            tg = Toggle(True)
+            r.addWidget(tg)
+            lay.addLayout(r)
+            setattr(self, attr, tg)
         self.period.currentChanged.connect(self._sync)
         self.lang.currentChanged.connect(self._sync)
         for w in (self.anchor, self.d_from, self.d_to):
@@ -89,13 +96,14 @@ class ReportForm(QWidget):
     def values(self):
         a, b = self.range()
         return {"name": self.name.text().strip(), "lang": self.report_lang(), "start": a, "end": b, "fmt": FORMATS[self.fmt.current()],
-                "kind": self.kind()}
+                "kind": self.kind(), "exams": self.inc_exams.isChecked(), "schedule": self.inc_sched.isChecked()}
 
 
 def build_report(ctx, v):
     """The report data for the chosen values (also used by tests)."""
     return report.collect(ctx.store, ctx.study, v["start"], v["end"], v["name"], v["lang"],
-                          goal_min=int(ctx.store.settings.get("daily_goal_min", 120)))
+                          goal_min=int(ctx.store.settings.get("daily_goal_min", 120)),
+                          include_schedule=v.get("schedule", True), include_exams=v.get("exams", True))
 
 
 def write_report(R, fmt, path):
@@ -121,7 +129,7 @@ def default_path(v):
 def export_report(ctx):
     form = ReportForm(ctx)
     m = ctx.new_modal().build("Export study report",
-                              "For your advisor or parents: total study time, time per subject, a day-by-day table and the focus sessions.",
+                              "For your advisor or parents: study time, time per subject, charts, exam results and progress, the weekly timetable and the focus sessions.",
                               form, "Choose file…", icon="download", width=540, validator=form.valid)
     form.changed.connect(m.revalidate)
     if not m.exec_modal():

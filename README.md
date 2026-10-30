@@ -36,6 +36,19 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
+## What changed in 1.8.0
+
+- **New tab: Exams.** Add your exam days, and after each exam enter the results: percent and taraz of every subject, the total taraz and the overall rank (Persian digits and separators are accepted; leave out what you do not know;
+  percent can be negative down to -33.4). The tab shows cards (days to the next exam, latest and best taraz, latest rank, number of exams), a progress chart with four views - total taraz (trend line, best point), overall rank
+  (inverted axis: up is always better), taraz per subject and percent per subject - hover a point for details, a table of the latest exam by subject with the change since the previous exam, and the list of all exams.
+- **Reports are fuller:** the study chart is stacked by subject with hour gridlines, the daily goal, the average of the study days, a 7-day moving average and exam markers (monthly bars for long periods);
+  a weekday pattern chart; **the weekly timetable** (classes with teacher / place, and planned study sessions, with hours per week) so an advisor knows when your classes are held; and **exam results and taraz progress** (summary cards,
+  taraz / rank / per-subject charts, an exam table with changes, a subject-by-exam matrix, strongest and weakest subjects, biggest gain and drop). Both sections are in HTML, PDF and CSV and can be switched off in the export window.
+  Results are included up to the end of the chosen period (a trend needs the earlier exams too).
+- One chart engine (`voidlock/charts.py`): a chart is a small vector scene drawn as inline SVG in the HTML (hover tooltips, right-to-left aware) and with QPainter in the PDF and in the app (`charts_qt.py`), so the three look alike.
+  In the PDF every chart carries its own heading in the picture, so a heading is never left alone at the bottom of a page.
+- The "Exams" button on the Study page now opens the Exams tab.
+
 ## What changed in 1.7.1
 
 - **Release build failed (v1.7.0):** the new report tests print Persian section names, and the Windows CI console (cp1252) cannot encode them, so the test step crashed with `UnicodeEncodeError`

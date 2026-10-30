@@ -8,7 +8,7 @@ import html
 import io
 from datetime import date, datetime, timedelta
 
-from . import __version__, i18n
+from . import __version__, charts, i18n
 
 MAX_DAILY_ROWS = 62          # longer periods get a month-by-month table instead of one row per day
 STREAK_MIN_SEC = 600         # a day counts for the streak with at least 10 minutes
@@ -27,6 +27,16 @@ STR = {
         "note": "زمان مطالعه = تایمر درس‌ها + زمان ثبت‌شده‌ی دستی. جلسه‌های تمرکز جدا فهرست شده‌اند و به مجموع اضافه نشده‌اند.",
         "print": "چاپ", "chart_daily": "مطالعه‌ی روزانه", "chart_monthly": "مطالعه‌ی ماهانه", "chart_subjects": "سهم درس‌ها", "goal": "هدف روزانه",
         "none": "—", "h": "ساعت", "m": "دقیقه", "and": "و", "of": "از", "legend_goal": "رسیدن به هدف", "legend_below": "کمتر از هدف", "legend_exam": "روز آزمون", "goal_line": "خط چین: هدف روزانه",
+ "avg_line": "میانگین روزهای مطالعه", "ma7": "میانگین ۷ روزه", "weekday_chart": "میانگین مطالعه در هر روز هفته",
+        "schedule_title": "برنامه‌ی هفتگی کلاس‌ها و مطالعه", "kind_class": "کلاس", "kind_session": "جلسه‌ی مطالعه", "place": "مکان / معلم",
+        "week_class_h": "ساعت کلاس در هفته", "week_session_h": "ساعت مطالعه‌ی برنامه‌ریزی‌شده در هفته", "no_schedule": "هنوز برنامه‌ای ثبت نشده است.",
+        "results_title": "نتایج آزمون‌ها و روند تراز", "taraz": "تراز", "taraz_total": "تراز کل", "rank": "رتبه کل", "pct": "درصد",
+        "exam_name": "آزمون", "delta": "تغییر", "best_taraz": "بهترین تراز", "avg_taraz": "میانگین تراز", "latest": "آخرین آزمون",
+        "best_rank": "بهترین رتبه", "first_to_last": "تغییر تراز از اولین تا آخرین آزمون", "exams_taken": "آزمون‌های ثبت‌شده",
+        "chart_taraz": "روند تراز کل", "chart_rank": "روند رتبه کل (پایین‌تر = بهتر)", "chart_subj": "روند تراز هر درس", "trend": "روند",
+        "strong": "قوی‌ترین درس‌ها", "weak": "نیازمند تلاش بیشتر", "improved": "بیشترین پیشرفت", "declined": "بیشترین افت", "no_results": "هنوز نتیجه‌ای ثبت نشده است.",
+        "pct_avg": "میانگین درصد", "note_l": "یادداشت", "subject_matrix": "تراز و درصد هر درس در هر آزمون", "up": "▲", "down": "▼", "same": "=",
+        "results_upto": "همه‌ی نتایج تا پایان بازه", "delta_taraz": "تغییر تراز", "delta_rank": "تغییر رتبه", "kind": "نوع", "min_l": "دقیقه", "latest_vs_prev": "نسبت به آزمون قبل",
         "st_completed": "کامل", "st_ended": "پایان دستی", "st_emergency": "خروج اضطراری", "st_recovered": "بازیابی‌شده",
         "csv_minutes": "دقیقه", "gdate": "تاریخ میلادی", "jdate": "تاریخ شمسی", "tests_short": "تست", "words_short": "لغت",
         "total_min": "مجموع (دقیقه)", "key": "مورد", "value": "مقدار", "start_gdate": "شروع (میلادی)", "end_gdate": "پایان (میلادی)",
@@ -45,6 +55,16 @@ STR = {
         "note": "Study time = subject timer + manually added time. Focus sessions are listed separately and are not added to the total.",
         "print": "Print", "chart_daily": "Study per day", "chart_monthly": "Study per month", "chart_subjects": "Share of subjects", "goal": "Daily goal",
         "none": "-", "h": "h", "m": "min", "and": "", "of": "of", "legend_goal": "goal reached", "legend_below": "below goal", "legend_exam": "exam day", "goal_line": "dashed line: daily goal",
+ "avg_line": "average of study days", "ma7": "7-day average", "weekday_chart": "Average study per weekday",
+        "schedule_title": "Weekly timetable: classes and study", "kind_class": "Class", "kind_session": "Study session", "place": "Place / teacher",
+        "week_class_h": "Class hours per week", "week_session_h": "Planned study hours per week", "no_schedule": "Nothing is scheduled yet.",
+        "results_title": "Exam results and taraz progress", "taraz": "Taraz", "taraz_total": "Total taraz", "rank": "Overall rank", "pct": "Percent",
+        "exam_name": "Exam", "delta": "Change", "best_taraz": "Best taraz", "avg_taraz": "Average taraz", "latest": "Latest exam",
+        "best_rank": "Best rank", "first_to_last": "Taraz change, first to latest exam", "exams_taken": "Exams with results",
+        "chart_taraz": "Total taraz trend", "chart_rank": "Overall rank trend (lower is better)", "chart_subj": "Taraz per subject", "trend": "trend",
+        "strong": "Strongest subjects", "weak": "Needs more work", "improved": "Most improved", "declined": "Biggest drop", "no_results": "No results recorded yet.",
+        "pct_avg": "Average percent", "note_l": "Note", "subject_matrix": "Taraz and percent per subject and exam", "up": "▲", "down": "▼", "same": "=",
+        "results_upto": "all results up to the end of the period", "delta_taraz": "Taraz change", "delta_rank": "Rank change", "kind": "Type", "min_l": "min", "latest_vs_prev": "vs the previous exam",
         "st_completed": "Completed", "st_ended": "Ended by hand", "st_emergency": "Emergency exit", "st_recovered": "Recovered",
         "csv_minutes": "minutes", "gdate": "Gregorian date", "jdate": "Jalali date", "tests_short": "tests", "words_short": "words",
         "total_min": "Total (minutes)", "key": "Item", "value": "Value", "start_gdate": "Start", "end_gdate": "End",
@@ -156,7 +176,7 @@ def first_recorded_day(study, store):
 
 
 # ------------------------------------------------------------------ data
-def collect(store, study, start, end, name="", lang="fa", goal_min=None, now=None):
+def collect(store, study, start, end, name="", lang="fa", goal_min=None, now=None, include_schedule=True, include_exams=True):
     """Everything a report shows, as plain data."""
     today = (now or datetime.now()).date()
     eff_end = min(end, today)
@@ -250,8 +270,140 @@ def collect(store, study, start, end, name="", lang="fa", goal_min=None, now=Non
             "streak": streak, "goal_days": sum(1 for x in days if goal and x["sec"] >= goal),
             "sessions": len(sessions), "sessions_sec": sum(s["focus_sec"] for s in sessions),
         },
-        "version": __version__,
+        "version": __version__, "week_start": int(store.settings.get("week_start", 5)),
+        "schedule": schedule_data(store, lang) if include_schedule else None,
+        "results": results_data(study, end, lang) if include_exams else None,
     }
+
+
+def schedule_data(store, lang):
+    """The weekly timetable (classes and planned study sessions), days in the person's week order."""
+    ws = int(store.settings.get("week_start", 5))
+    days = []
+    cmin = smin = 0
+    for k in range(7):
+        wd = (ws + k) % 7
+        items = []
+        for c in store.classes:
+            if c.get("enabled", True) and c["day"] == wd:
+                items.append({"kind": "class", "time": c["time"], "minutes": int(c["minutes"]), "name": c["name"], "place": c.get("place", "")})
+                cmin += int(c["minutes"])
+        for e in store.schedule:
+            if e.get("enabled", True) and e["day"] == wd:
+                items.append({"kind": "session", "time": e["time"], "minutes": int(e["minutes"]), "name": e.get("subject") or "", "place": ""})
+                smin += int(e["minutes"])
+        items.sort(key=lambda x: x["time"])
+        days.append({"weekday": wd, "items": items})
+    has = any(d["items"] for d in days)
+    return {"days": days, "class_min": cmin, "session_min": smin, "has": has}
+
+
+def _short_date(iso, lang):
+    d = date.fromisoformat(iso)
+    return fmt_date(d, lang, year=False)
+
+
+def results_data(study, end, lang):
+    """Exam results up to the end of the period, with what the charts and the text need."""
+    P = study.exam_progress(upto=end)
+    ex = P["exams"]
+    if not ex:
+        return None
+    tz = [(i, e["taraz"]) for i, e in enumerate(ex) if e["taraz"] is not None]
+    rk = [(i, e["rank"]) for i, e in enumerate(ex) if e["rank"] is not None]
+    for i, e in enumerate(ex):
+        prev = next((ex[j]["taraz"] for j in range(i - 1, -1, -1) if ex[j]["taraz"] is not None), None)
+        e["delta"] = (e["taraz"] - prev) if (e["taraz"] is not None and prev is not None) else None
+        prevr = next((ex[j]["rank"] for j in range(i - 1, -1, -1) if ex[j]["rank"] is not None), None)
+        e["delta_rank"] = (prevr - e["rank"]) if (e["rank"] is not None and prevr is not None) else None   # + = better rank
+        e["short"] = _short_date(e["date"], lang)
+    subs = []
+    for s in P["subjects"]:
+        pts = [p for p in s["points"] if p[2] is not None or p[1] is not None]
+        tz_pts = [p for p in s["points"] if p[2] is not None]
+        latest = pts[-1] if pts else None
+        delta = (tz_pts[-1][2] - tz_pts[-2][2]) if len(tz_pts) >= 2 else None
+        subs.append({"key": s["key"], "name": s["name"], "color": s["color"], "points": s["points"],
+                     "latest_pct": latest[1] if latest else None, "latest_taraz": tz_pts[-1][2] if tz_pts else None, "delta": delta})
+    ranked = sorted([s for s in subs if s["latest_taraz"] is not None], key=lambda s: -s["latest_taraz"])
+    moved = [s for s in subs if s["delta"] is not None]
+    out = {
+        "exams": ex, "subjects": subs, "count": len(ex),
+        "latest": ex[-1], "prev": ex[-2] if len(ex) > 1 else None,
+        "best_taraz": max((e for e in ex if e["taraz"] is not None), key=lambda e: e["taraz"], default=None),
+        "avg_taraz": (sum(v for _i, v in tz) / len(tz)) if tz else None,
+        "best_rank": min((e for e in ex if e["rank"] is not None), key=lambda e: e["rank"], default=None),
+        "first_to_last": (tz[-1][1] - tz[0][1]) if len(tz) >= 2 else None,
+        "strong": ranked[:2], "weak": ranked[-2:][::-1] if len(ranked) >= 4 else [],
+        "improved": max(moved, key=lambda s: s["delta"]) if moved and max(s["delta"] for s in moved) > 0 else None,
+        "declined": min(moved, key=lambda s: s["delta"]) if moved and min(s["delta"] for s in moved) < 0 else None,
+    }
+    return out
+
+
+def exam_chart(res, kind, lang, pal=charts.LIGHT, w=760, h=260):
+    """One exam-progress chart. kind: taraz | rank | subjects (taraz per subject) | percent (percent per subject).
+    Returns an empty scene when there is nothing to draw."""
+    fa = lang == "fa"
+    t = STR[lang]
+    ex = res["exams"] if res else []
+    if not ex:
+        return charts.Scene(w, 10)
+    labels = [e["short"] for e in ex]
+    tips = [f"{e['name']} · {fmt_date(date.fromisoformat(e['date']), lang)}" for e in ex]
+    fi = lambda n: charts.fmt_int(n, fa)
+    if kind in ("taraz", "rank"):
+        key = kind
+        vals = [e[key] for e in ex]
+        if not any(v is not None for v in vals):
+            return charts.Scene(w, 10)
+        return charts.line_chart({"labels": labels, "invert": kind == "rank", "unit": t["taraz" if kind == "taraz" else "rank"],
+                                  "series": [{"name": t["taraz_total" if kind == "taraz" else "rank"], "color": pal.get("line1", "#0e7490") if kind == "taraz" else pal.get("line2", "#2563eb"), "values": vals}],
+                                  "tips": [f"{tp}: " + (fi(v) if v is not None else "-") for tp, v in zip(tips, vals)]}, pal, w, h, fa)
+    series = []
+    for s in res["subjects"]:
+        vals = [None] * len(ex)
+        for i, pct, tz in s["points"]:
+            v = tz if kind == "subjects" else pct
+            if v is not None:
+                vals[i] = v
+        if any(v is not None for v in vals):
+            series.append({"name": s["name"], "color": s["color"], "values": vals, "width": 2.2})
+    if not series or len(ex) < 2:
+        return charts.Scene(w, 10)
+    spec = {"labels": labels, "series": series, "unit": t["taraz"] if kind == "subjects" else "%"}
+    if kind == "percent":
+        spec["fmt"] = lambda v: _digits(f"{v:.0f}", lang)
+    return charts.line_chart(spec, pal, w, h, fa)
+
+
+def result_scenes(R, w=760):
+    """Charts of the exam progress for the report (those that have data)."""
+    res = R.get("results")
+    if not res:
+        return {}
+    out = {}
+    for kind, name, hh in (("taraz", "taraz", 250), ("rank", "rank", 230), ("subjects", "subjects", 270)):
+        sc = exam_chart(res, kind, R["lang"], charts.LIGHT, w, hh)
+        if sc.items:
+            out[name] = sc
+    return out
+
+
+def pdf_scenes(R, w=680):
+    """Every chart of the PDF, by the name used in its HTML (<img src=name>)."""
+    sc = {}
+    t = STR[R["lang"]]
+    fa = R["lang"] == "fa"
+    if R["days"]:
+        st_ = charts.study_chart(R, charts.LIGHT, w)
+        sc["chart_study"] = charts.titled(st_, t["chart_daily"] if R["daily_rows"] else t["chart_monthly"], fa)
+        if len(R["days"]) >= 7:
+            sc["chart_weekday"] = charts.titled(charts.weekday_chart(R, charts.LIGHT, min(w, 460), 190), t["weekday_chart"], fa)
+    titles = {"taraz": t["chart_taraz"], "rank": t["chart_rank"], "subjects": t["chart_subj"]}
+    for k, v in result_scenes(R, w).items():
+        sc["chart_" + k] = charts.titled(v, titles[k], fa)
+    return sc
 
 
 def period_title(R):
@@ -269,6 +421,21 @@ def _status(st, lang):
 # ------------------------------------------------------------------ HTML
 _CSS = """
 .tw{overflow-x:auto}
+.sched{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
+.sd{background:#f8fafc;border:1px solid #e3e9f3;border-radius:10px;padding:8px;min-height:70px}
+.sd h4{margin:0 0 6px;font-size:12.5px;color:#334155;text-align:center}
+.it{border-radius:8px;padding:5px 7px;margin-bottom:5px;font-size:12px;line-height:1.5;border-inline-start:4px solid}
+.it.class{background:#f3e8ff;border-color:#7e22ce}
+.it.session{background:#e0f2fe;border-color:#0369a1}
+.it b{display:block;font-size:12.5px}
+.it span{color:#64748b}
+.chart{margin-top:4px}
+.two{display:flex;flex-wrap:wrap;gap:12px}
+.two>div{flex:1 1 320px;min-width:0}
+.pos{color:#15803d;font-weight:700}.neg{color:#b91c1c;font-weight:700}
+.ins{margin:8px 0 0;padding:0;list-style:none;font-size:13px}
+.ins li{padding:3px 0}
+@media (max-width:720px){.sched{grid-template-columns:repeat(2,minmax(0,1fr))}}
 *{box-sizing:border-box}
 html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 body{margin:0;background:#eef1f6;color:#1d2433;font:14px/1.7 "Vazirmatn","Vazir","Segoe UI",Tahoma,"Noto Sans Arabic",system-ui,sans-serif}
@@ -279,7 +446,7 @@ body{margin:0;background:#eef1f6;color:#1d2433;font:14px/1.7 "Vazirmatn","Vazir"
 .card{background:#fff;border:1px solid #dde3ee;border-radius:14px;padding:18px 20px;margin-bottom:14px}
 .card h2{margin:0 0 12px;font-size:17px;color:#0e5a72}
 .grid{display:flex;flex-wrap:wrap;gap:10px}
-.stat{flex:1 1 150px;background:#f5f8fc;border:1px solid #e3e9f3;border-radius:12px;padding:10px 14px;min-width:140px}
+.stat{flex:1 1 170px;background:#f5f8fc;border:1px solid #e3e9f3;border-radius:12px;padding:10px 14px;min-width:150px;max-width:100%;overflow-wrap:anywhere}
 .stat b{display:block;font-size:19px;color:#0f172a}
 .stat span{font-size:12px;color:#5b6577}
 table{width:100%;border-collapse:collapse;font-size:13.5px}
@@ -301,6 +468,8 @@ button.noprint{font:inherit;background:#0e7490;color:#fff;border:0;border-radius
 @page{size:A4;margin:12mm}
 @media print{
  .tw{overflow:visible}
+ .sched{grid-template-columns:repeat(7,minmax(0,1fr))}
+ .it{font-size:10.5px}
  body{background:#fff}
  .page{max-width:none;padding:0}
  .noprint{display:none!important}
@@ -322,61 +491,117 @@ def _bar(pct, color):
     return f'<div class="bar"><i style="width:{max(0.0, min(100.0, pct)):.1f}%;background:{esc(color)}"></i></div>'
 
 
-def chart_series(R):
-    """Bars of the main chart: one per day for short periods, one per month for long ones.
-    Returns (mode, [(label, seconds, is_exam_day)])."""
-    lang = R["lang"]
-    if R["daily_rows"]:
-        out = []
-        for x in R["days"]:
-            d = x["date"]
-            lab = _digits(i18n.to_jalali(datetime(d.year, d.month, d.day))[2], lang) if lang == "fa" else str(d.day)
-            out.append((lab, x["sec"], bool(x["exam"])))
-        return "day", out
-    out = []
-    for m in R["monthly"]:
-        y, mo = m["key"]
-        lab = i18n.FA_MONTHS[mo - 1] if lang == "fa" else date(y, mo, 1).strftime("%b")
-        out.append((lab, m["sec"], False))
-    return "month", out
-
-
-def _svg_daily(R):
-    """Inline SVG column chart of the daily study time (first day at the reading start side)."""
-    mode, series = chart_series(R)
-    if not series:
+def _delta_html(v, lang, better_up=True, fmt=None):
+    if v is None or v == 0:
         return ""
+    good = (v > 0) == better_up
+    arrow = STR[lang]["up"] if v > 0 else STR[lang]["down"]
+    num = (fmt or (lambda x: charts.fmt_int(abs(x), lang == "fa")))(v)
+    return f'<span class="{"pos" if good else "neg"}">{arrow} {esc(num)}</span>'
+
+
+def _results_html(R):
+    res = R.get("results")
     lang = R["lang"]
-    rtl = lang == "fa"
-    W, H, pad_b, pad_t = 760, 190, 26, 10
-    goal = R["goal_sec"] if mode == "day" else 0
-    mx = max(max(v for _l, v, _e in series), goal or 0, 1)
-    n = len(series)
-    slot = W / n
-    bw = max(2.0, min(26.0 if mode == "day" else 60.0, slot * 0.68))
-    parts = [f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="{esc(STR[lang]["chart_daily" if mode == "day" else "chart_monthly"])}">']
-    gy = pad_t + (H - pad_b - pad_t) * (1 - (goal / mx)) if goal else None
-    for i, (lab, v, exam) in enumerate(series):
-        cx = (W - (i + 0.5) * slot) if rtl else (i + 0.5) * slot
-        h = (H - pad_b - pad_t) * (v / mx)
-        color = ("#0e7490" if (goal and v >= goal) else "#7c9cd6") if mode == "day" else "#0e7490"
-        if exam:
-            color = "#d97706"
-        parts.append(f'<rect x="{cx - bw / 2:.1f}" y="{H - pad_b - h:.1f}" width="{bw:.1f}" height="{max(h, 0):.1f}" rx="2" fill="{color}"/>')
-        step = (1 if n <= 14 else (2 if n <= 31 else 7)) if mode == "day" else 1
-        if i % step == 0:
-            parts.append(f'<text x="{cx:.1f}" y="{H - 8}" font-size="11" text-anchor="middle" fill="#64748b">{esc(lab)}</text>')
-    if gy is not None:
-        parts.append(f'<line x1="0" x2="{W}" y1="{gy:.1f}" y2="{gy:.1f}" stroke="#a855f7" stroke-dasharray="5 4" stroke-width="1.4"/>')
-    parts.append("</svg>")
     t = STR[lang]
-    sw = lambda c: f'<span><span class="dot" style="background:{c}"></span>'
-    legend = ""
-    if mode == "day":
-        legend = (f'<div class="legend">{sw("#0e7490")}{esc(t["legend_goal"])}</span>{sw("#7c9cd6")}{esc(t["legend_below"])}</span>'
-                  + (f'{sw("#d97706")}{esc(t["legend_exam"])}</span>' if any(x["exam"] for x in R["days"]) else "")
-                  + (f'<span>{esc(t["goal_line"])}</span>' if R["goal_sec"] else "") + "</div>")
-    return "".join(parts) + legend
+    fa = lang == "fa"
+    if not res:
+        return ""
+    ex = res["exams"]
+    fi = lambda n: charts.fmt_int(n, fa)
+    pc = lambda p: _digits(f"{p:.1f}", lang) + ("٪" if fa else "%")
+    latest, best, bestr = res["latest"], res["best_taraz"], res["best_rank"]
+    stats = [_stat(t["exams_taken"], _digits(res["count"], lang))]
+    if latest["taraz"] is not None:
+        d = _delta_html(latest["delta"], lang)
+        stats.append(f'<div class="stat"><b>{esc(fi(latest["taraz"]))} {d}</b><span>{esc(t["latest"])} · {esc(t["taraz_total"])}</span></div>')
+    if latest["rank"] is not None:
+        d = _delta_html(latest["delta_rank"], lang)
+        stats.append(f'<div class="stat"><b>{esc(fi(latest["rank"]))} {d}</b><span>{esc(t["latest"])} · {esc(t["rank"])}</span></div>')
+    if best:
+        stats.append(_stat(t["best_taraz"] + f" ({best['short']})", fi(best["taraz"])))
+    if res["avg_taraz"] is not None:
+        stats.append(_stat(t["avg_taraz"], fi(res["avg_taraz"])))
+    if bestr:
+        stats.append(_stat(t["best_rank"] + f" ({bestr['short']})", fi(bestr["rank"])))
+    if res["first_to_last"] is not None:
+        v = res["first_to_last"]
+        stats.append(f'<div class="stat"><b>{_delta_html(v, lang) or esc(t["same"])}</b><span>{esc(t["first_to_last"])}</span></div>')
+    out = [f'<div class="card"><h2>{esc(t["results_title"])}</h2><div class="grid">{"".join(stats)}</div>'
+           f'<div class="note">{esc(t["results_upto"])}</div></div>\n']
+    scenes = result_scenes(R)
+    for key, title in (("taraz", "chart_taraz"), ("rank", "chart_rank"), ("subjects", "chart_subj")):
+        if key in scenes:
+            out.append(f'<div class="card"><h2>{esc(t[title])}</h2><div class="chart">{scenes[key].to_svg(t[title], fa)}</div></div>\n')
+    # exams table
+    rows = []
+    for e in reversed(ex):
+        rows.append(f'<tr><td class="num">{esc(fmt_date(date.fromisoformat(e["date"]), lang))}</td><td>{esc(e["name"])}</td>'
+                    f'<td class="num">{esc(fi(e["taraz"])) if e["taraz"] is not None else "<span class=muted>" + esc(t["none"]) + "</span>"}</td>'
+                    f'<td class="num">{_delta_html(e["delta"], lang)}</td>'
+                    f'<td class="num">{esc(fi(e["rank"])) if e["rank"] is not None else "<span class=muted>" + esc(t["none"]) + "</span>"}</td>'
+                    f'<td class="num">{_delta_html(e["delta_rank"], lang)}</td>'
+                    f'<td class="num">{esc(pc(e["pct_avg"])) if e["pct_avg"] is not None else ""}</td><td>{esc(e["note"])}</td></tr>')
+    out.append(f'<div class="card tall"><h2>{esc(t["exam_name"])}</h2><table><thead><tr><th>{esc(t["date"])}</th><th>{esc(t["exam_name"])}</th>'
+               f'<th class="num">{esc(t["taraz_total"])}</th><th class="num">{esc(t["delta_taraz"])}</th><th class="num">{esc(t["rank"])}</th><th class="num">{esc(t["delta_rank"])}</th>'
+               f'<th class="num">{esc(t["pct_avg"])}</th><th>{esc(t["note_l"])}</th></tr></thead><tbody>' + "".join(rows) + "</tbody></table></div>\n")
+    # per subject matrix: last 8 exams
+    subs = [s for s in res["subjects"] if any(p[1] is not None or p[2] is not None for p in s["points"])]
+    if subs:
+        cols = list(range(max(0, len(ex) - 8), len(ex)))
+        head = "".join(f'<th class="num">{esc(ex[i]["short"])}</th>' for i in cols)
+        rows = []
+        for s in subs:
+            cells = {i: (pct, tz) for i, pct, tz in s["points"]}
+            tds = []
+            for i in cols:
+                pct, tz = cells.get(i, (None, None))
+                tds.append('<td class="num">' + (f'<b>{esc(fi(tz))}</b>' if tz is not None else "") + (f'<br><span class="muted">{esc(pc(pct))}</span>' if pct is not None else "")
+                           + ("" if (tz is not None or pct is not None) else f'<span class="muted">{esc(t["none"])}</span>') + "</td>")
+            rows.append(f'<tr><td class="name"><span class="dot" style="background:{esc(s["color"])}"></span>{esc(s["name"])}</td>{"".join(tds)}'
+                        f'<td class="num">{_delta_html(s["delta"], lang)}</td></tr>')
+        out.append(f'<div class="card tall"><h2>{esc(t["subject_matrix"])}</h2><table><thead><tr><th>{esc(t["subject"])}</th>{head}'
+                   f'<th class="num">{esc(t["latest_vs_prev"])}</th></tr></thead><tbody>' + "".join(rows) + "</tbody></table>"
+                   f'<div class="note">{esc(t["taraz"])} / {esc(t["pct"])}</div></div>\n')
+    # insights
+    ins = []
+    if res["strong"]:
+        ins.append(f'<li><b>{esc(t["strong"])}:</b> ' + "، ".join(esc(f'{s["name"]} ({fi(s["latest_taraz"])})') for s in res["strong"]) + "</li>")
+    if res["weak"]:
+        ins.append(f'<li><b>{esc(t["weak"])}:</b> ' + "، ".join(esc(f'{s["name"]} ({fi(s["latest_taraz"])})') for s in res["weak"]) + "</li>")
+    if res["improved"]:
+        s = res["improved"]
+        ins.append(f'<li><b>{esc(t["improved"])}:</b> {esc(s["name"])} {_delta_html(s["delta"], lang)}</li>')
+    if res["declined"]:
+        s = res["declined"]
+        ins.append(f'<li><b>{esc(t["declined"])}:</b> {esc(s["name"])} {_delta_html(s["delta"], lang)}</li>')
+    if ins:
+        out.append(f'<div class="card"><ul class="ins">{"".join(ins)}</ul></div>\n')
+    return "".join(out)
+
+
+def _schedule_html(R):
+    sch = R.get("schedule")
+    lang = R["lang"]
+    t = STR[lang]
+    rtl = lang == "fa"
+    if not sch or not sch["has"]:
+        return ""
+    cols = []
+    for d in sch["days"]:
+        name = i18n.FA_DAYS[d["weekday"]] if rtl else date(2024, 1, 1 + d["weekday"]).strftime("%A")
+        items = []
+        for it in d["items"]:
+            kind = t["kind_class"] if it["kind"] == "class" else t["kind_session"]
+            title = it["name"] or kind
+            sub = [fmt_dur(it["minutes"] * 60, lang)]
+            if it["place"]:
+                sub.append(it["place"])
+            items.append(f'<div class="it {it["kind"]}"><b>{esc(_digits(it["time"], lang))} · {esc(title)}</b><span>{esc(" · ".join(sub))}</span></div>')
+        cols.append(f'<div class="sd"><h4>{esc(name)}</h4>{"".join(items) or "<div class=muted style=text-align:center>" + esc(t["none"]) + "</div>"}</div>')
+    stats = [_stat(t["week_class_h"], fmt_dur(sch["class_min"] * 60, lang)), _stat(t["week_session_h"], fmt_dur(sch["session_min"] * 60, lang))]
+    return (f'<div class="card"><h2>{esc(t["schedule_title"])}</h2><div class="sched">{"".join(cols)}</div>'
+            f'<div class="grid" style="margin-top:10px">{"".join(stats)}</div></div>\n')
 
 
 def render_html(R, interactive=True):
@@ -435,9 +660,15 @@ def render_html(R, interactive=True):
                    f'<th class="num">{esc(t["tests_short"])}</th><th class="num">{esc(t["words_short"])}</th></tr></thead><tbody>'
                    + "".join(rows) + "</tbody></table></div>\n")
     # daily chart + table
-    mode, series = chart_series(R)
-    if len(series) > 1:
-        out.append(f'<div class="card"><h2>{esc(t["chart_daily"] if mode == "day" else t["chart_monthly"])}</h2>{_svg_daily(R)}</div>\n')
+    sc_study = charts.study_chart(R)
+    if sc_study.items and len(R["days"]) > 1:
+        mode = "day" if R["daily_rows"] else "month"
+        wk = charts.weekday_chart(R) if len(R["days"]) >= 7 else None
+        out.append(f'<div class="card"><h2>{esc(t["chart_daily"] if mode == "day" else t["chart_monthly"])}</h2><div class="chart">{sc_study.to_svg(t["chart_daily"], rtl)}</div></div>\n')
+        if wk is not None:
+            out.append(f'<div class="card"><h2>{esc(t["weekday_chart"])}</h2><div class="chart" style="max-width:520px;margin:0 auto">{wk.to_svg(t["weekday_chart"], rtl)}</div></div>\n')
+    out.append(_results_html(R))
+    out.append(_schedule_html(R))
     if R["daily_rows"] and R["days"]:
         mx = max([x["sec"] for x in R["days"]] + [1])
         any_exam = any(x["exam"] for x in R["days"])
@@ -544,6 +775,32 @@ def render_csv(R):
         w.writerow([t["exams"]])
         for e in R["exams"]:
             w.writerow([e["date"].isoformat(), fmt_jdate_numeric(e["date"]), e["name"]])
+    sch = R.get("schedule")
+    if sch and sch["has"]:
+        w.writerow([])
+        w.writerow([t["schedule_title"]])
+        w.writerow([t["kind"], t["weekday"], "HH:MM", t["csv_minutes"], t["subject"], t["place"]])
+        for d in sch["days"]:
+            dn = i18n.FA_DAYS[d["weekday"]] if lang == "fa" else date(2024, 1, 1 + d["weekday"]).strftime("%A")
+            for it in d["items"]:
+                w.writerow([t["kind_class"] if it["kind"] == "class" else t["kind_session"], dn, it["time"], it["minutes"], it["name"], it["place"]])
+    res = R.get("results")
+    if res:
+        w.writerow([])
+        w.writerow([t["results_title"]])
+        subs = [s for s in res["subjects"] if s["points"]]
+        head = [t["gdate"], t["jdate"], t["exam_name"], t["taraz_total"], t["rank"], t["pct_avg"], t["note_l"]]
+        for s in subs:
+            head += [f"{s['name']} - {t['pct']}", f"{s['name']} - {t['taraz']}"]
+        w.writerow(head)
+        for i, e in enumerate(res["exams"]):
+            d = date.fromisoformat(e["date"])
+            row_ = [e["date"], fmt_jdate_numeric(d), e["name"], "" if e["taraz"] is None else e["taraz"], "" if e["rank"] is None else e["rank"],
+                    "" if e["pct_avg"] is None else round(e["pct_avg"], 2), e["note"]]
+            for s in subs:
+                pt = next((p for p in s["points"] if p[0] == i), None)
+                row_ += ["" if not pt or pt[1] is None else pt[1], "" if not pt or pt[2] is None else pt[2]]
+            w.writerow(row_)
     return buf.getvalue()
 
 
@@ -553,6 +810,112 @@ def write_text(path, text, bom=False):
 
 
 # ------------------------------------------------------------------ PDF (Qt rich-text subset; drawn by report_pdf.py)
+def _results_pdf(R, scenes, row, table, h, al):
+    res = R.get("results")
+    if not res:
+        return ""
+    lang = R["lang"]
+    t = STR[lang]
+    fa = lang == "fa"
+    fi = lambda n: charts.fmt_int(n, fa)
+    pc = lambda p: _digits(f"{p:.1f}", lang) + ("٪" if fa else "%")
+    ex = res["exams"]
+
+    def dl(v, better_up=True):
+        if v is None or v == 0:
+            return ""
+        good = (v > 0) == better_up
+        return f' <span style="color:{"#15803d" if good else "#b91c1c"}">{t["up"] if v > 0 else t["down"]} {esc(fi(abs(v)))}</span>'
+
+    out = [h(t["results_title"])]
+    latest = res["latest"]
+    stats = [(t["exams_taken"], _digits(res["count"], lang))]
+    if latest["taraz"] is not None:
+        stats.append((t["latest"] + " · " + t["taraz_total"], fi(latest["taraz"]) + dl(latest["delta"])))
+    if latest["rank"] is not None:
+        stats.append((t["latest"] + " · " + t["rank"], fi(latest["rank"]) + dl(latest["delta_rank"])))
+    if res["best_taraz"]:
+        stats.append((t["best_taraz"] + f" ({res['best_taraz']['short']})", fi(res["best_taraz"]["taraz"])))
+    if res["avg_taraz"] is not None:
+        stats.append((t["avg_taraz"], fi(res["avg_taraz"])))
+    if res["best_rank"]:
+        stats.append((t["best_rank"] + f" ({res['best_rank']['short']})", fi(res["best_rank"]["rank"])))
+    if res["first_to_last"] is not None:
+        stats.append((t["first_to_last"], dl(res["first_to_last"]) or t["same"]))
+    while len(stats) % 3:
+        stats.append(("", ""))
+    srows = []
+    for i in range(0, len(stats), 3):
+        cells = [(f'<span style="font-size:12.5pt; font-weight:600">{v}</span><br><span style="font-size:8pt; color:#5b6577">{esc(k)}</span>' if k else "")
+                 for k, v in stats[i:i + 3]]
+        srows.append(row(cells, bg="#f5f8fc"))
+        srows.append('<tr><td></td></tr>')
+    out.append(table(srows))
+    for key, title in (("chart_taraz", "chart_taraz"), ("chart_rank", "chart_rank"), ("chart_subjects", "chart_subj")):
+        if key in scenes:
+            out.append(f'<p style="margin-top:6px; margin-bottom:0"><img src="{key}"></p>')
+    rows = []
+    for i, e in enumerate(reversed(ex)):
+        rows.append(row([esc(fmt_date(date.fromisoformat(e["date"]), lang)), esc(e["name"]), esc(fi(e["taraz"])) if e["taraz"] is not None else esc(t["none"]),
+                         dl(e["delta"]).strip(), esc(fi(e["rank"])) if e["rank"] is not None else esc(t["none"]), dl(e["delta_rank"]).strip(),
+                         esc(pc(e["pct_avg"])) if e["pct_avg"] is not None else ""], bg="#fafcff" if i % 2 else None))
+    out.append(h(t["exam_name"]))
+    out.append(table(rows, head=[t["date"], t["exam_name"], t["taraz_total"], t["delta_taraz"], t["rank"], t["delta_rank"], t["pct_avg"]]))
+    subs = [s for s in res["subjects"] if any(p[1] is not None or p[2] is not None for p in s["points"])]
+    if subs:
+        cols = list(range(max(0, len(ex) - 6), len(ex)))
+        rows = []
+        for k, s in enumerate(subs):
+            cells = {i: (pct, tz) for i, pct, tz in s["points"]}
+            vals = [f'<span style="color:{esc(s["color"])}">&#9679;</span> {esc(s["name"])}']
+            for i in cols:
+                pct, tz = cells.get(i, (None, None))
+                vals.append((f"<b>{esc(fi(tz))}</b>" if tz is not None else "") + (f'<br><span style="font-size:7.5pt; color:#64748b">{esc(pc(pct))}</span>' if pct is not None else "")
+                            or esc(t["none"]))
+            vals.append(dl(s["delta"]).strip())
+            rows.append(row(vals, bg="#fafcff" if k % 2 else None))
+        out.append(h(t["subject_matrix"]))
+        out.append(table(rows, head=[t["subject"]] + [ex[i]["short"] for i in cols] + [t["latest_vs_prev"]]))
+    ins = []
+    if res["strong"]:
+        ins.append(f'<b>{esc(t["strong"])}:</b> ' + "، ".join(esc(f'{s["name"]} ({fi(s["latest_taraz"])})') for s in res["strong"]))
+    if res["weak"]:
+        ins.append(f'<b>{esc(t["weak"])}:</b> ' + "، ".join(esc(f'{s["name"]} ({fi(s["latest_taraz"])})') for s in res["weak"]))
+    if res["improved"]:
+        ins.append(f'<b>{esc(t["improved"])}:</b> {esc(res["improved"]["name"])}{dl(res["improved"]["delta"])}')
+    if res["declined"]:
+        ins.append(f'<b>{esc(t["declined"])}:</b> {esc(res["declined"]["name"])}{dl(res["declined"]["delta"], True)}')
+    if ins:
+        out.append('<p style="margin-top:8px">' + "<br>".join(ins) + "</p>")
+    return "".join(out)
+
+
+def _schedule_pdf(R, row, h, al):
+    sch = R.get("schedule")
+    if not sch or not sch["has"]:
+        return ""
+    lang = R["lang"]
+    t = STR[lang]
+    rtl = lang == "fa"
+    heads, cells = [], []
+    for d in sch["days"]:
+        heads.append(esc(i18n.FA_DAYS[d["weekday"]] if rtl else date(2024, 1, 1 + d["weekday"]).strftime("%a")))
+        parts = []
+        for it in d["items"]:
+            col = "#7e22ce" if it["kind"] == "class" else "#0369a1"
+            title = it["name"] or (t["kind_class"] if it["kind"] == "class" else t["kind_session"])
+            sub = fmt_dur(it["minutes"] * 60, lang) + ((" · " + it["place"]) if it["place"] else "")
+            parts.append(f'<span style="color:{col}"><b>{esc(_digits(it["time"], lang))}</b></span> {esc(title)}<br><span style="font-size:7.5pt; color:#64748b">{esc(sub)}</span>')
+        cells.append("<br>".join(parts) or esc(t["none"]))
+    out = [h(t["schedule_title"])]
+    body = ['<table width="100%" cellspacing="0" cellpadding="3" border="0">',
+            row(heads, bg="#eef2f9", head=True, aligns=["center"] * 7), row(cells, aligns=[al] * 7), "</table>"]
+    out.append("".join(body))
+    out.append(f'<p style="font-size:8.5pt; color:#475569">{esc(t["week_class_h"])}: <b>{esc(fmt_dur(sch["class_min"] * 60, lang))}</b> &nbsp;·&nbsp; '
+               f'{esc(t["week_session_h"])}: <b>{esc(fmt_dur(sch["session_min"] * 60, lang))}</b></p>')
+    return "".join(out)
+
+
 def render_pdf_html(R):
     """HTML for QTextDocument (tables, no flexbox). Qt lays tables out left-to-right even in an RTL document, so for Persian
     every row is written in reverse order - the first column then ends up at the right. Charts are images named
@@ -632,17 +995,15 @@ def render_pdf_html(R):
             rows.append(row([nm, esc(fmt_dur(r["sec"], lang)), _digits(f"{pct:.0f}%", lang),
                              _digits(r["tests"], lang) if r["tests"] else dash, _digits(r["words"], lang) if r["words"] else dash]))
         parts.append(table(rows, head=[t["subject"], t["time"], t["share"], t["tests_short"], t["words_short"]]))
-    # daily
-    mode, series = chart_series(R)
-    if len(series) > 1:
-        legend = ""
-        if mode == "day":
-            legend = ('<br><span style="font-size:8pt; color:#64748b">' + esc(t["legend_goal"]) + ' <span style="color:#0e7490">&#9632;</span> &nbsp; '
-                      + esc(t["legend_below"]) + ' <span style="color:#7c9cd6">&#9632;</span>'
-                      + ((' &nbsp; ' + esc(t["legend_exam"]) + ' <span style="color:#d97706">&#9632;</span>') if any(x["exam"] for x in R["days"]) else "")
-                      + ((' &nbsp; ' + esc(t["goal_line"])) if R["goal_sec"] else "") + '</span>')
-        parts.append('<table width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td align="' + al + '">'
-                     + h(t["chart_daily"] if mode == "day" else t["chart_monthly"]) + '<br><img src="chart_daily">' + legend + '</td></tr></table>')
+    # charts, exam results and the weekly timetable
+    scenes = pdf_scenes(R)
+    if "chart_study" in scenes:
+        mode = "day" if R["daily_rows"] else "month"
+        parts.append('<p style="margin-top:12px; margin-bottom:0"><img src="chart_study"></p>')
+        if "chart_weekday" in scenes:
+            parts.append('<p style="margin-top:6px; margin-bottom:0"><img src="chart_weekday"></p>')
+    parts.append(_results_pdf(R, scenes, row, table, h, al))
+    parts.append(_schedule_pdf(R, row, h, al))
     if R["daily_rows"] and R["days"]:
         any_exam = any(x["exam"] for x in R["days"])
         rows = []

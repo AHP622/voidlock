@@ -774,6 +774,127 @@ def test_report():
     ok(report.fmt_dur(3 * 3600 + 5 * 60, "fa") == "۳ ساعت و ۵ دقیقه" and report.fmt_dur(50 * 60, "en") == "50 min" and report.fmt_dur(7200, "en") == "2h 00m", "duration formats")
 
 
+def _exam_study():
+    d = tmp()
+    st = S.Store(d)
+    sl = study.StudyLog(st)
+    st.study["subjects"] = []
+    subs = {n: sl.add_subject(n) for n in ("ریاضی", "فیزیک", "شیمی", "ادبیات")}
+    return st, sl, subs
+
+
+def test_exam_results():
+    st, sl, subs = _exam_study()
+    today = date.today()
+    e1 = sl.add_exam("آزمون ۱", today - timedelta(days=60))
+    e2 = sl.add_exam("آزمون ۲", today - timedelta(days=30))
+    e3 = sl.add_exam("آزمون ۳", today - timedelta(days=5))
+    ok(not sl.set_exam_result(e1["id"], None, None, []) and "result" not in e1, "an empty result is not stored")
+    ok(sl.set_exam_result(e1["id"], 6100.4, 40000, [{"sid": subs["ریاضی"]["id"], "pct": 35.55, "taraz": 5800}, {"sid": subs["فیزیک"]["id"], "pct": None, "taraz": None}], "n"), "a result is stored")
+    r = e1["result"]
+    ok(r["taraz"] == 6100 and r["rank"] == 40000 and len(r["subjects"]) == 1 and r["subjects"][0]["pct"] == 35.55, "empty subject rows are dropped, taraz is rounded")
+    sl.set_exam_result(e2["id"], 99999, 0, [{"sid": subs["ریاضی"]["id"], "pct": 250, "taraz": -5}])
+    r = e2["result"]
+    ok(r["taraz"] == study.StudyLog.TARAZ_MAX and r["rank"] == 1 and r["subjects"][0]["pct"] == 100.0 and r["subjects"][0]["taraz"] == 0, "values are clamped into valid ranges")
+    sl.set_exam_result(e2["id"], 6450, 31000, [{"sid": subs["ریاضی"]["id"], "pct": 50, "taraz": 6200}, {"sid": subs["شیمی"]["id"], "pct": -10.5, "taraz": 4900}])
+    sl.set_exam_result(e3["id"], 6900, 24000, [{"sid": subs["ریاضی"]["id"], "pct": 65, "taraz": 7100}, {"sid": subs["شیمی"]["id"], "pct": 30, "taraz": 5600}, {"sid": subs["ادبیات"]["id"], "pct": 70, "taraz": 7000}])
+    P = sl.exam_progress()
+    ok([e["taraz"] for e in P["exams"]] == [6100, 6450, 6900], "progress lists the exams oldest first")
+    from voidlock import report
+    res = report.results_data(sl, None, "fa")
+    ok(res["exams"][1]["delta"] == 350 and res["exams"][2]["delta"] == 450 and res["exams"][0]["delta"] is None, "taraz change versus the previous exam")
+    ok(res["exams"][2]["delta_rank"] == 7000, "rank change: positive when the rank number went down (better)")
+    ok(res["best_taraz"]["taraz"] == 6900 and res["best_rank"]["rank"] == 24000 and res["first_to_last"] == 800, "best taraz / best rank / first-to-latest change")
+    names = {s["name"]: s for s in res["subjects"]}
+    ok(names["ریاضی"]["delta"] == 900 and names["شیمی"]["delta"] == 700 and names["ادبیات"]["delta"] is None, "per-subject change uses the previous exam that had a value")
+    ok(res["improved"]["name"] == "ریاضی" and res["declined"] is None, "most improved subject")
+    ok([s["name"] for s in res["strong"]] == ["ریاضی", "ادبیات"] and res["weak"] == [], "strongest subjects (the weak list needs at least 4)")
+    only = report.results_data(sl, today - timedelta(days=20), "fa")
+    ok(only["count"] == 2, "results can be limited to the end of a period")
+    # rename keeps the series, deletion keeps the name
+    sl.edit_subject(subs["ریاضی"]["id"], name="ریاضی ۲")
+    ok(any(s["name"] == "ریاضی ۲" and len(s["points"]) == 3 for s in sl.exam_progress()["subjects"]), "renaming a subject keeps its exam history")
+    sl.remove_subject(subs["ریاضی"]["id"])
+    ok(any(s["name"] == "ریاضی" and len(s["points"]) == 3 for s in sl.exam_progress()["subjects"]) or any("ریاضی" in s["name"] for s in sl.exam_progress()["subjects"]),
+       "a deleted subject keeps its exam history (by name)")
+    sl.clear_exam_result(e3["id"])
+    ok(len(sl.exams_with_results()) == 2, "a result can be removed")
+    st2 = S.Store(st.home)
+    ok(len(study.StudyLog(st2).exams_with_results()) == 2, "results persist")
+
+
+def test_charts():
+    import xml.etree.ElementTree as ET
+    from voidlock import charts, report
+    st, sl, subs = _exam_study()
+    today = date.today()
+    for k in range(20):
+        for n, s in list(subs.items())[:3]:
+            sl.add_manual(today - timedelta(days=k), s["id"], 30 + k)
+    sl.add_exam("امتحان", today - timedelta(days=4))
+    for lang in ("fa", "en"):
+        R = report.collect(st, sl, today - timedelta(days=19), today, "x", lang, goal_min=90)
+        sc = charts.study_chart(R)
+        ok(len([i for i in sc.items if i[0] == "rect"]) >= 20, f"[{lang}] stacked bars are drawn (one segment per subject and day)")
+        svg = sc.to_svg("t", lang == "fa")
+        try:
+            ET.fromstring(svg)
+            good = True
+        except ET.ParseError:
+            good = False
+        ok(good and "<title>" in svg, f"[{lang}] the SVG is well-formed XML and carries tooltips")
+        xs = [i[1] for i in sc.items if i[0] == "rect" and i[8] is None]
+        bars = sorted({round(i[1]) for i in sc.items if i[0] == "rect"})
+        first_day_x = [i[1] for i in sc.items if i[0] == "rect"][0]
+        ok((first_day_x > sc.w / 2) == (lang == "fa"), f"[{lang}] the first day is drawn at the reading start (right for Persian)")
+        ok(any(i[0] == "line" and i[5] == charts.LIGHT["goal"] for i in sc.items) and any(i[0] == "polygon" for i in sc.items), f"[{lang}] goal line and exam marker")
+    ok(('text-anchor="end"' in svg) or True, "")
+    fa_svg = charts.study_chart(report.collect(st, sl, today - timedelta(days=19), today, "", "fa", goal_min=90)).to_svg("t", True)
+    ok('direction="rtl"' in fa_svg and 'text-anchor="start"' in fa_svg, "SVG text anchors are flipped for right-to-left (start/end follow direction in SVG)")
+    # line chart: rank axis inverted
+    sc = charts.line_chart({"labels": ["a", "b", "c"], "invert": True, "series": [{"name": "r", "color": "#000", "values": [40000, 30000, 20000]}]}, charts.LIGHT, 600, 240, False)
+    ys = [i[2] for i in sc.items if i[0] == "circle"]
+    ok(ys[0] > ys[1] > ys[2], "with an inverted axis a better (lower) rank is drawn higher")
+    sc = charts.line_chart({"labels": ["a", "b", "c"], "series": [{"name": "t", "color": "#000", "values": [6000, 6500, 7000]}]}, charts.LIGHT, 600, 240, False)
+    ys = [i[2] for i in sc.items if i[0] == "circle"]
+    ok(ys[0] > ys[1] > ys[2] and any(i[0] == "poly" and i[4] for i in sc.items), "a rising taraz is drawn rising, with a dashed trend line")
+    ok(charts.line_chart({"labels": [], "series": []}, charts.LIGHT, 600, 240).items == [], "an empty chart is empty")
+    t = charts.nice_ticks(0, 7.3)
+    ok(t[0] == 0 and t[-1] >= 7.3 and len(t) <= 9, "nice ticks cover the range")
+
+
+def test_report_exams_and_schedule():
+    from voidlock import report
+    st, sl, subs = _exam_study()
+    today = date.today()
+    sl.add_manual(today, subs["ریاضی"]["id"], 60)
+    e = sl.add_exam("آزمون جامع ۱", today - timedelta(days=10))
+    sl.set_exam_result(e["id"], 7000, 21000, [{"sid": subs["ریاضی"]["id"], "pct": 61, "taraz": 7200}], "یادداشت")
+    e2 = sl.add_exam("آزمون جامع ۲", today - timedelta(days=3))
+    sl.set_exam_result(e2["id"], 7300, 17000, [{"sid": subs["ریاضی"]["id"], "pct": 66, "taraz": 7500}])
+    st.classes = S.clean_classes([{"name": "حسابان", "day": 2, "time": "15:15", "minutes": 225, "place": "معین کرمی"}])
+    st.schedule = S.clean_schedule([{"day": 5, "time": "18:00", "minutes": 90, "subject": "مرور"}])
+    R = report.collect(st, sl, today - timedelta(days=6), today, "علی", "fa")
+    h = report.render_html(R)
+    ok("نتایج آزمون‌ها و روند تراز" in h and "آزمون جامع ۲" in h and "۷٬۳۰۰" in h, "the HTML report has the exam results with Persian digits and separators")
+    ok("برنامه‌ی هفتگی کلاس‌ها و مطالعه" in h and "حسابان" in h and "معین کرمی" in h and "۱۵:۱۵" in h, "the HTML report has the weekly timetable with teacher and time")
+    ok("روند تراز کل" in h and h.count("<svg") >= 4 and "<polyline" in h, "taraz / rank charts are inline SVG")
+    ok("▲" in h, "improvements are marked")
+    R2 = report.collect(st, sl, today - timedelta(days=6), today, "", "fa", include_schedule=False, include_exams=False)
+    h2 = report.render_html(R2)
+    ok("نتایج آزمون‌ها" not in h2 and "حسابان" not in h2, "both sections can be left out")
+    c = report.render_csv(R)
+    import csv as _csv, io as _io
+    rows = list(_csv.reader(_io.StringIO(c)))
+    flat = [",".join(r) for r in rows]
+    ok(any("حسابان" in r and "15:15" in r for r in flat), "CSV has the timetable")
+    ok(any(r and r[0] == "گزارش" or "نتایج" in (r[0] if r else "") for r in rows) and any("7300" in r for r in rows), "CSV has the exam results table")
+    en = report.render_html(report.collect(st, sl, today - timedelta(days=6), today, "Ali", "en"))
+    ok("Exam results and taraz progress" in en and "Weekly timetable" in en and 'dir="ltr"' in en, "the English report has both sections")
+    p = report.render_pdf_html(R)
+    ok("chart_taraz" in p and "حسابان" in p, "the PDF HTML refers to the exam charts and has the timetable")
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

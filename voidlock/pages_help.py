@@ -38,8 +38,13 @@ TOPICS_FA = [
      "همه‌ی تاریخچه‌اش به اون برمی‌گرده. برنامه موقع شروع هم از روی بکاپ‌ها ساعت‌های درس‌های دوباره‌ساخته‌شده رو به همنام جدیدشون برمی‌گردونه."),
     ("تایمر مطالعه", "برنامه‌ی روز و روزهای بعد", "کادر «برنامه‌ی امروز» کارهای هر روز رو نگه می‌داره. با فلش‌های کنار عنوان به فردا یا هر روز دیگه برو و برنامه‌اش رو بنویس؛ "
      "با «Today» برمی‌گردی. با کلیک روی ردیف تیکش بزن."),
-    ("تایمر مطالعه", "آزمون‌ها", "دکمه‌ی «Exams» بالا سمت راست: روز آزمون‌هات رو با اسم ثبت کن. نزدیک‌ترین آزمون با شمارش معکوس همون‌جا نوشته می‌شه، یه روز قبل و در روز "
-     "آزمون یادآوری می‌گیری، و توی گزارش روزانه، روز آزمون علامت داره."),
+    ("تایمر مطالعه", "آزمون‌ها", "دکمه‌ی «Exams» بالای این صفحه تو رو به تب «آزمون‌ها» می‌بره. نزدیک‌ترین آزمون با شمارش معکوس اینجا هم نوشته می‌شه، یه روز قبل و در روز آزمون یادآوری "
+     "می‌گیری، و توی گزارش روزانه روز آزمون علامت داره."),
+    ("آزمون‌ها", "ثبت آزمون و نتیجه", "«Add exam»: اسم و روز آزمون. بعد از برگزاری، «Enter results» رو بزن و درصد و تراز هر درس، تراز کل و رتبه‌ی کل رو وارد کن (ارقام فارسی هم قبوله؛ "
+     "هر چی نمی‌دونی خالی بذار). درصد می‌تونه منفی باشه (تا ۳۳-). نتایج بعداً قابل ویرایش یا حذفن."),
+    ("آزمون‌ها", "نمودار پیشرفت", "چهار نمودار: تراز کل (با خط روند و بهترین نقطه)، رتبه‌ی کل (پایین‌تر = بهتر؛ محور برعکسه تا بالا رفتن یعنی بهتر شدن)، تراز هر درس و درصد هر درس. "
+     "روی نقطه‌ها بمون تا اسم آزمون و عدد رو ببینی. کارت‌های بالا آخرین تراز، بهترین تراز، آخرین رتبه و تغییر نسبت به آزمون قبل رو نشون می‌دن (▲ بهتر، ▼ بدتر)، "
+     "و جدول «آخرین آزمون» تراز و درصد هر درس و تغییرش رو می‌گه."),
     ("تایمر مطالعه", "شمارش معکوس کنکور", "تاریخ کنکور رو از تنظیمات (تقویم شمسی) بده؛ شمارش معکوس بالای این صفحه و توی پیام بستن برنامه‌ها میاد."),
     # ---- کنترل برنامه‌ها
     ("کنترل برنامه‌ها", "فعال کردن برنامه‌ها", "هر برنامه‌ای که فعالش کنی، توی جلسه و ساعت‌های قفل بسته می‌شه و یه پیام شخصی می‌بینی. دسته‌ها (بازی، پیام‌رسان، مرورگر…) "
@@ -66,8 +71,10 @@ TOPICS_FA = [
     ("تحلیل‌ها", "آمار و گزارش", "مطالعه‌ی امروز، هدف روزانه، زنجیره‌ی روزها، نمودار هفتگی، نمای سال (ساعت، تست، لغت)، تقویم مطالعه و گزارش تلاش برای باز کردن بازی‌ها."),
     ("تحلیل‌ها", "گزارش برای مشاور یا والدین", "دکمه‌ی «Export report» بالای صفحه‌ی تحلیل‌ها (یا از تنظیمات ← داده): بازه رو انتخاب کن (روز، هفته، ماه شمسی، سال، همه‌ی زمان‌ها یا دلخواه)، "
      "اسم دانش‌آموز رو بنویس و قالب رو بزن. HTML یه فایل تک‌صفحه‌ایه که همه‌چیزش (CSS و نمودار) داخلشه، راست‌به‌چپ و فارسی، با چاپ تمیز و قابل فرستادن توی تلگرام یا واتس‌اپ. "
-     "PDF آماده‌ی چاپه و CSV برای اکسله. گزارش شامل خلاصه، جمع هر درس (با درس‌های حذف‌شده)، جدول روزانه یا ماهانه و جدول جلسه‌های تمرکز است. زمان مطالعه همون تعریف تب تایمر رو داره؛ "
-     "جلسه‌ها جدا فهرست می‌شن تا دوبار شمرده نشن."),
+     "PDF آماده‌ی چاپه و CSV برای اکسله. گزارش شامل خلاصه، جمع هر درس (با درس‌های حذف‌شده)، نمودار ستونی روزانه به تفکیک درس (با خط هدف، میانگین، میانگین ۷ روزه و علامت روز آزمون)، "
+     "الگوی هفتگی مطالعه، جدول روزانه یا ماهانه و جدول جلسه‌های تمرکز است. اگه نتیجه‌ی آزمون ثبت کرده باشی، بخش «نتایج آزمون‌ها و روند تراز» هم میاد (نمودار تراز و رتبه، تراز هر درس، قوی‌ترین و "
+     "ضعیف‌ترین درس‌ها، بیشترین پیشرفت و افت)، و «برنامه‌ی هفتگی کلاس‌ها» هم هست تا مشاور بدونه کلاس‌ها کی برگزار می‌شن. هر دو بخش رو می‌شه توی پنجره‌ی خروجی خاموش کرد. "
+     "زمان مطالعه همون تعریف تب تایمر رو داره؛ جلسه‌ها جدا فهرست می‌شن تا دوبار شمرده نشن."),
     # ---- تنظیمات
     ("تنظیمات", "تم و صدا", "نُه تم (هفت تیره و دو روشن) با پیش‌نمایش و ده سبک صدا. با تغییر تم، برنامه دوباره راه می‌افته. دکمه‌ی «Test sound» صدا رو پخش می‌کنه."),
     ("تنظیمات", "زبان و تقویم", "فارسی کل برنامه رو راست‌به‌چپ و با تقویم شمسی می‌کنه. زبان با راه‌اندازی دوباره اعمال می‌شه."),
@@ -124,9 +131,14 @@ TOPICS_EN = [
     ("Rewards", "Points and rewards", "Each day without gaming earns points, with a bonus for streaks. Spend points on play time, a film or your own rewards. Days the guard watched for less than an hour do not count."),
     ("Rewards", "Play pass", "A play ticket unlocks games for a while; by default only on Fridays (changeable). The day comes from the guard's internet time, so changing the Windows clock does not help."),
     ("Analytics", "Statistics", "Today's study, daily goal, streak, weekly chart, year overview (hours, tests, words), study calendar and the report of attempts to open games."),
+    ("Exams", "Exams and results", "'Add exam': name and day. After the exam press 'Enter results' and type the percent and taraz of each subject, the total taraz and the overall rank (Persian digits are fine; leave unknown "
+     "values empty). Percent can be negative (down to -33). Results can be edited or removed later."),
+    ("Exams", "Progress charts", "Four charts: total taraz (with a trend line and the best point), overall rank (lower is better; the axis is inverted so up always means better), taraz per subject and percent per subject. "
+     "Hover a point for the exam name and value. The cards show the latest taraz, best taraz, latest rank and the change from the previous exam (▲ better, ▼ worse); 'Latest exam' lists every subject's percent, taraz and change."),
     ("Analytics", "Report for advisor or parents", "The 'Export report' button at the top of Analytics (or Settings -> Data): choose the period (day, week, Jalali month, year, all time or custom), type the student's name and pick a format. "
      "HTML is one self-contained page (CSS and charts inside), right-to-left Persian or English, clean to print and easy to send by chat. PDF is ready to print and CSV opens in Excel. The report has a summary, time per subject "
-     "(deleted subjects included), a daily or monthly table and the focus-session table. Study time uses the Study Timer's definition; sessions are listed separately so nothing is counted twice."),
+     "(deleted subjects included), a stacked daily chart by subject (goal line, average, 7-day average, exam markers), the weekday pattern, a daily or monthly table, the focus-session table, "
+     "the exam results and taraz progress (if you recorded any) and the weekly timetable of classes - the last two can be switched off in the export window. Study time uses the Study Timer's definition; sessions are listed separately so nothing is counted twice."),
     ("Settings", "Themes and sounds", "Nine themes (seven dark, two light) with preview cards and ten sound styles. Changing the theme restarts the program. 'Test sound' plays the chosen style."),
     ("Settings", "Language and calendar", "Persian turns the whole interface right-to-left with the Jalali calendar. The language applies after a restart."),
     ("Settings", "Updates", "The program checks the official repository (AHP622/voidlock) at start and every few hours and tells you about a new version. With 'Install automatically' it installs and restarts when no session "

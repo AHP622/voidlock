@@ -503,3 +503,28 @@ FA.update({
     "HTML (web page)": "HTML (صفحه‌ی وب)", "CSV (Excel)": "CSV (اکسل)", "Save report": "ذخیره‌ی گزارش",
     "Could not save the report: {x}": "گزارش ذخیره نشد: {x}", "Report saved.": "گزارش ذخیره شد.",
 })
+
+# ---------------- 1.8.0: exams tab, results, report additions
+FA.update({
+    "Your exams, results and progress": "آزمون‌ها، نتایج و روند پیشرفت شما",
+    "Days to the next exam": "روز تا آزمون بعدی", "Latest total taraz": "آخرین تراز کل", "Best total taraz": "بهترین تراز کل",
+    "Latest overall rank": "آخرین رتبه کل", "Exams with results": "آزمون‌های دارای نتیجه", "PROGRESS": "پیشرفت",
+    "Total taraz": "تراز کل", "Overall rank": "رتبه کل", "Taraz by subject": "تراز هر درس", "Percent by subject": "درصد هر درس",
+    "No exam results yet": "هنوز نتیجه‌ای ثبت نشده",
+    "Add an exam, then enter its results: percent and taraz of every subject, your total taraz and your rank. The progress charts appear here.":
+        "یک آزمون اضافه کنید و نتیجه‌اش را وارد کنید: درصد و تراز هر درس، تراز کل و رتبه‌ی کل. نمودارهای پیشرفت اینجا ظاهر می‌شوند.",
+    "Taraz change from the first to the latest exam: {x}": "تغییر تراز از اولین تا آخرین آزمون: {x}",
+    "LATEST EXAM": "آخرین آزمون", "Subject": "درس", "Percent": "درصد", "Taraz": "تراز", "Change": "تغییر", "Rank": "رتبه",
+    "ALL EXAMS": "همه‌ی آزمون‌ها", "No exams yet. Add the days of your exams.": "هنوز آزمونی نیست. روز آزمون‌هایتان را اضافه کنید.",
+    "Edit results": "ویرایش نتایج", "Enter results": "ثبت نتایج", "Edit exam": "ویرایش آزمون", "Delete exam?": "آزمون حذف شود؟",
+    "“{x}” and its results will be removed.": "«{x}» و نتایجش حذف می‌شود.", "{num} days ago": "{num} روز پیش", "Results": "نتایج",
+    "Fill in what you know. Percent and taraz are per subject; leave the rest empty.": "آنچه می‌دانید را پر کنید. درصد و تراز برای هر درس است؛ بقیه را خالی بگذارید.",
+    "%": "٪", "Note (optional)": "یادداشت (اختیاری)", "Remove this result": "حذف این نتیجه",
+    "Check the numbers: percent from -33 to 100, taraz up to 20000, rank 1 or more.": "اعداد را بررسی کنید: درصد از ۳۳- تا ۱۰۰، تراز تا ۲۰۰۰۰، رتبه از ۱ به بالا.",
+    "Results saved.": "نتایج ذخیره شد.", "Result removed.": "نتیجه حذف شد.", "Nothing to save.": "چیزی برای ذخیره نیست.",
+    "Study time, charts, exam results and progress, the weekly timetable and the focus sessions - as an HTML page, a PDF or a CSV file.":
+        "زمان مطالعه، نمودارها، نتایج و روند آزمون‌ها، برنامه‌ی هفتگی و جلسه‌های تمرکز - به‌صورت صفحه‌ی HTML، فایل PDF یا CSV.",
+    "For your advisor or parents: study time, time per subject, charts, exam results and progress, the weekly timetable and the focus sessions.":
+        "برای مشاور یا والدین: زمان مطالعه، زمان هر درس، نمودارها، نتایج و روند آزمون‌ها، برنامه‌ی هفتگی و جلسه‌های تمرکز.",
+    "Include exam results and progress": "شامل نتایج آزمون‌ها و روند پیشرفت", "Include the weekly timetable (classes and study)": "شامل برنامه‌ی هفتگی (کلاس و مطالعه)",
+})
