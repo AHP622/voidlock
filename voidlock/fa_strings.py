@@ -528,3 +528,18 @@ FA.update({
         "برای مشاور یا والدین: زمان مطالعه، زمان هر درس، نمودارها، نتایج و روند آزمون‌ها، برنامه‌ی هفتگی و جلسه‌های تمرکز.",
     "Include exam results and progress": "شامل نتایج آزمون‌ها و روند پیشرفت", "Include the weekly timetable (classes and study)": "شامل برنامه‌ی هفتگی (کلاس و مطالعه)",
 })
+
+# ---------------- 1.8.1: own subjects for exams, region rank
+FA.update({
+    "Region rank": "رتبه در منطقه", "Region": "منطقه", "Latest region rank": "آخرین رتبه در منطقه",
+    "EXAM SUBJECTS": "درس‌های آزمون",
+    "These are the subjects you enter results for. They are separate from the Study Timer subjects.":
+        "درس‌هایی که برایشان نتیجه ثبت می‌کنید. این‌ها از درس‌های تایمر مطالعه جدا هستند.",
+    "No subjects yet. Add the subjects of your exam, then enter the results.": "هنوز درسی اضافه نشده. درس‌های آزمونتان را اضافه کنید، بعد نتایج را وارد کنید.",
+    "No subjects yet. Type the name of a subject below and press Add.": "هنوز درسی نیست. نام درس را پایین بنویسید و «افزودن» را بزنید.",
+    "New subject, e.g. Calculus": "درس جدید، مثلاً حسابان", "Subject name, e.g. Calculus": "نام درس، مثلاً حسابان",
+    "Renaming keeps the results already saved for it.": "تغییر نام، نتایجی که قبلاً برای این درس ثبت شده را نگه می‌دارد.",
+    "“{x}” will be removed from the exam form. Results already saved for it stay in your charts and reports.":
+        "«{x}» از فرم آزمون حذف می‌شود. نتایجی که قبلاً برایش ثبت شده در نمودارها و گزارش‌ها می‌ماند.",
+    "Fill in what you know. Percent and taraz are per subject; leave the rest empty.": "آنچه می‌دانید را پر کنید. درصد و تراز برای هر درس است؛ بقیه را خالی بگذارید.",
+})

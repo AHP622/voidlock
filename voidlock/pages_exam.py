@@ -9,12 +9,13 @@ from . import charts, i18n, report, study as studymod
 from .charts_qt import ChartView
 from .pages_a import Page
 from .pages_b import StatCard
+from .pages_c import ColorPicker
 from .theme import T
 from .viz import EmptyState, IconTile
 from .widgets import AC, Button, Card, DateField, Divider, Pill, Segmented, clear_layout, label, set_label_color
 
-KINDS = ["taraz", "rank", "subjects", "percent"]
-KIND_NAMES = ["Total taraz", "Overall rank", "Taraz by subject", "Percent by subject"]
+KINDS = ["taraz", "rank", "region", "subjects", "percent"]
+KIND_NAMES = ["Total taraz", "Overall rank", "Region rank", "Taraz by subject", "Percent by subject"]
 
 
 def dark_palette():
@@ -54,15 +55,49 @@ class ExamForm(QWidget):
         return {"name": self.name.text().strip(), "date": self.date.value()}
 
 
+class ExamSubjectForm(QWidget):
+    """Add / edit one subject of the exam form: a name and a colour."""
+    changed = Signal()
+
+    def __init__(self, s=None, taken=()):
+        """`taken`: names of the OTHER exam subjects (a name can be used once)."""
+        super().__init__()
+        s = s or {}
+        self.taken = {str(n).strip().casefold() for n in taken}
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 4, 0, 0)
+        lay.setSpacing(10)
+        self.name = QLineEdit(s.get("name", ""))
+        self.name.setPlaceholderText("Subject name, e.g. Calculus")
+        self.name.setMaxLength(24)
+        lay.addWidget(self.name)
+        self.cp = ColorPicker()
+        if s.get("color") in self.cp.colors:
+            self.cp.cur = self.cp.colors.index(s["color"])
+        elif not s:
+            self.cp.cur = len(taken) % len(self.cp.colors)
+        lay.addWidget(self.cp)
+        self.name.textChanged.connect(lambda _t: self.changed.emit())
+
+    def valid(self):
+        t = self.name.text().strip().casefold()
+        return bool(t) and t not in self.taken
+
+    def values(self):
+        return {"name": self.name.text().strip(), "color": self.cp.color()}
+
+
 class ExamResultForm(QWidget):
-    """Percent and taraz per subject, plus the total taraz and the overall rank. Persian digits are fine; empty = not known."""
+    """Total taraz, overall rank, rank in the region, and percent + taraz for each subject of the exam. The subjects are the
+    student's own exam subjects (added here or on the Exams tab), not the study-timer subjects. Persian digits are fine;
+    empty = not known."""
     changed = Signal()
 
     def __init__(self, sl, exam):
         super().__init__()
         self.sl, self.exam = sl, exam
         old = exam.get("result") or {}
-        old_rows = {self.sl.subject_key(r): r for r in old.get("subjects", [])}
+        self._old_rows = {self.sl.subject_key(r): r for r in old.get("subjects", [])}
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 4, 0, 0)
         lay.setSpacing(8)
@@ -70,10 +105,10 @@ class ExamResultForm(QWidget):
         top.setHorizontalSpacing(10)
         self.total = self._edit(old.get("taraz"), "Total taraz")
         self.rank = self._edit(old.get("rank"), "Overall rank")
-        top.addWidget(label("Total taraz", 12, color=T.text2), 0, 0)
-        top.addWidget(label("Overall rank", 12, color=T.text2), 0, 1)
-        top.addWidget(self.total, 1, 0)
-        top.addWidget(self.rank, 1, 1)
+        self.region = self._edit(old.get("rank_region"), "Region rank")
+        for c, (txt, w) in enumerate((("Total taraz", self.total), ("Overall rank", self.rank), ("Region rank", self.region))):
+            top.addWidget(label(txt, 12, color=T.text2), 0, c)
+            top.addWidget(w, 1, c)
         lay.addLayout(top)
         lay.addWidget(Divider())
         head = QGridLayout()
@@ -84,35 +119,35 @@ class ExamResultForm(QWidget):
         head.setColumnStretch(0, 1)
         lay.addLayout(head)
         inner = QWidget()
-        grid = QGridLayout(inner)
-        grid.setContentsMargins(0, 0, 6, 0)
-        grid.setHorizontalSpacing(10)
-        grid.setVerticalSpacing(6)
-        grid.setColumnStretch(0, 1)
+        self.grid = QGridLayout(inner)
+        self.grid.setContentsMargins(0, 0, 6, 0)
+        self.grid.setHorizontalSpacing(10)
+        self.grid.setVerticalSpacing(6)
+        self.grid.setColumnStretch(0, 1)
         self.rows = []
-        for i, s in enumerate(self.sl.subjects()):
-            r = old_rows.get(s["id"], {})
-            pct = self._edit(r.get("pct"), "%")
-            tz = self._edit(r.get("taraz"), "Taraz")
-            nm = QHBoxLayout()
-            nm.setSpacing(8)
-            nm.addWidget(IconTile(s["name"], s["color"], 24))
-            nl = label(s["name"], 13)
-            nl.setAlignment(Qt.AlignmentFlag.AlignLeading | Qt.AlignmentFlag.AlignVCenter)
-            nm.addWidget(nl, 1)
-            w = QWidget()
-            w.setLayout(nm)
-            grid.addWidget(w, i, 0)
-            grid.addWidget(pct, i, 1)
-            grid.addWidget(tz, i, 2)
-            self.rows.append((s, pct, tz))
-        self._extra = [r for r in old.get("subjects", []) if not self.sl.subject(r.get("sid"))]      # of deleted subjects: kept as they are
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        scroll.setWidget(inner)
-        scroll.setFixedHeight(min(300, 38 * max(len(self.rows), 1) + 8))
-        lay.addWidget(scroll)
+        self.empty_hint = label("No subjects yet. Type the name of a subject below and press Add.", 12, color=T.text3, wrap=True)
+        self.grid.addWidget(self.empty_hint, 0, 0, 1, 3)
+        for s in self.sl.exam_subjects():
+            self._add_row(s, emit=False)
+        self._extra = [r for r in old.get("subjects", []) if not self.sl.exam_subject(r.get("sid"))]      # of deleted subjects: kept as they are
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        self.scroll.setWidget(inner)
+        self.scroll.setFixedHeight(232)               # fixed: adding a subject below never resizes the open dialog, the list scrolls
+        lay.addWidget(self.scroll)
+        # add a subject right here
+        add = QHBoxLayout()
+        add.setSpacing(8)
+        self.new_name = QLineEdit()
+        self.new_name.setPlaceholderText("New subject, e.g. Calculus")
+        self.new_name.setMaxLength(24)
+        self.b_new = Button("Add subject", "soft", "plus", height=38)
+        add.addWidget(self.new_name, 1)
+        add.addWidget(self.b_new)
+        lay.addLayout(add)
+        self.new_name.returnPressed.connect(self.add_subject)
+        self.b_new.clicked.connect(lambda _=False: self.add_subject())
         self.note = QLineEdit(old.get("note", ""))
         self.note.setPlaceholderText("Note (optional)")
         self.note.setMaxLength(120)
@@ -123,8 +158,46 @@ class ExamResultForm(QWidget):
         lay.addWidget(self.b_clear)
         self.b_clear.setVisible(bool(exam.get("result")))
         self.cleared = False
-        for e in [self.total, self.rank, self.note] + [x for _s, a, b in self.rows for x in (a, b)]:
+        for e in (self.total, self.rank, self.region, self.note):
             e.textChanged.connect(lambda _t: self.changed.emit())
+        self._fit()
+
+    def _fit(self):
+        n = len(self.rows)
+        self.empty_hint.setVisible(n == 0)
+
+    def _add_row(self, s, emit=True):
+        i = len(self.rows)
+        r = self._old_rows.get(self.sl.subject_key({"sid": s["id"], "name": s["name"]}), {})
+        pct = self._edit(r.get("pct"), "%")
+        tz = self._edit(r.get("taraz"), "Taraz")
+        nm = QHBoxLayout()
+        nm.setSpacing(8)
+        nm.addWidget(IconTile(s["name"], s["color"], 24))
+        nl = label(s["name"], 13)
+        nl.setAlignment(Qt.AlignmentFlag.AlignLeading | Qt.AlignmentFlag.AlignVCenter)
+        nm.addWidget(nl, 1)
+        w = QWidget()
+        w.setLayout(nm)
+        self.grid.addWidget(w, i + 1, 0)
+        self.grid.addWidget(pct, i + 1, 1)
+        self.grid.addWidget(tz, i + 1, 2)
+        self.rows.append((s, pct, tz))
+        pct.textChanged.connect(lambda _t: self.changed.emit())
+        tz.textChanged.connect(lambda _t: self.changed.emit())
+        return pct
+
+    def add_subject(self):
+        name = self.new_name.text().strip()
+        if not name:
+            return
+        known = {x["id"] for x in self.sl.exam_subjects()}
+        s = self.sl.add_exam_subject(name)
+        if s and s["id"] not in known:
+            first = self._add_row(s)
+            self._fit()
+            first.setFocus()
+        self.new_name.clear()
 
     @staticmethod
     def _edit(value, placeholder):
@@ -150,6 +223,8 @@ class ExamResultForm(QWidget):
         ok_all &= ok
         rank, ok = self._num(self.rank, 1, studymod.StudyLog.RANK_MAX, True)
         ok_all &= ok
+        region, ok = self._num(self.region, 1, studymod.StudyLog.RANK_MAX, True)
+        ok_all &= ok
         rows = []
         for s, pe, te in self.rows:
             pct, ok1 = self._num(pe, *studymod.StudyLog.PCT_RANGE)
@@ -157,8 +232,9 @@ class ExamResultForm(QWidget):
             ok_all &= ok1 and ok2
             if pct is not None or tz is not None:
                 rows.append({"sid": s["id"], "pct": pct, "taraz": tz})
-        rows += [{"sid": r.get("sid", ""), "name": r.get("name", ""), "pct": r.get("pct"), "taraz": r.get("taraz")} for r in self._extra]
-        return {"taraz": total, "rank": rank, "subjects": rows, "note": self.note.text().strip()}, ok_all
+        rows += [{"sid": r.get("sid", ""), "name": r.get("name", ""), "color": r.get("color", ""), "pct": r.get("pct"), "taraz": r.get("taraz")}
+                 for r in self._extra]
+        return {"taraz": total, "rank": rank, "rank_region": region, "subjects": rows, "note": self.note.text().strip()}, ok_all
 
     def valid(self):
         _v, ok = self.parsed()
@@ -192,6 +268,8 @@ class ExamCard(Card):
                 row.addWidget(Pill(f"{i18n.tr('Taraz')} {charts.fmt_int(r['taraz'], fa)}", T.cyan, px=11))
             if r.get("rank") is not None:
                 row.addWidget(Pill(f"{i18n.tr('Rank')} {charts.fmt_int(r['rank'], fa)}", T.violet, px=11))
+            if r.get("rank_region") is not None:
+                row.addWidget(Pill(f"{i18n.tr('Region')} {charts.fmt_int(r['rank_region'], fa)}", T.green, px=11))
         b_res = Button("Edit results" if r else "Enter results", "soft" if r else "primary", "check", height=34)
         b_res.clicked.connect(lambda _=False: page.enter_results(e))
         b_ed = Button("", "icon", "edit", "Edit exam", square=32)
@@ -222,8 +300,9 @@ class ExamsPage(Page):
         self.k_taraz = StatCard("analytics", T.cyan, "Latest total taraz")
         self.k_best = StatCard("flame", T.violet, "Best total taraz")
         self.k_rank = StatCard("star", T.green, "Latest overall rank")
+        self.k_region = StatCard("star", T.violet, "Latest region rank")
         self.k_count = StatCard("check", T.text2, "Exams with results")
-        for k in (self.k_next, self.k_taraz, self.k_best, self.k_rank, self.k_count):
+        for k in (self.k_next, self.k_taraz, self.k_best, self.k_rank, self.k_region, self.k_count):
             self.kpis.addWidget(k, 1)
         self.body.addLayout(self.kpis)
         # progress chart
@@ -250,6 +329,19 @@ class ExamsPage(Page):
         self.last_grid.setVerticalSpacing(8)
         self.last_card.lay.addLayout(self.last_grid)
         self.body.addWidget(self.last_card)
+        # the subjects of the exam form
+        self.subj_card = Card(pad=20)
+        sh = QHBoxLayout()
+        sh.addWidget(label("EXAM SUBJECTS", 11, QFont.Weight.Bold, T.text3, spacing=2.4), 1)
+        self.b_subj = Button("Add subject", "soft", "plus", height=34)
+        sh.addWidget(self.b_subj)
+        self.subj_card.lay.addLayout(sh)
+        self.subj_hint = label("These are the subjects you enter results for. They are separate from the Study Timer subjects.", 12, color=T.text3, wrap=True)
+        self.subj_card.lay.addWidget(self.subj_hint)
+        self.subj_box = QVBoxLayout()
+        self.subj_box.setSpacing(6)
+        self.subj_card.lay.addLayout(self.subj_box)
+        self.body.addWidget(self.subj_card)
         # list
         self.list_card = Card(pad=20)
         self.list_card.lay.addWidget(label("ALL EXAMS", 11, QFont.Weight.Bold, T.text3, spacing=2.4))
@@ -259,9 +351,10 @@ class ExamsPage(Page):
         self.body.addWidget(self.list_card)
         self.body.addStretch(1)
         self.b_add.clicked.connect(self.add_exam)
+        self.b_subj.clicked.connect(lambda _=False: self.add_subject())
         self.empty.action.connect(self.add_exam)
         self.kind_seg.currentChanged.connect(self._kind)
-        self._reveal = [self.chart_card, self.last_card, self.list_card]
+        self._reveal = [self.chart_card, self.last_card, self.subj_card, self.list_card]
 
     def _kind(self, i):
         self.kind = i
@@ -307,6 +400,8 @@ class ExamsPage(Page):
             self.k_best.set(fi(best["taraz"]) if best else "-", best["short"] if best else "")
             self.k_rank.set(fi(lr["rank"]) if lr["rank"] is not None else "-")
             delta(self.k_rank.sub, lr["delta_rank"])
+            self.k_region.set(fi(lr["rank_region"]) if lr.get("rank_region") is not None else "-")
+            delta(self.k_region.sub, lr.get("delta_region"))
             self.k_count.set(i18n.digits(str(res["count"])))
             ftl = res["first_to_last"]
             if ftl is not None:
@@ -316,10 +411,33 @@ class ExamsPage(Page):
             self._draw_chart()
             self._fill_last(res)
         else:
-            for k in (self.k_taraz, self.k_best, self.k_rank, self.k_count):
+            for k in (self.k_taraz, self.k_best, self.k_rank, self.k_region, self.k_count):
                 k.set("-")
                 k.sub.setText("")
+        self._fill_subjects()
         self._fill_list()
+
+    def _fill_subjects(self):
+        clear_layout(self.subj_box)
+        subs = self.ctx.study.exam_subjects()
+        if not subs:
+            self.subj_box.addWidget(label("No subjects yet. Add the subjects of your exam, then enter the results.", 12, color=T.text2))
+        for s in subs:
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            row.addWidget(IconTile(s["name"], s["color"], 24))
+            nl = label(s["name"], 13)
+            nl.setAlignment(Qt.AlignmentFlag.AlignLeading | Qt.AlignmentFlag.AlignVCenter)
+            row.addWidget(nl, 1)
+            b_ed = Button("", "icon", "edit", "Edit subject", square=30)
+            b_ed.clicked.connect(lambda _=False, s=s: self.edit_subject(s))
+            b_del = Button("", "icon", "trash", "Delete", square=30)
+            b_del.clicked.connect(lambda _=False, s=s: self.delete_subject(s))
+            row.addWidget(b_ed)
+            row.addWidget(b_del)
+            w = QWidget()
+            w.setLayout(row)
+            self.subj_box.addWidget(w)
 
     def _fill_last(self, res):
         clear_layout(self.last_grid)
@@ -391,11 +509,38 @@ class ExamsPage(Page):
             self.ctx.study.remove_exam(e["id"])
             self.refresh()
 
+    def add_subject(self):
+        sl = self.ctx.study
+        form = ExamSubjectForm(taken=[x["name"] for x in sl.exam_subjects()])
+        m = self.ctx.new_modal().build("Add subject", None, form, "Add", validator=form.valid, icon="book", width=460)
+        form.changed.connect(m.revalidate)
+        if m.exec_modal():
+            v = form.values()
+            sl.add_exam_subject(v["name"], v["color"])
+            self.refresh()
+
+    def edit_subject(self, s):
+        sl = self.ctx.study
+        form = ExamSubjectForm(s, taken=[x["name"] for x in sl.exam_subjects() if x["id"] != s["id"]])
+        m = self.ctx.new_modal().build("Edit subject", "Renaming keeps the results already saved for it.", form, "Save",
+                                       validator=form.valid, icon="edit", width=460)
+        form.changed.connect(m.revalidate)
+        if m.exec_modal():
+            v = form.values()
+            sl.edit_exam_subject(s["id"], v["name"], v["color"])
+            self.refresh()
+
+    def delete_subject(self, s):
+        if self.ctx.confirm("Delete subject?", f"“{s['name']}” will be removed from the exam form. Results already saved for it stay "
+                            "in your charts and reports.", "Delete", True, "trash"):
+            self.ctx.study.remove_exam_subject(s["id"])
+            self.refresh()
+
     def enter_results(self, e):
         form = ExamResultForm(self.ctx.study, e)
         m = self.ctx.new_modal().build(f"{i18n.tr('Results')} · {e['name']}",
                                        "Fill in what you know. Percent and taraz are per subject; leave the rest empty.", form, "Save",
-                                       validator=form.valid, icon="check", width=540)
+                                       validator=form.valid, icon="check", width=580)
         form.changed.connect(m.revalidate)
         form.b_clear.clicked.connect(lambda: (setattr(form, "cleared", True), m.finish(True)))
         if not m.exec_modal():
@@ -406,6 +551,6 @@ class ExamsPage(Page):
             self.ctx.toast("Result removed.", "info")
         else:
             v = form.values()
-            saved = sl.set_exam_result(e["id"], v["taraz"], v["rank"], v["subjects"], v["note"])
+            saved = sl.set_exam_result(e["id"], v["taraz"], v["rank"], v["subjects"], v["note"], v["rank_region"])
             self.ctx.toast("Results saved." if saved else "Nothing to save.", "success" if saved else "warn")
         self.refresh()

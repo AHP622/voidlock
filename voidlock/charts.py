@@ -179,9 +179,40 @@ def _bars(R):
     return "month", bars
 
 
+def _group_parts(bars, R, deleted="", keep=5):
+    """The `keep` subjects with the most time keep their own colour (biggest at the bottom of every column); the rest of the
+    subjects are merged into one grey 'other' part, so a column never has more than keep+1 slices."""
+    tot = {}
+    for b in bars:
+        for nm, _c, v in b["parts"]:
+            tot[nm] = tot.get(nm, 0) + v
+    ranked = sorted(tot, key=lambda n: -tot[n])
+    top = ranked[:keep] if len(ranked) > keep + 1 else ranked          # one leftover subject is shown as itself, not as "other"
+    rank = {n: i for i, n in enumerate(top)}
+    color = {}
+    for b in bars:
+        for nm, c, _v in b["parts"]:
+            color.setdefault(nm, c)
+    for b in bars:
+        parts, other = [], 0
+        for nm, c, v in b["parts"]:
+            if nm in rank:
+                parts.append((nm, c, v))
+            else:
+                other += v
+        parts.sort(key=lambda p: rank[p[0]])
+        if other:
+            parts.append((None, "#b6bfcc", other))
+        b["parts"] = parts
+    ghosts = {r["name"] for r in R["subjects"] if r["ghost"]}
+    legend = [(color[n], n + (f" ({deleted})" if n in ghosts else "")) for n in top]
+    return legend, len(ranked) > keep + 1
+
+
 def study_chart(R, pal=LIGHT, w=760):
-    """Stacked column chart of the study time (by subject) with hour gridlines, goal line, average line, 7-day moving average
-    and exam markers."""
+    """Study time per day (or per month) as a clean stacked column chart: a few light hour gridlines, one slice per main
+    subject (small ones merged into 'other'), the day's total above every column, one dashed line for the daily goal and a
+    soft band + marker on exam days. Details (subject, time) are in the tooltips."""
     from . import report
     lang = R["lang"]
     fa = lang == "fa"
@@ -189,70 +220,63 @@ def study_chart(R, pal=LIGHT, w=760):
     mode, bars = _bars(R)
     if not bars:
         return Scene(w, 10)
-    ml, mr, mt, mb = (12, 50, 18, 30) if fa else (50, 12, 18, 30)
-    h_plot = 230
+    legend, has_other = _group_parts(bars, R, t["deleted"])
+    ml, mr, mt, mb = (14, 40, 30, 30) if fa else (40, 14, 30, 30)
+    h_plot = 270
     pw, ph = w - ml - mr, h_plot - mt - mb
     goal = R["goal_sec"] if mode == "day" else 0
     ymax_sec = max(max(b["sec"] for b in bars), goal or 0, 3600)
-    ticks = nice_ticks(0, ymax_sec / 3600, 5)
+    ticks = nice_ticks(0, ymax_sec * 1.06 / 3600, 4)
     ymax = ticks[-1] * 3600
     n = len(bars)
     slot = pw / n
-    bw = max(3.0, min(30.0 if mode == "day" else 64.0, slot * 0.7))
+    bw = max(4.0, min(30.0 if mode == "day" else 64.0, slot * 0.64))
     sc = Scene(w, h_plot)
-    axis_x = (w - mr + 6) if fa else (ml - 6)
+    axis_x = (w - mr + 8) if fa else (ml - 8)
     anchor = "start" if fa else "end"
+    base = mt + ph
     for tv in ticks:
-        y = mt + ph - ph * (tv * 3600 / ymax)
-        sc.line(ml, y, w - mr, y, pal["grid"], 1)
+        y = base - ph * (tv * 3600 / ymax)
+        sc.line(ml, y, w - mr, y, pal["grid"], 1 if tv else 1.4, None if tv == 0 else "2 4")
         sc.text(axis_x, y + 3.5, digits(f"{tv:g}", fa), 10.5, pal["muted"], anchor)
-    sc.text(axis_x, mt - 6, t["h"], 10.5, pal["muted"], anchor)
+    sc.text(axis_x, mt - 14, t["h"], 10, pal["muted"], anchor)
 
     def cx(i):
         return (ml + pw - (i + 0.5) * slot) if fa else (ml + (i + 0.5) * slot)
 
-    step = (1 if n <= 16 else (2 if n <= 31 else 7)) if mode == "day" else 1
+    # labels: every bar that has room; the first day of a month always carries its month name
+    step = 1
+    while slot * step < (30 if mode == "day" else 40):
+        step += 1
+    show_tot = slot >= 19 or mode == "month"
     for i, b in enumerate(bars):
         x0 = cx(i) - bw / 2
-        base = mt + ph
+        if b["exam"]:
+            sc.rect(cx(i) - slot / 2 + 1, mt - 4, slot - 2, ph + 4, pal["exam"] + "1f", 4)
+            sc.polygon([(cx(i) - 5, mt - 11), (cx(i) + 5, mt - 11), (cx(i), mt - 3)], pal["exam"], f"{t['exam']}: {', '.join(b['exam'])}")
         if b["sec"] > 0:
             tip = f"{b['tip']} · {report.fmt_dur(b['sec'], lang)}"
             used = 0.0
-            if b["parts"]:
-                for nm, color, v in b["parts"]:
-                    hh = ph * v / ymax
-                    sc.rect(x0, base - used - hh, bw, hh, color, 0, f"{tip}\n{nm}: {report.fmt_dur(v, lang)}")
-                    used += hh
-            else:
-                hh = ph * b["sec"] / ymax
-                sc.rect(x0, base - hh, bw, hh, pal["accent"], 2, tip)
+            parts = b["parts"] or [(None, pal["accent"], b["sec"])]
+            for k, (nm, color, v) in enumerate(parts):
+                hh = max(ph * v / ymax, 0.8)
+                label = nm if nm is not None else t["other_subjects"]
+                sc.rect(x0, base - used - hh, bw, hh, color, 3 if k == len(parts) - 1 else 0, f"{tip}\n{label}: {report.fmt_dur(v, lang)}", "#ffffff")
+                used += hh
+            if show_tot:
+                sc.text(cx(i), base - used - 6, digits(f"{b['sec'] / 3600:.1f}".replace(".0", ""), fa), 9.5, pal["text"])
+        else:
+            sc.rect(x0, base - 2, bw, 2, pal["grid"], 1)                        # an empty day is a short grey stub, not a gap
         if i % step == 0 or b["label"].count(" "):
-            sc.text(cx(i), h_plot - 12, b["label"], 10, pal["muted"])
-        if b["exam"]:
-            ytop = mt + 2
-            sc.line(cx(i), ytop + 8, cx(i), mt + ph, pal["exam"], 1, "2 3")
-            sc.polygon([(cx(i) - 5, ytop), (cx(i) + 5, ytop), (cx(i), ytop + 9)], pal["exam"], f"{t['exam']}: {', '.join(b['exam'])}")
-    s = R["summary"]
+            sc.text(cx(i), h_plot - 10, b["label"], 10, pal["muted"])
     if goal:
-        gy = mt + ph - ph * goal / ymax
-        sc.line(ml, gy, w - mr, gy, pal["goal"], 1.4, "6 4")
-    if mode == "day" and s["avg_active"]:
-        ay = mt + ph - ph * s["avg_active"] / ymax
-        sc.line(ml, ay, w - mr, ay, pal["avg"], 1.2, "1 4")
-    if mode == "day" and n >= 10:
-        pts = []
-        for i in range(n):
-            win = bars[max(0, i - 6): i + 1]
-            pts.append((cx(i), mt + ph - ph * (sum(b["sec"] for b in win) / len(win)) / ymax))
-        sc.poly(pts, pal["ma"], 2.2)
-    # legend
-    ent = [("dot", r["color"], r["name"] + (f" ({t['deleted']})" if r["ghost"] else "")) for r in R["subjects"][:8] if r["sec"]]
-    if goal:
-        ent.append(("dash", pal["goal"], t["goal"]))
-    if mode == "day" and s["avg_active"]:
-        ent.append(("dash", pal["avg"], t["avg_line"]))
-    if mode == "day" and n >= 10:
-        ent.append(("line", pal["ma"], t["ma7"]))
+        gy = base - ph * goal / ymax
+        sc.line(ml, gy, w - mr, gy, pal["goal"], 1.5, "6 4")
+        gx = (w - mr - 2) if not fa else (ml + 2)
+        sc.text(gx, gy - 5, f"{t['goal']} {digits(f'{goal / 3600:g}', fa)} {t['h']}", 10, pal["goal"], "end" if not fa else "start", True)
+    ent = [("dot", c, nm) for c, nm in legend]
+    if has_other:
+        ent.append(("dot", "#b6bfcc", t["other_subjects"]))
     if any(b["exam"] for b in bars):
         ent.append(("tri", pal["exam"], t["legend_exam"]))
     used = _legend(sc, ent, h_plot + 2, w, fa, pal)

@@ -63,12 +63,37 @@ class StudyLog:
         st.setdefault("words", {})        # {date: {subject_id: count}}  (language subjects)
         st.setdefault("gone", {})         # {subject_id: {name, color}} of deleted subjects: their hours keep a name
         st.setdefault("exams", [])        # {id, name, date, time, notified}
+        if not isinstance(st.get("exam_subjects"), list):
+            st["exam_subjects"] = self._migrate_exam_subjects(st)       # 1.8.1: exams have their own subjects
         st.setdefault("todos", [])        # {id,date,text,done}
         st.setdefault("active", None)     # {subject, started, last_seen}
         if fresh and not st["subjects"]:
             st["subjects"] = [{"id": uid(), "name": n, "color": c} for n, c in DEFAULT_SUBJECTS]
             self.save()
         return st
+
+    @staticmethod
+    def _migrate_exam_subjects(st):
+        """1.8.0 listed the study-timer subjects in the exam form. Subjects that already appear in saved results become the
+        exam subjects (same id, name and colour), so every old result keeps its curve. New installs start with an empty list:
+        the student adds exactly the subjects of his / her exam."""
+        timer = {x.get("id"): x for x in st.get("subjects", []) if isinstance(x, dict)}
+        out, by_name = [], {}
+        for e in st.get("exams", []):
+            r = e.get("result") if isinstance(e, dict) else None
+            for row in (r or {}).get("subjects", []):
+                sid = row.get("sid") or ""
+                src = timer.get(sid) or {}
+                nm = str(src.get("name") or row.get("name") or "").strip()
+                if not nm:
+                    continue
+                known = by_name.get(nm.casefold())
+                if known is None:
+                    known = {"id": sid or uid(), "name": nm, "color": src.get("color") or row.get("color") or "#8A8F9C"}
+                    by_name[nm.casefold()] = known
+                    out.append(known)
+                row["sid"] = known["id"]                  # rows of one name (an old deleted + re-added subject) share one series
+        return out
 
     @property
     def d(self):
@@ -382,10 +407,51 @@ class StudyLog:
     def exam_on(self, d):
         return [e for e in self.d["exams"] if e["date"] == dkey(d)]
 
-    # ---- exam results: percent and taraz per subject, total taraz and rank
+    # ---- exam subjects: their own list (not the study-timer subjects)
+    def exam_subjects(self):
+        return self.d["exam_subjects"]
+
+    def exam_subject(self, sid):
+        return next((s for s in self.exam_subjects() if s["id"] == sid), None) if sid else None
+
+    def add_exam_subject(self, name, color=None):
+        """Adds a subject to the exam form. A name that already exists (any case) returns the existing subject."""
+        name = str(name or "").strip()[:24]
+        if not name:
+            return None
+        same = next((s for s in self.exam_subjects() if str(s["name"]).strip().casefold() == name.casefold()), None)
+        if same:
+            return same
+        color = color or SUBJECT_COLORS[len(self.exam_subjects()) % len(SUBJECT_COLORS)]
+        s = {"id": uid(), "name": name, "color": color}
+        self.exam_subjects().append(s)
+        self.save()
+        return s
+
+    def edit_exam_subject(self, sid, name=None, color=None):
+        s = self.exam_subject(sid)
+        if not s:
+            return None
+        if name is not None and name.strip():
+            s["name"] = name.strip()[:24]
+        if color:
+            s["color"] = color
+        for e in self.d["exams"]:                       # saved results keep a copy of the name / colour for the day the subject is deleted
+            for row in (e.get("result") or {}).get("subjects", []):
+                if row.get("sid") == sid:
+                    row["name"], row["color"] = s["name"], s["color"]
+        self.save()
+        return s
+
+    def remove_exam_subject(self, sid):
+        """The subject leaves the form; the results already saved keep their rows (by name) and stay in the charts."""
+        self.d["exam_subjects"] = [s for s in self.exam_subjects() if s["id"] != sid]
+        self.save()
+
+    # ---- exam results: percent and taraz per subject, total taraz, overall rank and rank in the region
     PCT_RANGE, TARAZ_MAX, RANK_MAX = (-33.4, 100.0), 20000, 5_000_000
 
-    def set_exam_result(self, eid, taraz=None, rank=None, subjects=(), note=""):
+    def set_exam_result(self, eid, taraz=None, rank=None, subjects=(), note="", rank_region=None):
         """Stores what you got in an exam. subjects: [{"sid", "pct", "taraz"}]; empty values are dropped. Returns False when
         nothing usable was given (the result is removed then)."""
         e = next((x for x in self.d["exams"] if x["id"] == eid), None)
@@ -399,16 +465,18 @@ class StudyLog:
             tz = None if tz is None else max(0, min(self.TARAZ_MAX, int(round(float(tz)))))
             if pct is None and tz is None:
                 continue
-            sub = self.subject(r.get("sid")) if r.get("sid") else None
+            sub = self.exam_subject(r.get("sid")) if r.get("sid") else None
             rows.append({"sid": r.get("sid") or "", "name": (sub["name"] if sub else str(r.get("name") or "")).strip(),
+                         "color": (sub or {}).get("color") or r.get("color") or "",
                          "pct": None if pct is None else round(pct, 2), "taraz": tz})
         taraz = None if taraz is None else max(0, min(self.TARAZ_MAX, int(round(float(taraz)))))
         rank = None if rank is None else max(1, min(self.RANK_MAX, int(round(float(rank)))))
-        if taraz is None and rank is None and not rows:
+        region = None if rank_region is None else max(1, min(self.RANK_MAX, int(round(float(rank_region)))))
+        if taraz is None and rank is None and region is None and not rows:
             e.pop("result", None)
             self.save()
             return False
-        e["result"] = {"taraz": taraz, "rank": rank, "subjects": rows, "note": str(note or "").strip()[:200]}
+        e["result"] = {"taraz": taraz, "rank": rank, "rank_region": region, "subjects": rows, "note": str(note or "").strip()[:200]}
         self.save()
         return True
 
@@ -426,15 +494,15 @@ class StudyLog:
         return out
 
     def subject_key(self, row):
-        """Series key of a result row: the subject id while it exists, otherwise the saved name."""
+        """Series key of a result row: the exam subject id while it exists, otherwise the saved name."""
         sid = row.get("sid")
-        if sid and self.subject(sid):
+        if sid and self.exam_subject(sid):
             return sid
         return "n:" + str(row.get("name", "")).strip().casefold()
 
     def exam_progress(self, upto=None):
         """Data for the progress charts.
-        {"exams": [{id,name,date,taraz,rank,pct_avg,note}], "subjects": [{key,name,color,points:[(i,pct,taraz)]}]}"""
+        {"exams": [{id,name,date,taraz,rank,rank_region,pct_avg,note}], "subjects": [{key,name,color,points:[(i,pct,taraz)]}]}"""
         ex = self.exams_with_results(upto)
         subj = {}
         out = []
@@ -442,12 +510,13 @@ class StudyLog:
             r = e["result"]
             pcts = [x["pct"] for x in r.get("subjects", []) if x.get("pct") is not None]
             out.append({"id": e["id"], "name": e["name"], "date": e["date"], "taraz": r.get("taraz"), "rank": r.get("rank"),
+                        "rank_region": r.get("rank_region"),
                         "pct_avg": (sum(pcts) / len(pcts)) if pcts else None, "note": r.get("note", "")})
             for row in r.get("subjects", []):
                 key = self.subject_key(row)
-                s = self.subject(row.get("sid")) if row.get("sid") else None
+                s = self.exam_subject(row.get("sid")) if row.get("sid") else None
                 rec = subj.setdefault(key, {"key": key, "name": s["name"] if s else row.get("name") or "?",
-                                            "color": (s or {}).get("color", "#8A8F9C"), "points": []})
+                                            "color": (s or {}).get("color") or row.get("color") or "#8A8F9C", "points": []})
                 rec["points"].append((i, row.get("pct"), row.get("taraz")))
         return {"exams": out, "subjects": sorted(subj.values(), key=lambda r: r["name"])}
 

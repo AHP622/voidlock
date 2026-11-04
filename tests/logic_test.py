@@ -779,7 +779,7 @@ def _exam_study():
     st = S.Store(d)
     sl = study.StudyLog(st)
     st.study["subjects"] = []
-    subs = {n: sl.add_subject(n) for n in ("ریاضی", "فیزیک", "شیمی", "ادبیات")}
+    subs = {n: sl.add_exam_subject(n) for n in ("ریاضی", "فیزیک", "شیمی", "ادبیات")}      # 1.8.1: exams have their own subjects
     return st, sl, subs
 
 
@@ -812,15 +812,100 @@ def test_exam_results():
     only = report.results_data(sl, today - timedelta(days=20), "fa")
     ok(only["count"] == 2, "results can be limited to the end of a period")
     # rename keeps the series, deletion keeps the name
-    sl.edit_subject(subs["ریاضی"]["id"], name="ریاضی ۲")
+    sl.edit_exam_subject(subs["ریاضی"]["id"], name="ریاضی ۲")
     ok(any(s["name"] == "ریاضی ۲" and len(s["points"]) == 3 for s in sl.exam_progress()["subjects"]), "renaming a subject keeps its exam history")
-    sl.remove_subject(subs["ریاضی"]["id"])
+    sl.remove_exam_subject(subs["ریاضی"]["id"])
     ok(any(s["name"] == "ریاضی" and len(s["points"]) == 3 for s in sl.exam_progress()["subjects"]) or any("ریاضی" in s["name"] for s in sl.exam_progress()["subjects"]),
        "a deleted subject keeps its exam history (by name)")
     sl.clear_exam_result(e3["id"])
     ok(len(sl.exams_with_results()) == 2, "a result can be removed")
     st2 = S.Store(st.home)
     ok(len(study.StudyLog(st2).exams_with_results()) == 2, "results persist")
+
+
+def test_exam_subjects_and_region_rank():
+    st, sl, subs = _exam_study()
+    today = date.today()
+    ok(sl.add_exam_subject("  ریاضی ") is subs["ریاضی"] and len(sl.exam_subjects()) == 4, "adding an existing exam subject name returns the existing one")
+    ok(sl.add_exam_subject("   ") is None, "an empty subject name is refused")
+    t0 = S.Store(tmp())
+    fresh = study.StudyLog(t0)
+    ok(fresh.exam_subjects() == [] and len(fresh.subjects()) == 6, "a new install: exam subjects start empty, the study-timer subjects are untouched")
+    e1 = sl.add_exam("آزمون ۱", today - timedelta(days=30))
+    e2 = sl.add_exam("آزمون ۲", today - timedelta(days=10))
+    sl.set_exam_result(e1["id"], 6000, 30000, [{"sid": subs["ریاضی"]["id"], "pct": 40, "taraz": 5500}], "", 900)
+    sl.set_exam_result(e2["id"], 6500, 25000, [{"sid": subs["ریاضی"]["id"], "pct": 50, "taraz": 6000}], "", 700)
+    ok(e1["result"]["rank_region"] == 900, "the region rank is stored")
+    sl.set_exam_result(e2["id"], None, None, [], "", 0)
+    ok(e2["result"]["rank_region"] == 1, "a region rank is at least 1")
+    sl.set_exam_result(e2["id"], 6500, 25000, [{"sid": subs["ریاضی"]["id"], "pct": 50, "taraz": 6000}], "", 700)
+    sl.set_exam_result(e2["id"], None, None, [], "", None)
+    ok("result" not in e2, "a result with nothing in it is removed")
+    sl.set_exam_result(e2["id"], None, None, [], "", 700)
+    ok(e2["result"]["rank_region"] == 700 and e2["result"]["taraz"] is None, "a result can hold only a region rank")
+    from voidlock import report, charts
+    res = report.results_data(sl, None, "en")
+    ok(res["exams"][1]["delta_region"] == 200 and res["best_rank_region"]["rank_region"] == 700, "region rank change (positive = better) and best region rank")
+    sc = report.exam_chart(res, "region", "en")
+    ok(sc.items and any(i[0] == "circle" for i in sc.items), "the region rank chart draws points")
+    R = report.collect(st, sl, today - timedelta(days=60), today, "x", "fa")
+    html = report.render_html(R)
+    ok(report.STR["fa"]["rank_region"] in html, "the HTML report has the region rank")
+    ok(report.STR["en"]["rank_region"] in report.render_csv(report.collect(st, sl, today - timedelta(days=60), today, "x", "en")), "the CSV has a region rank column")
+    # renaming / deleting
+    sl.edit_exam_subject(subs["ریاضی"]["id"], name="حسابان", color="#123456")
+    ok(e1["result"]["subjects"][0]["name"] == "حسابان" and e1["result"]["subjects"][0]["color"] == "#123456", "renaming an exam subject updates the saved rows")
+    sl.remove_exam_subject(subs["ریاضی"]["id"])
+    p = sl.exam_progress()["subjects"]
+    ok(len(p) == 1 and p[0]["name"] == "حسابان" and p[0]["color"] == "#123456" and len(p[0]["points"]) == 1, "a deleted exam subject keeps its name, colour and points")
+
+
+def test_exam_subjects_migration():
+    """1.8.0 saved results with the ids of the study-timer subjects: they become the exam subjects, nothing is lost."""
+    st = S.Store(tmp())
+    sl = study.StudyLog(st)
+    math = sl.subjects()[0]
+    e = sl.add_exam("Mock", date.today() - timedelta(days=3))
+    e["result"] = {"taraz": 7000, "rank": 100, "subjects": [{"sid": math["id"], "name": math["name"], "pct": 50, "taraz": 6000},
+                                                           {"sid": "deadbeef", "name": "Old subject", "pct": 10, "taraz": 4000}], "note": ""}
+    st.study.pop("exam_subjects", None)                                       # a 1.8.0 file has no such key
+    names = {s["name"] for s in sl.exam_subjects()}
+    ok(names == {math["name"], "Old subject"}, "subjects used by saved results become exam subjects")
+    ok(sl.exam_subject(math["id"]) and sl.exam_subject(math["id"])["color"] == math["color"], "they keep their id and colour")
+    ok({s["name"] for s in sl.exam_progress()["subjects"]} == names and len(sl.exam_subjects()) == 2, "the progress charts still have every curve")
+    n = len(sl.exam_subjects())
+    sl.exam_subjects()
+    ok(len(sl.exam_subjects()) == n, "the migration runs once")
+    ok(len(sl.subjects()) == 6, "the study-timer subjects are untouched")
+
+
+def test_study_chart_clean():
+    from voidlock import charts, report
+    import xml.etree.ElementTree as ET
+    st = S.Store(tmp())
+    sl = study.StudyLog(st)
+    st.study["subjects"] = []
+    names = ["A", "B", "C", "D", "E", "F", "G"]
+    subs = [sl.add_subject(n) for n in names]
+    today = date.today()
+    for i in range(20):
+        for k, sj in enumerate(subs):
+            sl.add_manual(today - timedelta(days=i), sj["id"], 10 + 5 * k + i)
+    sl.add_exam("Mock", today - timedelta(days=4))
+    for lang in ("en", "fa"):
+        R = report.collect(st, sl, today - timedelta(days=19), today, "", lang, goal_min=480)
+        sc = charts.study_chart(R)
+        svg = sc.to_svg("t", lang == "fa")
+        ET.fromstring(svg)
+        texts = [i[3] for i in sc.items if i[0] == "text"]
+        ok(report.STR[lang]["other_subjects"] in texts, f"[{lang}] small subjects are merged into one 'other' slice")
+        legend_dots = [i for i in sc.items if i[0] == "circle"]
+        ok(len(legend_dots) == 6 + 0, f"[{lang}] the legend has the 5 main subjects + other (no clutter) {len(legend_dots)}")
+        ok(not any(i[0] == "poly" for i in sc.items), f"[{lang}] no moving-average line")
+        ok(sum(1 for i in sc.items if i[0] == "line" and i[5] == charts.LIGHT["goal"]) == 1, f"[{lang}] exactly one goal line")
+        ok(sum(1 for i in sc.items if i[0] == "polygon") >= 2, f"[{lang}] exam marker and legend marker")
+    R = report.collect(st, sl, today - timedelta(days=19), today, "", "en")
+    ok(charts.study_chart(R).items, "a chart without a goal still draws")
 
 
 def test_charts():

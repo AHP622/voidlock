@@ -71,6 +71,8 @@ STR = {
         "planned_min": "Planned (min)", "focus_min": "Focused (min)", "kind_daily": "Daily", "avg_short": "Average",
     },
 }
+STR["fa"].update({"other_subjects": "سایر درس‌ها", "rank_region": "رتبه در منطقه", "best_rank_region": "بهترین رتبه در منطقه", "chart_region": "روند رتبه در منطقه (پایین‌تر = بهتر)"})
+STR["en"].update({"other_subjects": "Other subjects", "rank_region": "Region rank", "best_rank_region": "Best region rank", "chart_region": "Region rank trend (lower is better)"})
 
 
 # ------------------------------------------------------------------ formatting (independent of the app's language)
@@ -316,6 +318,8 @@ def results_data(study, end, lang):
         e["delta"] = (e["taraz"] - prev) if (e["taraz"] is not None and prev is not None) else None
         prevr = next((ex[j]["rank"] for j in range(i - 1, -1, -1) if ex[j]["rank"] is not None), None)
         e["delta_rank"] = (prevr - e["rank"]) if (e["rank"] is not None and prevr is not None) else None   # + = better rank
+        prevg = next((ex[j].get("rank_region") for j in range(i - 1, -1, -1) if ex[j].get("rank_region") is not None), None)
+        e["delta_region"] = (prevg - e["rank_region"]) if (e.get("rank_region") is not None and prevg is not None) else None
         e["short"] = _short_date(e["date"], lang)
     subs = []
     for s in P["subjects"]:
@@ -333,6 +337,7 @@ def results_data(study, end, lang):
         "best_taraz": max((e for e in ex if e["taraz"] is not None), key=lambda e: e["taraz"], default=None),
         "avg_taraz": (sum(v for _i, v in tz) / len(tz)) if tz else None,
         "best_rank": min((e for e in ex if e["rank"] is not None), key=lambda e: e["rank"], default=None),
+        "best_rank_region": min((e for e in ex if e.get("rank_region") is not None), key=lambda e: e["rank_region"], default=None),
         "first_to_last": (tz[-1][1] - tz[0][1]) if len(tz) >= 2 else None,
         "strong": ranked[:2], "weak": ranked[-2:][::-1] if len(ranked) >= 4 else [],
         "improved": max(moved, key=lambda s: s["delta"]) if moved and max(s["delta"] for s in moved) > 0 else None,
@@ -352,13 +357,15 @@ def exam_chart(res, kind, lang, pal=charts.LIGHT, w=760, h=260):
     labels = [e["short"] for e in ex]
     tips = [f"{e['name']} · {fmt_date(date.fromisoformat(e['date']), lang)}" for e in ex]
     fi = lambda n: charts.fmt_int(n, fa)
-    if kind in ("taraz", "rank"):
-        key = kind
-        vals = [e[key] for e in ex]
+    if kind in ("taraz", "rank", "region"):
+        key = {"taraz": "taraz", "rank": "rank", "region": "rank_region"}[kind]
+        vals = [e.get(key) for e in ex]
         if not any(v is not None for v in vals):
             return charts.Scene(w, 10)
-        return charts.line_chart({"labels": labels, "invert": kind == "rank", "unit": t["taraz" if kind == "taraz" else "rank"],
-                                  "series": [{"name": t["taraz_total" if kind == "taraz" else "rank"], "color": pal.get("line1", "#0e7490") if kind == "taraz" else pal.get("line2", "#2563eb"), "values": vals}],
+        name = {"taraz": t["taraz_total"], "rank": t["rank"], "region": t["rank_region"]}[kind]
+        color = {"taraz": pal.get("line1", "#0e7490"), "rank": pal.get("line2", "#2563eb"), "region": pal.get("accent2", "#7c3aed")}[kind]
+        return charts.line_chart({"labels": labels, "invert": kind != "taraz", "unit": name,
+                                  "series": [{"name": name, "color": color, "values": vals}],
                                   "tips": [f"{tp}: " + (fi(v) if v is not None else "-") for tp, v in zip(tips, vals)]}, pal, w, h, fa)
     series = []
     for s in res["subjects"]:
@@ -383,7 +390,7 @@ def result_scenes(R, w=760):
     if not res:
         return {}
     out = {}
-    for kind, name, hh in (("taraz", "taraz", 250), ("rank", "rank", 230), ("subjects", "subjects", 270)):
+    for kind, name, hh in (("taraz", "taraz", 250), ("rank", "rank", 230), ("region", "region", 230), ("subjects", "subjects", 270)):
         sc = exam_chart(res, kind, R["lang"], charts.LIGHT, w, hh)
         if sc.items:
             out[name] = sc
@@ -400,7 +407,7 @@ def pdf_scenes(R, w=680):
         sc["chart_study"] = charts.titled(st_, t["chart_daily"] if R["daily_rows"] else t["chart_monthly"], fa)
         if len(R["days"]) >= 7:
             sc["chart_weekday"] = charts.titled(charts.weekday_chart(R, charts.LIGHT, min(w, 460), 190), t["weekday_chart"], fa)
-    titles = {"taraz": t["chart_taraz"], "rank": t["chart_rank"], "subjects": t["chart_subj"]}
+    titles = {"taraz": t["chart_taraz"], "rank": t["chart_rank"], "region": t["chart_region"], "subjects": t["chart_subj"]}
     for k, v in result_scenes(R, w).items():
         sc["chart_" + k] = charts.titled(v, titles[k], fa)
     return sc
@@ -518,19 +525,25 @@ def _results_html(R):
     if latest["rank"] is not None:
         d = _delta_html(latest["delta_rank"], lang)
         stats.append(f'<div class="stat"><b>{esc(fi(latest["rank"]))} {d}</b><span>{esc(t["latest"])} · {esc(t["rank"])}</span></div>')
+    if latest.get("rank_region") is not None:
+        d = _delta_html(latest.get("delta_region"), lang)
+        stats.append(f'<div class="stat"><b>{esc(fi(latest["rank_region"]))} {d}</b><span>{esc(t["latest"])} · {esc(t["rank_region"])}</span></div>')
     if best:
         stats.append(_stat(t["best_taraz"] + f" ({best['short']})", fi(best["taraz"])))
     if res["avg_taraz"] is not None:
         stats.append(_stat(t["avg_taraz"], fi(res["avg_taraz"])))
     if bestr:
         stats.append(_stat(t["best_rank"] + f" ({bestr['short']})", fi(bestr["rank"])))
+    if res.get("best_rank_region"):
+        bg = res["best_rank_region"]
+        stats.append(_stat(t["best_rank_region"] + f" ({bg['short']})", fi(bg["rank_region"])))
     if res["first_to_last"] is not None:
         v = res["first_to_last"]
         stats.append(f'<div class="stat"><b>{_delta_html(v, lang) or esc(t["same"])}</b><span>{esc(t["first_to_last"])}</span></div>')
     out = [f'<div class="card"><h2>{esc(t["results_title"])}</h2><div class="grid">{"".join(stats)}</div>'
            f'<div class="note">{esc(t["results_upto"])}</div></div>\n']
     scenes = result_scenes(R)
-    for key, title in (("taraz", "chart_taraz"), ("rank", "chart_rank"), ("subjects", "chart_subj")):
+    for key, title in (("taraz", "chart_taraz"), ("rank", "chart_rank"), ("region", "chart_region"), ("subjects", "chart_subj")):
         if key in scenes:
             out.append(f'<div class="card"><h2>{esc(t[title])}</h2><div class="chart">{scenes[key].to_svg(t[title], fa)}</div></div>\n')
     # exams table
@@ -541,9 +554,10 @@ def _results_html(R):
                     f'<td class="num">{_delta_html(e["delta"], lang)}</td>'
                     f'<td class="num">{esc(fi(e["rank"])) if e["rank"] is not None else "<span class=muted>" + esc(t["none"]) + "</span>"}</td>'
                     f'<td class="num">{_delta_html(e["delta_rank"], lang)}</td>'
+                    f'<td class="num">{esc(fi(e["rank_region"])) + " " + _delta_html(e.get("delta_region"), lang) if e.get("rank_region") is not None else "<span class=muted>" + esc(t["none"]) + "</span>"}</td>'
                     f'<td class="num">{esc(pc(e["pct_avg"])) if e["pct_avg"] is not None else ""}</td><td>{esc(e["note"])}</td></tr>')
     out.append(f'<div class="card tall"><h2>{esc(t["exam_name"])}</h2><table><thead><tr><th>{esc(t["date"])}</th><th>{esc(t["exam_name"])}</th>'
-               f'<th class="num">{esc(t["taraz_total"])}</th><th class="num">{esc(t["delta_taraz"])}</th><th class="num">{esc(t["rank"])}</th><th class="num">{esc(t["delta_rank"])}</th>'
+               f'<th class="num">{esc(t["taraz_total"])}</th><th class="num">{esc(t["delta_taraz"])}</th><th class="num">{esc(t["rank"])}</th><th class="num">{esc(t["delta_rank"])}</th><th class="num">{esc(t["rank_region"])}</th>'
                f'<th class="num">{esc(t["pct_avg"])}</th><th>{esc(t["note_l"])}</th></tr></thead><tbody>' + "".join(rows) + "</tbody></table></div>\n")
     # per subject matrix: last 8 exams
     subs = [s for s in res["subjects"] if any(p[1] is not None or p[2] is not None for p in s["points"])]
@@ -789,13 +803,14 @@ def render_csv(R):
         w.writerow([])
         w.writerow([t["results_title"]])
         subs = [s for s in res["subjects"] if s["points"]]
-        head = [t["gdate"], t["jdate"], t["exam_name"], t["taraz_total"], t["rank"], t["pct_avg"], t["note_l"]]
+        head = [t["gdate"], t["jdate"], t["exam_name"], t["taraz_total"], t["rank"], t["rank_region"], t["pct_avg"], t["note_l"]]
         for s in subs:
             head += [f"{s['name']} - {t['pct']}", f"{s['name']} - {t['taraz']}"]
         w.writerow(head)
         for i, e in enumerate(res["exams"]):
             d = date.fromisoformat(e["date"])
             row_ = [e["date"], fmt_jdate_numeric(d), e["name"], "" if e["taraz"] is None else e["taraz"], "" if e["rank"] is None else e["rank"],
+                    "" if e.get("rank_region") is None else e["rank_region"],
                     "" if e["pct_avg"] is None else round(e["pct_avg"], 2), e["note"]]
             for s in subs:
                 pt = next((p for p in s["points"] if p[0] == i), None)
@@ -834,12 +849,16 @@ def _results_pdf(R, scenes, row, table, h, al):
         stats.append((t["latest"] + " · " + t["taraz_total"], fi(latest["taraz"]) + dl(latest["delta"])))
     if latest["rank"] is not None:
         stats.append((t["latest"] + " · " + t["rank"], fi(latest["rank"]) + dl(latest["delta_rank"])))
+    if latest.get("rank_region") is not None:
+        stats.append((t["latest"] + " · " + t["rank_region"], fi(latest["rank_region"]) + dl(latest.get("delta_region"))))
     if res["best_taraz"]:
         stats.append((t["best_taraz"] + f" ({res['best_taraz']['short']})", fi(res["best_taraz"]["taraz"])))
     if res["avg_taraz"] is not None:
         stats.append((t["avg_taraz"], fi(res["avg_taraz"])))
     if res["best_rank"]:
         stats.append((t["best_rank"] + f" ({res['best_rank']['short']})", fi(res["best_rank"]["rank"])))
+    if res.get("best_rank_region"):
+        stats.append((t["best_rank_region"] + f" ({res['best_rank_region']['short']})", fi(res["best_rank_region"]["rank_region"])))
     if res["first_to_last"] is not None:
         stats.append((t["first_to_last"], dl(res["first_to_last"]) or t["same"]))
     while len(stats) % 3:
@@ -851,16 +870,17 @@ def _results_pdf(R, scenes, row, table, h, al):
         srows.append(row(cells, bg="#f5f8fc"))
         srows.append('<tr><td></td></tr>')
     out.append(table(srows))
-    for key, title in (("chart_taraz", "chart_taraz"), ("chart_rank", "chart_rank"), ("chart_subjects", "chart_subj")):
+    for key, title in (("chart_taraz", "chart_taraz"), ("chart_rank", "chart_rank"), ("chart_region", "chart_region"), ("chart_subjects", "chart_subj")):
         if key in scenes:
             out.append(f'<p style="margin-top:6px; margin-bottom:0"><img src="{key}"></p>')
     rows = []
     for i, e in enumerate(reversed(ex)):
         rows.append(row([esc(fmt_date(date.fromisoformat(e["date"]), lang)), esc(e["name"]), esc(fi(e["taraz"])) if e["taraz"] is not None else esc(t["none"]),
                          dl(e["delta"]).strip(), esc(fi(e["rank"])) if e["rank"] is not None else esc(t["none"]), dl(e["delta_rank"]).strip(),
+                         (esc(fi(e["rank_region"])) + dl(e.get("delta_region"))) if e.get("rank_region") is not None else esc(t["none"]),
                          esc(pc(e["pct_avg"])) if e["pct_avg"] is not None else ""], bg="#fafcff" if i % 2 else None))
     out.append(h(t["exam_name"]))
-    out.append(table(rows, head=[t["date"], t["exam_name"], t["taraz_total"], t["delta_taraz"], t["rank"], t["delta_rank"], t["pct_avg"]]))
+    out.append(table(rows, head=[t["date"], t["exam_name"], t["taraz_total"], t["delta_taraz"], t["rank"], t["delta_rank"], t["rank_region"], t["pct_avg"]]))
     subs = [s for s in res["subjects"] if any(p[1] is not None or p[2] is not None for p in s["points"])]
     if subs:
         cols = list(range(max(0, len(ex) - 6), len(ex)))
