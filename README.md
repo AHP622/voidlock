@@ -36,13 +36,14 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
-## What changed in 1.8.1
+## What changed in 1.8.11
 
 - **Exams have their own subjects.** The result form no longer lists the Study Timer subjects. You add exactly the subjects of your exam (in the result form itself - type a name and press Add - or in the new *Exam subjects* card on the Exams tab, where you can also rename, recolour and delete them).
   Renaming keeps the saved results; a deleted subject keeps its saved results in the charts and reports. Results saved in 1.8.0 are carried over: the subjects they used become your exam subjects automatically.
 - **Region rank.** Every result now has *Region rank* next to total taraz and overall rank. It has its own card, its own progress chart (inverted: up is better), a pill on the exam card, a column in the exam table, and it is in the HTML / PDF / CSV report.
 - **The daily study chart is cleaner.** One column per day, stacked by your five main subjects (the rest are merged into one grey *Other subjects* slice), the day's hours written above every column, three light gridlines, one dashed daily-goal line with its label, and exam days marked with a soft band and a marker.
   The average line, the 7-day moving average and the full-height exam line were removed (the average is in the summary cards). The same chart is used in HTML and PDF; the monthly view for long periods follows the same style.
+- **The exam list is sorted by date** (oldest first) instead of upcoming first and past last.
 
 ## What changed in 1.8.0
 

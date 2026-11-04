@@ -779,7 +779,7 @@ def _exam_study():
     st = S.Store(d)
     sl = study.StudyLog(st)
     st.study["subjects"] = []
-    subs = {n: sl.add_exam_subject(n) for n in ("ریاضی", "فیزیک", "شیمی", "ادبیات")}      # 1.8.1: exams have their own subjects
+    subs = {n: sl.add_exam_subject(n) for n in ("ریاضی", "فیزیک", "شیمی", "ادبیات")}      # 1.8.11: exams have their own subjects
     return st, sl, subs
 
 

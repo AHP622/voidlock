@@ -476,13 +476,10 @@ class ExamsPage(Page):
     def _fill_list(self):
         clear_layout(self.list_box)
         sl = self.ctx.study
-        today = date.today().isoformat()
-        exams = sl.exams()
-        upcoming = [e for e in exams if e["date"] >= today]
-        past = [e for e in reversed(exams) if e["date"] < today]
+        exams = sl.exams()                                   # oldest first: one plain timeline, the way the dates run
         if not exams:
             self.list_box.addWidget(label("No exams yet. Add the days of your exams.", 12, color=T.text3))
-        for e in upcoming + past:
+        for e in exams:
             self.list_box.addWidget(ExamCard(self, e))
 
     # ---- actions

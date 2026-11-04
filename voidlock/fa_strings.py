@@ -529,7 +529,7 @@ FA.update({
     "Include exam results and progress": "شامل نتایج آزمون‌ها و روند پیشرفت", "Include the weekly timetable (classes and study)": "شامل برنامه‌ی هفتگی (کلاس و مطالعه)",
 })
 
-# ---------------- 1.8.1: own subjects for exams, region rank
+# ---------------- 1.8.11: own subjects for exams, region rank
 FA.update({
     "Region rank": "رتبه در منطقه", "Region": "منطقه", "Latest region rank": "آخرین رتبه در منطقه",
     "EXAM SUBJECTS": "درس‌های آزمون",

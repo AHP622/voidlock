@@ -64,7 +64,7 @@ class StudyLog:
         st.setdefault("gone", {})         # {subject_id: {name, color}} of deleted subjects: their hours keep a name
         st.setdefault("exams", [])        # {id, name, date, time, notified}
         if not isinstance(st.get("exam_subjects"), list):
-            st["exam_subjects"] = self._migrate_exam_subjects(st)       # 1.8.1: exams have their own subjects
+            st["exam_subjects"] = self._migrate_exam_subjects(st)       # 1.8.11: exams have their own subjects
         st.setdefault("todos", [])        # {id,date,text,done}
         st.setdefault("active", None)     # {subject, started, last_seen}
         if fresh and not st["subjects"]:
