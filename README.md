@@ -36,6 +36,13 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
+## What changed in 1.8.12
+
+- **Any colour for a subject.** Next to the 8 preset colours there is now a colour-wheel button (Study Timer and Exam subject forms). It opens a full colour dialog (spectrum, brightness, #RRGGBB / RGB); the chosen colour appears as its own circle and is kept when you edit the subject. Black and white are lifted to a visible shade, because they would vanish on the dark app or on the white report.
+- **One colour per subject everywhere.** The colour of a subject in the Study Timer / Exams tab is the colour in the daily study chart, the subject table and the exam progress charts of the report (HTML and PDF). A new exam subject named like a Study Timer subject starts with that subject's colour.
+
+- **Update download is sturdier.** Only one download can run at a time (a second click or the auto-update no longer fights over the same `.part` file: `WinError 32`), and a file the antivirus still holds for a moment is retried instead of failing at once.
+
 ## What changed in 1.8.11
 
 - **Exams have their own subjects.** The result form no longer lists the Study Timer subjects. You add exactly the subjects of your exam (in the result form itself - type a name and press Add - or in the new *Exam subjects* card on the Exams tab, where you can also rename, recolour and delete them).

@@ -274,6 +274,14 @@ for e_ in list(sl.exams()):
 ep = win.pages["exams"]; win.goto("exams"); pump(300)
 ok(not ep.chart_card.isVisibleTo(ep) and ep.empty.isVisibleTo(ep), "no results yet: the empty state is shown")
 ex1 = sl.add_exam("Mock A", date.today() - timedelta(days=20)); ex2 = sl.add_exam("Mock B", date.today() - timedelta(days=5))
+from voidlock.pages_c import ColorPicker
+from voidlock.study import SUBJECT_COLORS
+cp = ColorPicker()
+ok(cp.width() == 9 * 36 and cp.color() == SUBJECT_COLORS[0], "the colour picker: 8 presets + the colour-wheel button")
+cp.set_color("#14B8A6")
+ok(cp.color() == "#14B8A6" and cp.custom == "#14B8A6" and cp.width() == 10 * 36, "a custom colour appears as its own circle and is selected")
+cp.set_color(SUBJECT_COLORS[2])
+ok(cp.color() == SUBJECT_COLORS[2] and cp.custom == "#14B8A6", "choosing a preset keeps the custom circle available")
 for x_ in list(sl.exam_subjects()):
     sl.remove_exam_subject(x_["id"])
 f = ExamResultForm(sl, ex1); f.show(); pump(50)

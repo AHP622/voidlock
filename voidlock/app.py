@@ -1050,6 +1050,11 @@ class MainWindow(QMainWindow):
             else:
                 self.toast("Finish the current session first.", "warn")
             return
+        prev = getattr(self, "_upd_worker", None)
+        if prev is not None and prev.isRunning():                  # already downloading (auto-update or an earlier click)
+            if not auto:
+                self.toast("The update is already downloading.", "info")
+            return
         if not auto and not self.confirm("Install update?", f"Version {info['version']} will be downloaded and installed. "
                                          f"VOIDLOCK restarts; sessions and locks keep going.", "Install", False, "download"):
             return

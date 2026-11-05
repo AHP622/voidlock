@@ -1,5 +1,6 @@
 """Study log (stopwatch, tests, to-dos), play statistics, focus points and attempt reports.
 Pure functions over the Store - no Qt."""
+import colorsys
 import re
 import time
 from datetime import date, datetime, timedelta
@@ -8,6 +9,23 @@ from . import i18n
 from .store import read_json, uid, write_json
 
 SUBJECT_COLORS = ["#FF5DA2", "#8B5CF6", "#00C2FF", "#34D399", "#FBBF24", "#FB7185", "#60A5FA", "#F97316"]
+_HEX6 = re.compile(r"#[0-9a-fA-F]{6}")
+
+
+def normalize_color(c, lo=0.38, hi=0.74):
+    """A subject colour as #RRGGBB (upper case) whose HSL lightness stays between lo and hi: black or white picked on the colour
+    wheel would be invisible on the dark app or on the white report. The hue and saturation are kept, the preset colours are
+    unchanged. Returns None when c is not a #RRGGBB colour."""
+    if not isinstance(c, str) or not _HEX6.fullmatch(c.strip()):
+        return None
+    h6 = c.strip()[1:]
+    r, g, b = (int(h6[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    hue, light, sat = colorsys.rgb_to_hls(r, g, b)
+    l2 = min(hi, max(lo, light))
+    if l2 != light:
+        r, g, b = colorsys.hls_to_rgb(hue, l2, sat)
+        return "#%02X%02X%02X" % (round(r * 255), round(g * 255), round(b * 255))
+    return "#" + h6.upper()
 DEFAULT_SUBJECTS = [("Math", "#8B5CF6"), ("Physics", "#00C2FF"), ("Chemistry", "#34D399"),
                     ("Biology", "#FBBF24"), ("Literature", "#FF5DA2"), ("English", "#FB923C")]
 # subjects whose name looks like a language get a "words learned" counter next to the tests counter
@@ -146,7 +164,7 @@ class StudyLog:
         """A subject with the name of a deleted one gets that subject's id back, so its old hours, tests and words
         belong to it again (deleting a subject and adding it again used to cut the history off)."""
         name = name.strip()
-        color = color or SUBJECT_COLORS[len(self.subjects()) % len(SUBJECT_COLORS)]
+        color = normalize_color(color) or SUBJECT_COLORS[len(self.subjects()) % len(SUBJECT_COLORS)]
         sid = next((k for k, g in self.d["gone"].items() if self._same(g.get("name", ""), name)), None)
         s = {"id": sid or uid(), "name": name, "color": color}
         if sid:
@@ -166,6 +184,7 @@ class StudyLog:
             return None
         if name is not None and name.strip():
             s["name"] = name.strip()
+        color = normalize_color(color) if color else None
         if color:
             s["color"] = color
         if words is not None:
@@ -422,7 +441,8 @@ class StudyLog:
         same = next((s for s in self.exam_subjects() if str(s["name"]).strip().casefold() == name.casefold()), None)
         if same:
             return same
-        color = color or SUBJECT_COLORS[len(self.exam_subjects()) % len(SUBJECT_COLORS)]
+        same_timer = next((t for t in self.subjects() if self._same(t.get("name", ""), name)), None)      # the same lesson keeps the same colour
+        color = normalize_color(color) or (same_timer or {}).get("color") or SUBJECT_COLORS[len(self.exam_subjects()) % len(SUBJECT_COLORS)]
         s = {"id": uid(), "name": name, "color": color}
         self.exam_subjects().append(s)
         self.save()
@@ -434,6 +454,7 @@ class StudyLog:
             return None
         if name is not None and name.strip():
             s["name"] = name.strip()[:24]
+        color = normalize_color(color) if color else None
         if color:
             s["color"] = color
         for e in self.d["exams"]:                       # saved results keep a copy of the name / colour for the day the subject is deleted

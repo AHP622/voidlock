@@ -3,8 +3,8 @@ import time
 from datetime import date, datetime, timedelta
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QVBoxLayout, QWidget
+from PySide6.QtGui import QBrush, QColor, QConicalGradient, QFont, QPainter, QPainterPath, QPen
+from PySide6.QtWidgets import QColorDialog, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
 
 from . import i18n, messages, study as studymod
 from .icons import paint_icon
@@ -25,25 +25,84 @@ def fmt_hms(sec):
     return f"{h:02d}:{m:02d}:{s:02d}"
 
 
+_COLOR_DIALOG_FA = {
+    "Basic colors": "رنگ‌های پایه", "Custom colors": "رنگ‌های سفارشی", "Add to Custom Colors": "افزودن به رنگ‌های سفارشی",
+    "Pick Screen Color": "برداشتن رنگ از صفحه", "Hue:": "طیف:", "Sat:": "اشباع:", "Val:": "روشنایی:", "Red:": "قرمز:",
+    "Green:": "سبز:", "Blue:": "آبی:", "Alpha channel:": "شفافیت:", "HTML:": "کد رنگ:", "OK": "تأیید", "Cancel": "انصراف",
+}
+
+
+def _translate_color_dialog(dlg):
+    """Qt's colour dialog is English-only here (no Qt translation files are shipped): translate its labels and buttons."""
+    if not i18n.is_fa():
+        return
+    for w in list(dlg.findChildren(QLabel)) + list(dlg.findChildren(QPushButton)):
+        key = w.text().replace("&", "").strip()
+        if key in _COLOR_DIALOG_FA:
+            w.setText(_COLOR_DIALOG_FA[key])
+
+
 class ColorPicker(QWidget):
+    """The preset colours, then (once one was chosen) the student's own colour, then a colour-wheel button that opens a full
+    colour dialog. The chosen colour is stored as #RRGGBB, the same value every chart and report reads."""
+    picked = Signal()                  # the person chose a colour (not emitted by set_color)
+
     def __init__(self, colors=SUBJECT_COLORS, parent=None):
         super().__init__(parent)
-        self.colors, self.cur = colors, 0
+        self.colors, self.cur, self.custom = list(colors), 0, None
         self.setFixedHeight(36)
-        self.setFixedWidth(len(colors) * 36)
+        self._resize()
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip(i18n.tr("Custom colour…"))
+
+    def _resize(self):
+        self.setFixedWidth((len(self.colors) + (1 if self.custom else 0) + 1) * 36)
+        self.updateGeometry()
 
     def color(self):
-        return self.colors[self.cur]
+        if self.cur < len(self.colors):
+            return self.colors[self.cur]
+        return self.custom or self.colors[0]
+
+    def set_color(self, c):
+        """Select a colour from code (a preset, or any #RRGGBB shown as the custom colour)."""
+        c = str(c or "").upper()
+        presets = [x.upper() for x in self.colors]
+        if c in presets:
+            self.cur = presets.index(c)
+        elif studymod.normalize_color(c):
+            self.custom, self.cur = c, len(self.colors)
+        self._resize()
+        self.update()
 
     def mousePressEvent(self, e):
-        self.cur = max(0, min(len(self.colors) - 1, int(e.position().x() // 36)))
-        self.update()
+        i = int(e.position().x() // 36)
+        n = len(self.colors)
+        if i < n or (self.custom and i == n):
+            self.cur = min(i, n if self.custom else n - 1)
+            self.update()
+            self.picked.emit()
+        else:
+            self._open_dialog()
+
+    def _open_dialog(self):
+        dlg = QColorDialog(QColor(self.color()), self.window())
+        dlg.setOption(QColorDialog.ColorDialogOption.DontUseNativeDialog, True)       # follows the app's dark style
+        dlg.setWindowTitle(i18n.tr("Choose a colour"))
+        dlg.setWindowModality(Qt.WindowModality.ApplicationModal)
+        _translate_color_dialog(dlg)
+        if dlg.exec() == QColorDialog.DialogCode.Accepted:
+            c = studymod.normalize_color(dlg.selectedColor().name())        # never black / white: they vanish on the dark app / white report
+            if c:
+                self.set_color(c)
+                self.picked.emit()
 
     def paintEvent(self, e):
         p = QPainter(self)
         p.setRenderHint(AA)
-        for i, c in enumerate(self.colors):
+        n = len(self.colors)
+        cells = list(self.colors) + ([self.custom] if self.custom else [])
+        for i, c in enumerate(cells):
             p.setPen(Qt.PenStyle.NoPen)
             p.setBrush(QColor(c))
             p.drawEllipse(QPointF(18 + i * 36, 18), 11, 11)
@@ -51,6 +110,19 @@ class ColorPicker(QWidget):
                 p.setBrush(Qt.BrushStyle.NoBrush)
                 p.setPen(QPen(QColor(T.text), 2))
                 p.drawEllipse(QPointF(18 + i * 36, 18), 15, 15)
+        # the colour wheel button: a hue sweep with a small "+"
+        cx = 18 + len(cells) * 36
+        g = QConicalGradient(QPointF(cx, 18), 90)
+        for k in range(7):
+            g.setColorAt(k / 6, QColor.fromHsvF((k % 6) / 6, 0.85, 1.0))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(g))
+        p.drawEllipse(QPointF(cx, 18), 11, 11)
+        p.setBrush(QColor(255, 255, 255, 235))
+        p.drawEllipse(QPointF(cx, 18), 5, 5)
+        p.setPen(QPen(QColor("#1d2433"), 1.6))
+        p.drawLine(QPointF(cx - 3, 18), QPointF(cx + 3, 18))
+        p.drawLine(QPointF(cx, 15), QPointF(cx, 21))
 
 
 class SubjectForm(QWidget):
@@ -69,8 +141,8 @@ class SubjectForm(QWidget):
         self.name.setMaxLength(24)
         lay.addWidget(self.name)
         self.cp = ColorPicker()
-        if s.get("color") in self.cp.colors:
-            self.cp.cur = self.cp.colors.index(s["color"])
+        if s.get("color"):
+            self.cp.set_color(s["color"])
         lay.addWidget(self.cp)
         r1 = QHBoxLayout()
         r1.addWidget(label("Show in Tests solved", 13), 1)

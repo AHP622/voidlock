@@ -59,11 +59,13 @@ class ExamSubjectForm(QWidget):
     """Add / edit one subject of the exam form: a name and a colour."""
     changed = Signal()
 
-    def __init__(self, s=None, taken=()):
-        """`taken`: names of the OTHER exam subjects (a name can be used once)."""
+    def __init__(self, s=None, taken=(), hints=None):
+        """`taken`: names of the OTHER exam subjects (a name can be used once). `hints`: {name: colour} of the study-timer
+        subjects: typing the name of one of them proposes its colour, so one lesson has one colour everywhere."""
         super().__init__()
         s = s or {}
         self.taken = {str(n).strip().casefold() for n in taken}
+        self.hints, self._touched = hints or {}, bool(s)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 4, 0, 0)
         lay.setSpacing(10)
@@ -72,12 +74,22 @@ class ExamSubjectForm(QWidget):
         self.name.setMaxLength(24)
         lay.addWidget(self.name)
         self.cp = ColorPicker()
-        if s.get("color") in self.cp.colors:
-            self.cp.cur = self.cp.colors.index(s["color"])
-        elif not s:
-            self.cp.cur = len(taken) % len(self.cp.colors)
+        if s.get("color"):
+            self.cp.set_color(s["color"])
+        else:
+            self.cp.set_color(self.cp.colors[len(self.taken) % len(self.cp.colors)])
         lay.addWidget(self.cp)
-        self.name.textChanged.connect(lambda _t: self.changed.emit())
+        self.cp.picked.connect(self._on_picked)
+        self.name.textChanged.connect(self._on_name)
+
+    def _on_picked(self):
+        self._touched = True
+
+    def _on_name(self, t):
+        c = self.hints.get(t.strip().casefold())
+        if c and not self._touched:
+            self.cp.set_color(c)
+        self.changed.emit()
 
     def valid(self):
         t = self.name.text().strip().casefold()
@@ -508,7 +520,8 @@ class ExamsPage(Page):
 
     def add_subject(self):
         sl = self.ctx.study
-        form = ExamSubjectForm(taken=[x["name"] for x in sl.exam_subjects()])
+        form = ExamSubjectForm(taken=[x["name"] for x in sl.exam_subjects()],
+                               hints={x["name"].strip().casefold(): x["color"] for x in sl.subjects()})
         m = self.ctx.new_modal().build("Add subject", None, form, "Add", validator=form.valid, icon="book", width=460)
         form.changed.connect(m.revalidate)
         if m.exec_modal():

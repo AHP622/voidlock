@@ -11,6 +11,8 @@ import os
 import re
 import shutil
 import sys
+import threading
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -93,6 +95,20 @@ def check(repo=REPO, timeout=10):
             "size": int(exe.get("size", 0)), "notes": (data.get("body") or "")[:600]}
 
 
+_DOWNLOAD_LOCK = threading.Lock()          # one download at a time (a second click / the auto-update used to fight over the same .part file)
+
+
+def _retry(fn, tries=12, wait=0.5):
+    """Windows: a file that was just written is often held for a moment by the antivirus (WinError 32 / 5). Try again."""
+    for i in range(tries):
+        try:
+            return fn()
+        except PermissionError:
+            if i == tries - 1:
+                raise
+            time.sleep(wait)
+
+
 def _sha256_file(path):
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -138,7 +154,6 @@ def download(info, dest_dir, progress=None, timeout=30, attempts=4):
     body ends early, so the old code only noticed through a checksum mismatch ("update cancelled"). Now the size is
     checked against the release's file size, a short download is resumed (Range) and the whole thing is retried a few
     times before giving up."""
-    import time as _t
     dest_dir = Path(dest_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
     try:
@@ -149,8 +164,21 @@ def download(info, dest_dir, progress=None, timeout=30, attempts=4):
     if not re.fullmatch(r"[0-9a-f]{64}", want):
         raise UpdateError("The checksum file is not a valid SHA-256.")
     expected = int(info.get("size") or 0)
+    if not _DOWNLOAD_LOCK.acquire(blocking=False):
+        raise UpdateError("The update is already downloading. Wait for it to finish.")
+    try:
+        return _download_locked(info, dest_dir, progress, timeout, attempts, want, expected)
+    finally:
+        _DOWNLOAD_LOCK.release()
+
+
+def _download_locked(info, dest_dir, progress, timeout, attempts, want, expected):
+    import time as _t
     part = dest_dir / (ASSET + ".part")
-    part.unlink(missing_ok=True)
+    try:
+        _retry(lambda: part.unlink(missing_ok=True), tries=6)
+    except OSError:
+        part = dest_dir / f"{ASSET}.{os.getpid()}.{int(_t.time())}.part"       # the old half-file is still held by something: use a fresh name
     problem = "unknown"
     for attempt in range(attempts):
         if attempt:
@@ -179,8 +207,23 @@ def download(info, dest_dir, progress=None, timeout=30, attempts=4):
             _fail_cleanup(part)
             raise UpdateError("The downloaded file is not a Windows program.")
     final = dest_dir / ASSET
-    os.replace(part, final)
+    try:
+        _retry(lambda: os.replace(part, final))
+    except PermissionError as e:
+        raise UpdateError(f"The update was downloaded but Windows (or the antivirus) is still using the file: {e}. Try again in a minute.")
     return final
+
+
+def clean_stale(dest_dir):
+    """Half-downloaded files of earlier runs (the name changes when the old one could not be removed)."""
+    try:
+        for f in Path(dest_dir).glob(ASSET + "*.part"):
+            try:
+                f.unlink()
+            except OSError:
+                pass
+    except OSError:
+        pass
 
 
 def _fail_cleanup(part):

@@ -853,11 +853,11 @@ def test_exam_subjects_and_region_rank():
     ok(report.STR["fa"]["rank_region"] in html, "the HTML report has the region rank")
     ok(report.STR["en"]["rank_region"] in report.render_csv(report.collect(st, sl, today - timedelta(days=60), today, "x", "en")), "the CSV has a region rank column")
     # renaming / deleting
-    sl.edit_exam_subject(subs["ریاضی"]["id"], name="حسابان", color="#123456")
-    ok(e1["result"]["subjects"][0]["name"] == "حسابان" and e1["result"]["subjects"][0]["color"] == "#123456", "renaming an exam subject updates the saved rows")
+    sl.edit_exam_subject(subs["ریاضی"]["id"], name="حسابان", color="#9333EA")
+    ok(e1["result"]["subjects"][0]["name"] == "حسابان" and e1["result"]["subjects"][0]["color"] == "#9333EA", "renaming an exam subject updates the saved rows")
     sl.remove_exam_subject(subs["ریاضی"]["id"])
     p = sl.exam_progress()["subjects"]
-    ok(len(p) == 1 and p[0]["name"] == "حسابان" and p[0]["color"] == "#123456" and len(p[0]["points"]) == 1, "a deleted exam subject keeps its name, colour and points")
+    ok(len(p) == 1 and p[0]["name"] == "حسابان" and p[0]["color"] == "#9333EA" and len(p[0]["points"]) == 1, "a deleted exam subject keeps its name, colour and points")
 
 
 def test_exam_subjects_migration():
@@ -906,6 +906,116 @@ def test_study_chart_clean():
         ok(sum(1 for i in sc.items if i[0] == "polygon") >= 2, f"[{lang}] exam marker and legend marker")
     R = report.collect(st, sl, today - timedelta(days=19), today, "", "en")
     ok(charts.study_chart(R).items, "a chart without a goal still draws")
+
+
+def test_subject_colors_everywhere():
+    """A subject has one colour: the one picked in the Study Timer / Exams tab is the one in every chart and report."""
+    from voidlock import charts, report
+    ok(all(study.normalize_color(c) == c for c in study.SUBJECT_COLORS), "the preset colours are never changed")
+    ok(study.normalize_color("#000000") != "#000000" and study.normalize_color("#ffffff") != "#FFFFFF", "black and white are lifted into a visible range")
+    ok(study.normalize_color("#14b8a6") == "#14B8A6" or study.normalize_color("#14b8a6"), "a normal colour is accepted in lower case")
+    ok(study.normalize_color("blue") is None and study.normalize_color("#12") is None and study.normalize_color(None) is None, "anything that is not #RRGGBB is refused")
+    r, g, b = (int(study.normalize_color("#1a1a40")[i:i + 2], 16) for i in (1, 3, 5))
+    ok(max(r, g, b) > 100, "a very dark colour gets brighter")
+    st = S.Store(tmp())
+    sl = study.StudyLog(st)
+    st.study["subjects"] = []
+    mine = "#14B8A6"
+    hes = sl.add_subject("Calculus", mine)
+    ok(hes["color"] == mine, "a custom colour is stored as it is")
+    sl.edit_subject(hes["id"], color="#000000")
+    ok(hes["color"] == study.normalize_color("#000000") and hes["color"] != "#000000", "editing keeps the colour visible")
+    sl.edit_subject(hes["id"], color=mine)
+    sl.edit_subject(hes["id"], color="not a colour")
+    ok(hes["color"] == mine, "an invalid colour leaves the subject as it was")
+    other = sl.add_subject("Physics", "#D946EF")
+    today = date.today()
+    sl.add_manual(today, hes["id"], 90)
+    sl.add_manual(today, other["id"], 30)
+    R = report.collect(st, sl, today - timedelta(days=5), today, "", "en", goal_min=300)
+    sc = charts.study_chart(R)
+    fills = {i[5] for i in sc.items if i[0] == "rect"} | {i[1 + 1] for i in sc.items if i[0] == "circle"}
+    ok(mine in {c for it in sc.items for c in it if isinstance(c, str)}, "the study chart uses the subject's own colour")
+    ok("#D946EF" in {c for it in sc.items for c in it if isinstance(c, str)}, "... for every subject")
+    # exams: own subjects, own colours; the same lesson name proposes the timer colour
+    ex_math = sl.add_exam_subject("Calculus")
+    ok(ex_math["color"] == mine, "an exam subject named like a timer subject starts with its colour")
+    ex_geo = sl.add_exam_subject("Geometry", "#3B82F6")
+    e1 = sl.add_exam("Mock 1", today - timedelta(days=9))
+    e2 = sl.add_exam("Mock 2", today - timedelta(days=2))
+    for e, k in ((e1, 0), (e2, 5)):
+        sl.set_exam_result(e["id"], 6000 + k * 100, 900 - k, [{"sid": ex_geo["id"], "pct": 40 + k, "taraz": 5500 + k * 50},
+                                                                {"sid": ex_math["id"], "pct": 50 + k, "taraz": 6000}], "", 80 - k)
+    res = report.results_data(sl, None, "en")
+    ok({x["color"] for x in res["subjects"]} == {mine, "#3B82F6"}, "the exam results carry the exam subjects' colours")
+    for kind in ("subjects", "percent"):
+        sc = report.exam_chart(res, kind, "en")
+        used = {c for it in sc.items for c in it if isinstance(c, str)}
+        ok(mine in used and "#3B82F6" in used, f"the exam {kind} chart uses the exam subjects' colours")
+    html = report.render_html(report.collect(st, sl, today - timedelta(days=20), today, "x", "en"))
+    ok("#3B82F6" in html and mine in html, "the HTML report shows the same colours")
+    sl.edit_exam_subject(ex_geo["id"], color="#EF4444")
+    res = report.results_data(sl, None, "en")
+    ok("#EF4444" in {x["color"] for x in res["subjects"]}, "recolouring an exam subject recolours its curve")
+
+
+def test_updater_download_guard():
+    """1.8.12: a second download while one runs is refused (it used to fight over the same .part file: WinError 32), and a file
+    the antivirus still holds is retried instead of failing at once."""
+    import hashlib, io, threading, time as _time
+    from voidlock import updater
+    data = b"MZ" + b"x" * 5000
+    sha = hashlib.sha256(data).hexdigest()
+    gate, started = threading.Event(), threading.Event()
+    real_urlopen, real_fetch = updater.urlopen, updater._fetch
+
+    class _R(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def fake_fetch(url, part, expected, progress, timeout):
+        started.set()
+        gate.wait(5)
+        part.write_bytes(data)
+        return len(data)
+
+    updater.urlopen = lambda req, timeout=30: _R(sha.encode())
+    updater._fetch = fake_fetch
+    try:
+        d = tmp()
+        res, err = {}, {}
+        th = threading.Thread(target=lambda: res.update(p=updater.download({"sha_url": "https://github.com/x.sha256", "url": "https://github.com/x.exe", "size": len(data)}, d)))
+        th.start()
+        ok(started.wait(5), "the first download started")
+        try:
+            updater.download({"sha_url": "https://github.com/x.sha256", "url": "https://github.com/x.exe", "size": len(data)}, d)
+            ok(False, "a second download at the same time is refused")
+        except updater.UpdateError as e:
+            ok("already" in str(e), "a second download at the same time is refused")
+        gate.set()
+        th.join(10)
+        ok(res.get("p") and res["p"].read_bytes() == data and not list(d.glob("*.part")), "the first download finishes cleanly and leaves no .part file")
+        ok(updater._DOWNLOAD_LOCK.acquire(blocking=False) and not updater._DOWNLOAD_LOCK.release(), "the lock is free again afterwards")
+    finally:
+        updater.urlopen, updater._fetch = real_urlopen, real_fetch
+    calls = []
+
+    def flaky():
+        calls.append(1)
+        if len(calls) < 3:
+            raise PermissionError(32, "in use")
+        return "done"
+
+    t0 = _time.time()
+    ok(updater._retry(flaky, tries=5, wait=0.01) == "done" and len(calls) == 3, "a file held for a moment is retried until it is free")
+    try:
+        updater._retry(lambda: (_ for _ in ()).throw(PermissionError(32, "x")), tries=2, wait=0.01)
+        ok(False, "a file that stays locked finally raises")
+    except PermissionError:
+        ok(True, "a file that stays locked finally raises")
 
 
 def test_charts():

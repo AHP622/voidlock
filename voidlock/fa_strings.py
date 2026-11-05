@@ -543,3 +543,6 @@ FA.update({
         "«{x}» از فرم آزمون حذف می‌شود. نتایجی که قبلاً برایش ثبت شده در نمودارها و گزارش‌ها می‌ماند.",
     "Fill in what you know. Percent and taraz are per subject; leave the rest empty.": "آنچه می‌دانید را پر کنید. درصد و تراز برای هر درس است؛ بقیه را خالی بگذارید.",
 })
+
+# ---------------- 1.8.12: colour wheel
+FA.update({"Custom colour…": "رنگ دلخواه…", "Choose a colour": "انتخاب رنگ"})
