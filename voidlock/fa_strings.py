@@ -546,3 +546,4 @@ FA.update({
 
 # ---------------- 1.8.12: colour wheel
 FA.update({"Custom colour…": "رنگ دلخواه…", "Choose a colour": "انتخاب رنگ"})
+FA.update({"Select": "انتخاب", "Black and white are lifted a little so they stay visible.": "مشکی و سفید کمی روشن‌تر می‌شن تا دیده بشن."})

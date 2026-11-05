@@ -3,8 +3,8 @@ import time
 from datetime import date, datetime, timedelta
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QConicalGradient, QFont, QPainter, QPainterPath, QPen
-from PySide6.QtWidgets import QColorDialog, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtGui import QBrush, QColor, QConicalGradient, QFont, QLinearGradient, QPainter, QPainterPath, QPen
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QVBoxLayout, QWidget
 
 from . import i18n, messages, study as studymod
 from .icons import paint_icon
@@ -25,21 +25,175 @@ def fmt_hms(sec):
     return f"{h:02d}:{m:02d}:{s:02d}"
 
 
-_COLOR_DIALOG_FA = {
-    "Basic colors": "رنگ‌های پایه", "Custom colors": "رنگ‌های سفارشی", "Add to Custom Colors": "افزودن به رنگ‌های سفارشی",
-    "Pick Screen Color": "برداشتن رنگ از صفحه", "Hue:": "طیف:", "Sat:": "اشباع:", "Val:": "روشنایی:", "Red:": "قرمز:",
-    "Green:": "سبز:", "Blue:": "آبی:", "Alpha channel:": "شفافیت:", "HTML:": "کد رنگ:", "OK": "تأیید", "Cancel": "انصراف",
-}
+class _SVBox(QWidget):
+    """Saturation (left to right) and brightness (bottom to top) of one hue, in one square."""
+    changed = Signal()
+
+    def __init__(self, panel):
+        super().__init__()
+        self.pn = panel
+        self.setFixedHeight(172)
+        self.setMinimumWidth(280)
+        self.setCursor(Qt.CursorShape.CrossCursor)
+
+    def _set(self, pos):
+        w, h = max(1, self.width()), max(1, self.height())
+        self.pn.s = min(1.0, max(0.0, pos.x() / w))
+        self.pn.v = 1.0 - min(1.0, max(0.0, pos.y() / h))
+        self.changed.emit()
+
+    def mousePressEvent(self, e):
+        self._set(e.position())
+
+    def mouseMoveEvent(self, e):
+        if e.buttons() & Qt.MouseButton.LeftButton:
+            self._set(e.position())
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        p.setRenderHint(AA)
+        w, h = self.width(), self.height()
+        r = QRectF(0, 0, w, h)
+        clip = QPainterPath()
+        clip.addRoundedRect(r, 12, 12)
+        p.setClipPath(clip)
+        p.fillRect(r, QColor.fromHsvF(min(self.pn.h, 0.999), 1.0, 1.0))
+        g1 = QLinearGradient(0, 0, w, 0)
+        g1.setColorAt(0, QColor(255, 255, 255))
+        g1.setColorAt(1, QColor(255, 255, 255, 0))
+        p.fillRect(r, g1)
+        g2 = QLinearGradient(0, 0, 0, h)
+        g2.setColorAt(0, QColor(0, 0, 0, 0))
+        g2.setColorAt(1, QColor(0, 0, 0))
+        p.fillRect(r, g2)
+        p.setClipping(False)
+        x, y = self.pn.s * w, (1.0 - self.pn.v) * h
+        x, y = min(w - 9.0, max(9.0, x)), min(h - 9.0, max(9.0, y))
+        p.setBrush(QColor.fromHsvF(min(self.pn.h, 0.999), self.pn.s, self.pn.v))
+        p.setPen(QPen(QColor(0, 0, 0, 120), 1))
+        p.drawEllipse(QPointF(x, y), 9.5, 9.5)
+        p.setPen(QPen(QColor(255, 255, 255), 2.2))
+        p.drawEllipse(QPointF(x, y), 8, 8)
+        p.setPen(QPen(QColor(T.border_hi), 1))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), 12, 12)
 
 
-def _translate_color_dialog(dlg):
-    """Qt's colour dialog is English-only here (no Qt translation files are shipped): translate its labels and buttons."""
-    if not i18n.is_fa():
-        return
-    for w in list(dlg.findChildren(QLabel)) + list(dlg.findChildren(QPushButton)):
-        key = w.text().replace("&", "").strip()
-        if key in _COLOR_DIALOG_FA:
-            w.setText(_COLOR_DIALOG_FA[key])
+class _HueBar(QWidget):
+    changed = Signal()
+    PAD = 11
+
+    def __init__(self, panel):
+        super().__init__()
+        self.pn = panel
+        self.setFixedHeight(26)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def _set(self, pos):
+        span = max(1, self.width() - 2 * self.PAD)
+        self.pn.h = min(1.0, max(0.0, (pos.x() - self.PAD) / span))
+        self.changed.emit()
+
+    def mousePressEvent(self, e):
+        self._set(e.position())
+
+    def mouseMoveEvent(self, e):
+        if e.buttons() & Qt.MouseButton.LeftButton:
+            self._set(e.position())
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        p.setRenderHint(AA)
+        w = self.width()
+        bar = QRectF(self.PAD, 7, w - 2 * self.PAD, 12)
+        g = QLinearGradient(bar.left(), 0, bar.right(), 0)
+        for k in range(7):
+            g.setColorAt(k / 6, QColor.fromHsvF(min(k / 6, 0.999), 1.0, 1.0))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(g))
+        p.drawRoundedRect(bar, 6, 6)
+        x = bar.left() + self.pn.h * bar.width()
+        p.setBrush(QColor.fromHsvF(min(self.pn.h, 0.999), 1.0, 1.0))
+        p.setPen(QPen(QColor(0, 0, 0, 110), 1))
+        p.drawEllipse(QPointF(x, 13), 10.5, 10.5)
+        p.setPen(QPen(QColor(255, 255, 255), 2.4))
+        p.drawEllipse(QPointF(x, 13), 9, 9)
+
+
+class _Swatch(QWidget):
+    """The colour that will really be saved."""
+
+    def __init__(self, panel):
+        super().__init__()
+        self.pn = panel
+        self.setFixedSize(64, 40)
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        p.setRenderHint(AA)
+        p.setBrush(QColor(self.pn.final()))
+        p.setPen(QPen(QColor(T.border_hi), 1))
+        p.drawRoundedRect(QRectF(0.5, 0.5, self.width() - 1, self.height() - 1), 10, 10)
+
+
+class ColorPanel(QWidget):
+    """The app's own colour picker: a saturation / brightness square, a hue bar, a live preview of the colour that will be
+    saved and a #RRGGBB field (type or paste a code, any 3 or 6 digit hex)."""
+
+    def __init__(self, start="#8B5CF6"):
+        super().__init__()
+        c = QColor(start if QColor(start).isValid() else "#8B5CF6")
+        h, s, v, _a = c.getHsvF()
+        self.h, self.s, self.v = (max(0.0, h), s, v)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 4, 0, 0)
+        lay.setSpacing(12)
+        self.sv, self.hue = _SVBox(self), _HueBar(self)
+        lay.addWidget(self.sv)
+        lay.addWidget(self.hue)
+        row = QHBoxLayout()
+        row.setSpacing(12)
+        self.sw = _Swatch(self)
+        row.addWidget(self.sw)
+        self.hex = QLineEdit(c.name().upper())
+        self.hex.setMaxLength(7)
+        self.hex.setLayoutDirection(Qt.LayoutDirection.LeftToRight)       # a code is always read left to right
+        self.hex.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self.hex.setPlaceholderText("#RRGGBB")
+        row.addWidget(self.hex, 1)
+        lay.addLayout(row)
+        self.hint = label("Black and white are lifted a little so they stay visible.", 12, color=T.text3, wrap=True)
+        lay.addWidget(self.hint)
+        self.sv.changed.connect(self._moved)
+        self.hue.changed.connect(self._moved)
+        self.hex.textEdited.connect(self._typed)
+        self._moved(update_hex=False)
+
+    def raw(self):
+        return QColor.fromHsvF(self.h if self.h < 1 else 0.999, self.s, self.v).name().upper()
+
+    def final(self):
+        return studymod.normalize_color(self.raw()) or self.raw()
+
+    def _moved(self, update_hex=True):
+        if update_hex:
+            self.hex.setText(self.raw())
+        self.hint.setVisible(self.final() != self.raw())
+        self.sv.update()
+        self.hue.update()
+        self.sw.update()
+
+    def _typed(self, t):
+        t = t.strip().lstrip("#")
+        if len(t) == 3:
+            t = "".join(ch * 2 for ch in t)
+        if len(t) == 6 and all(ch in "0123456789abcdefABCDEF" for ch in t):
+            c = QColor("#" + t)
+            h, s, v, _a = c.getHsvF()
+            if s > 0.001 and v > 0.001:
+                self.h = max(0.0, h)                       # a grey / black keeps the hue that was chosen
+            self.s, self.v = s, v
+            self._moved(update_hex=False)
 
 
 class ColorPicker(QWidget):
@@ -86,13 +240,15 @@ class ColorPicker(QWidget):
             self._open_dialog()
 
     def _open_dialog(self):
-        dlg = QColorDialog(QColor(self.color()), self.window())
-        dlg.setOption(QColorDialog.ColorDialogOption.DontUseNativeDialog, True)       # follows the app's dark style
-        dlg.setWindowTitle(i18n.tr("Choose a colour"))
-        dlg.setWindowModality(Qt.WindowModality.ApplicationModal)
-        _translate_color_dialog(dlg)
-        if dlg.exec() == QColorDialog.DialogCode.Accepted:
-            c = studymod.normalize_color(dlg.selectedColor().name())        # never black / white: they vanish on the dark app / white report
+        from .overlays import Modal
+        outer = self.parent()
+        while outer is not None and not isinstance(outer, Modal):
+            outer = outer.parent()
+        host = outer.host if outer is not None else self.window()
+        panel = ColorPanel(self.color())
+        m = Modal(host, outer).build("Choose a colour", None, panel, "Select", "Cancel", icon="edit", width=420)
+        if m.exec_modal():
+            c = panel.final()                               # never black / white: they vanish on the dark app / white report
             if c:
                 self.set_color(c)
                 self.picked.emit()

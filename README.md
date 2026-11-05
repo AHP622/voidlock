@@ -36,6 +36,10 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
+## What changed in 1.8.13
+
+- **The colour picker is the app's own.** The colour-wheel button no longer opens Qt's grey system dialog. It opens a sheet in the style of the app (same panel as every other dialog): a saturation / brightness square, a hue bar, a preview of the colour that will really be saved, and a `#RRGGBB` field (type or paste a code, 3 or 6 digits). Black and white are lifted to a visible shade and the sheet tells you when that happens.
+
 ## What changed in 1.8.12
 
 - **Any colour for a subject.** Next to the 8 preset colours there is now a colour-wheel button (Study Timer and Exam subject forms). It opens a full colour dialog (spectrum, brightness, #RRGGBB / RGB); the chosen colour appears as its own circle and is kept when you edit the subject. Black and white are lifted to a visible shade, because they would vanish on the dark app or on the white report.
