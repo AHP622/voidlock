@@ -36,6 +36,13 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
+## What changed in 1.9.0
+
+- **Sync between devices (step 1: files).** Settings → *Sync between devices*: *Save sync file…* writes a `.voidsync` file, *Import sync file…* merges one from another device. Study data is synced: subjects, study time, tests / words per day, to-dos, exams with results and exam subjects, and the focus-session history. Settings, locks, apps and points are not.
+  The first time two devices meet **everything of both is added together** (the old history goes both ways). Two subjects with the same name become one. After that, edits and deletions travel too: for each record the latest change wins, and an old file or the same file twice can never undo anything.
+  Before an import you see what will change (new / changed / removed); a backup is made first; a file that would remove a lot of what is here asks for extra care. Restore, import and reset forget what the device knew about others, so replacing the data is never read as deleting it.
+  The file format (`voidlock-sync`, version 2) is documented at the top of `voidlock/sync.py`; the Android app will use the same one, and automatic sync over Wi-Fi (QR pairing) is the next step.
+
 ## What changed in 1.8.13
 
 - **The colour picker is the app's own.** The colour-wheel button no longer opens Qt's grey system dialog. It opens a sheet in the style of the app (same panel as every other dialog): a saturation / brightness square, a hue bar, a preview of the colour that will really be saved, and a `#RRGGBB` field (type or paste a code, 3 or 6 digits). Black and white are lifted to a visible shade and the sheet tells you when that happens.

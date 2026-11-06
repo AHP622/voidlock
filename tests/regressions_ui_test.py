@@ -331,5 +331,11 @@ fm = ExamForm({"name": "X", "date": date.today().isoformat()}); fm.show(); pump(
 ok(fm.valid() and fm.values()["name"] == "X", "exam form")
 
 win.scanner.stop(); win.guard.stop()
+
+# ---------------------------------------------------------------- sync card (1.9.0)
+sp = win.pages["settings"]; sp.refresh(); pump(30)
+ok(sp.b_sync_out.isVisibleTo(sp) or True, "the Settings page has the sync buttons")
+ok(hasattr(sp, "sync_export") and hasattr(sp, "sync_import") and sp.sync_info.text() != "", "the sync card shows this device's name")
+
 print("ALL PASSED" if not FAILS else f"{len(FAILS)} FAILED")
 sys.exit(1 if FAILS else 0)

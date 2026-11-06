@@ -1145,8 +1145,25 @@ class SettingsPage(Page):
         br.addStretch(1)
         c5.lay.addLayout(br)
         self.body.addWidget(c5)
+        c6 = Card(pad=22)
+        c6.lay.addWidget(section_title("Sync between devices"))
+        c6.lay.addWidget(label("Moves your study data between this computer and another device: subjects, study time, tests, "
+                               "to-dos, exams with their results and focus sessions, including the old history. Save a file here, "
+                               "open it on the other device and import it there, then do the same the other way round. "
+                               "Both devices end with the same data. Settings, locks, apps and points are not synced.",
+                               12, color=T.text2, wrap=True))
+        self.sync_info = label("", 12, color=T.text3, wrap=True)
+        c6.lay.addWidget(self.sync_info)
+        sr = QHBoxLayout()
+        self.b_sync_out = Button("Save sync file…", "soft", "download", height=38)
+        self.b_sync_in = Button("Import sync file…", "ghost", "folder", height=38)
+        sr.addWidget(self.b_sync_out)
+        sr.addWidget(self.b_sync_in)
+        sr.addStretch(1)
+        c6.lay.addLayout(sr)
+        self.body.addWidget(c6)
         self.body.addStretch(1)
-        self._reveal = [c1, c2, cg, cp, ca, c3, c4, cu, c5]
+        self._reveal = [c1, c2, cg, cp, ca, c3, c4, cu, c5, c6]
 
         self.goal.valueChanged.connect(lambda v: self._set("daily_goal_min", v))
         self.dflt.valueChanged.connect(lambda v: self._set("default_minutes", v, plan=True))
@@ -1182,6 +1199,8 @@ class SettingsPage(Page):
         self.b_restore.clicked.connect(self.restore_flow)
         self.b_exp.clicked.connect(self.export_settings)
         self.b_imp.clicked.connect(self.import_settings)
+        self.b_sync_out.clicked.connect(self.sync_export)
+        self.b_sync_in.clicked.connect(self.sync_import)
         self.b_folder.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(ctx.store.home))))
         self.b_recover.clicked.connect(ctx.recovery_flow)
         self.b_export.clicked.connect(self.export_csv)
@@ -1253,6 +1272,10 @@ class SettingsPage(Page):
         last = i18n.fmt_when(datetime.fromtimestamp(bks[0]["mtime"])) if bks else "-"
         self.bk_info.setText(f"{len(bks)} automatic backups · last: {last}\nYour data lives outside the program folder, "
                              f"so updating or rebuilding the app never resets it:\n{s.home}")
+        from . import sync
+        di = sync.device_info(s.home)
+        seen = [f"{p['name']}: {i18n.fmt_when(datetime.fromtimestamp(p['last_sync']))}" for p in di["peers"].values() if p.get("last_sync")]
+        self.sync_info.setText(i18n.tr("This device") + f": {di['name']}" + (("\n" + i18n.tr("Last synced with") + " " + " · ".join(seen)) if seen else ""))
 
     def _check_now(self):
         self.ctx.check_updates(manual=True)
@@ -1377,6 +1400,69 @@ class SettingsPage(Page):
             self.ctx.toast("Settings imported.", "success")
         else:
             self.ctx.toast("That file is not a valid VOIDLOCK export.", "error")
+
+    def sync_export(self):
+        import json
+        from . import sync
+        name = f"voidlock-{datetime.now():%Y%m%d-%H%M}{sync.EXT}"
+        f, _ = QFileDialog.getSaveFileName(self, "Save sync file", name, f"VOIDLOCK sync (*{sync.EXT})")
+        if not f:
+            return
+        try:
+            pkg = sync.make_package(self.ctx.store)
+            with open(f, "w", encoding="utf-8") as fh:
+                json.dump(pkg, fh, ensure_ascii=False, separators=(",", ":"))
+            self.ctx.toast("Sync file saved. Import it on your other device.", "success")
+        except OSError as e:
+            self.ctx.toast(f"Could not save the file: {e}", "error")
+
+    @staticmethod
+    def _sync_lines(plan):
+        fa = i18n.is_fa()
+        names = {"entries": "study records", "subjects": "subjects", "exams": "exams", "exam_subjects": "exam subjects",
+                 "todos": "to-dos", "sessions": "focus sessions"}
+        num = lambda n: i18n.digits(f"{n:,}")
+        lines = []
+        for title, field in (("New here", "added"), ("Changed", "updated"), ("Removed here", "removed")):
+            items = [f"{num(v[field])} {i18n.tr(names[k])}" for k, v in plan.stats.items() if k in names and v[field]]
+            counters = sum(plan.stats[k][field] for k in ("tests", "words"))
+            if counters:
+                items.append(f"{num(counters)} {i18n.tr('daily test / word counts')}")
+            if items:
+                lines.append(f"{i18n.tr(title)}: " + ("، " if fa else ", ").join(items))
+        return "\n".join(lines)
+
+    def sync_import(self):
+        import os
+        from . import sync
+        if self.ctx.session.active:
+            return self.ctx.toast("End the current session first.", "warn")
+        f, _ = QFileDialog.getOpenFileName(self, "Import sync file", "", f"VOIDLOCK sync (*{sync.EXT});;All files (*)")
+        if not f:
+            return
+        try:
+            if os.path.getsize(f) > sync.MAX_BYTES:
+                raise sync.SyncError("The file is too big to be a VOIDLOCK sync file.")
+            with open(f, "rb") as fh:
+                raw = fh.read()
+            plan = sync.prepare(self.ctx.store, raw)
+        except sync.SyncError as e:
+            return self.ctx.toast(str(e), "error")
+        except OSError as e:
+            return self.ctx.toast(f"Could not read the file: {e}", "error")
+        if plan.changes() == 0:
+            return self.ctx.toast("Already up to date: nothing to change.", "info")
+        body = i18n.tr("From") + f": {plan.peer['name']}\n" + self._sync_lines(plan) + "\n" + i18n.tr("A backup of your data is made first.")
+        if plan.warn:
+            body = i18n.tr("This would remove a lot of what is on this device. Check that this is the right file and the right device.") + "\n\n" + body
+        if not self.ctx.confirm("Import sync file?", body, "Import", bool(plan.warn), "download"):
+            return
+        sync.commit(self.ctx.store, plan, sl=self.ctx.study)
+        for pg in self.ctx.pages.values():
+            pg.refresh()
+        self.ctx.session.changed.emit()
+        self.refresh()
+        self.ctx.toast("Synced.", "success")
 
     def export_csv(self):
         if not self.ctx.store.history:

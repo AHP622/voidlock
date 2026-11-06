@@ -547,3 +547,27 @@ FA.update({
 # ---------------- 1.8.12: colour wheel
 FA.update({"Custom colour…": "رنگ دلخواه…", "Choose a colour": "انتخاب رنگ"})
 FA.update({"Select": "انتخاب", "Black and white are lifted a little so they stay visible.": "مشکی و سفید کمی روشن‌تر می‌شن تا دیده بشن."})
+
+# ---------------- 1.9.0: sync between devices
+FA.update({
+    "Sync between devices": "هماهنگی دستگاه‌ها",
+    "Moves your study data between this computer and another device: subjects, study time, tests, to-dos, exams with their results and focus sessions, including the old history. Save a file here, open it on the other device and import it there, then do the same the other way round. Both devices end with the same data. Settings, locks, apps and points are not synced.":
+        "اطلاعات مطالعه‌تان را بین این کامپیوتر و دستگاه دیگر جابه‌جا می‌کند: درس‌ها، زمان مطالعه، تست‌ها، کارها، آزمون‌ها با نتایجشان و جلسه‌های تمرکز، همراه با تاریخچه‌ی قبلی. اینجا یک فایل ذخیره کنید، روی دستگاه دیگر واردش کنید، و بعد همین کار را برعکس انجام دهید. هر دو دستگاه در پایان یک داده‌ی یکسان دارند. تنظیمات، قفل‌ها، برنامه‌ها و امتیازها هماهنگ نمی‌شوند.",
+    "Save sync file…": "ذخیره‌ی فایل هماهنگی…", "Import sync file…": "ورود فایل هماهنگی…", "Save sync file": "ذخیره‌ی فایل هماهنگی",
+    "Import sync file": "ورود فایل هماهنگی", "Import sync file?": "فایل هماهنگی وارد شود؟",
+    "This device": "این دستگاه", "Last synced with": "آخرین هماهنگی با", "From": "از",
+    "New here": "جدید در اینجا", "Changed": "تغییر کرده", "Removed here": "حذف‌شده از اینجا",
+    "study records": "ثبت مطالعه", "subjects": "درس", "exams": "آزمون", "exam subjects": "درس آزمون", "to-dos": "کار", "focus sessions": "جلسه‌ی تمرکز",
+    "daily test / word counts": "شمارش روزانه‌ی تست / لغت",
+    "A backup of your data is made first.": "قبل از ورود، از داده‌هایتان پشتیبان گرفته می‌شود.",
+    "This would remove a lot of what is on this device. Check that this is the right file and the right device.":
+        "این کار بخش بزرگی از داده‌های این دستگاه را حذف می‌کند. مطمئن شوید فایل و دستگاه درست است.",
+    "Already up to date: nothing to change.": "همه‌چیز به‌روز است: چیزی برای تغییر نیست.", "Synced.": "هماهنگ شد.",
+    "Sync file saved. Import it on your other device.": "فایل هماهنگی ذخیره شد. آن را روی دستگاه دیگرتان وارد کنید.",
+    "That file is not a VOIDLOCK sync file.": "این فایل یک فایل هماهنگی VOIDLOCK نیست.",
+    "The file is too big to be a VOIDLOCK sync file.": "این فایل برای یک فایل هماهنگی VOIDLOCK بیش از حد بزرگ است.",
+    "This sync file was made by a different version of VOIDLOCK. Update both devices.": "این فایل با نسخه‌ی دیگری از VOIDLOCK ساخته شده. هر دو دستگاه را به‌روز کنید.",
+    "That sync file has no device id.": "این فایل هماهنگی شناسه‌ی دستگاه ندارد.",
+    "The file has no data.": "این فایل داده‌ای ندارد.",
+    "This file was made by this same device.": "این فایل را همین دستگاه ساخته است.",
+})

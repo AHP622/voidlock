@@ -503,8 +503,17 @@ class Store:
             if (src / f).exists():
                 shutil.copy2(src / f, self.home / f)
         self.load()
+        self._forget_sync()
         self._keep_commitments(wait)
         return True
+
+    def _forget_sync(self):
+        """The data was replaced wholesale (restore / import / reset): what a sync remembers about the other device no longer
+        matches, and would make the next sync read the difference as deletions. Forget it; the next sync only adds."""
+        if self.service:
+            return
+        from . import sync
+        sync.forget_peers(self.home)
 
     def export_all(self):
         return {"voidlock_export": SCHEMA, "settings": self.settings, "apps": self.apps,
@@ -551,6 +560,7 @@ class Store:
         for f in (self.save_study, self.save_settings, self.save_apps, self.save_history, self.save_schedule, self.save_presets,
                   self.save_classes):
             f()
+        self._forget_sync()
         return True
 
     # ---- multi-day locks
@@ -661,6 +671,7 @@ class Store:
             except OSError:
                 pass
         self.load()
+        self._forget_sync()
 
 
 # ------------------------------------------------------------------ statistics

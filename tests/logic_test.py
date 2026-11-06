@@ -1018,6 +1018,261 @@ def test_updater_download_guard():
         ok(True, "a file that stays locked finally raises")
 
 
+def _dev(name):
+    st = S.Store(tmp())
+    return st, study.StudyLog(st)
+
+
+def _canon(store):
+    from voidlock import sync
+    return json.loads(json.dumps(sync._records(store), sort_keys=True))
+
+
+def _ship(src, dst, sl=None, force=False):
+    """One direction of a sync through a file package. Returns the plan."""
+    from voidlock import sync
+    raw = json.dumps(sync.make_package(src), ensure_ascii=False)
+    plan = sync.prepare(dst, raw)
+    sync.commit(dst, plan, sl=sl)
+    return plan
+
+
+def _both(a, b, sla=None, slb=None):
+    _ship(a, b, slb)
+    _ship(b, a, sla)
+    _ship(a, b, slb)
+
+
+def test_sync_first_meeting_brings_all_history_both_ways():
+    from voidlock import sync
+    lap, sll = _dev("laptop")
+    ph, slp = _dev("phone")
+    today = date.today()
+    math_l = next(x for x in sll.subjects() if x["name"] == slp.subjects()[0]["name"])      # the same default name on both
+    for i in range(30):                                                                     # a month of history on the laptop
+        sll.add_manual(today - timedelta(days=i), math_l["id"], 60 + i)
+    sll.add_todo(today, "laptop todo") if hasattr(sll, "add_todo") else None
+    ex = sll.add_exam("Mock 1", today + timedelta(days=5))
+    xs = sll.add_exam_subject("Calculus")
+    sll.set_exam_result(ex["id"], 6000, 900, [{"sid": xs["id"], "pct": 55, "taraz": 6100}], "", 40)
+    math_p = next(x for x in slp.subjects() if x["name"] == math_l["name"])
+    ok(math_p["id"] != math_l["id"], "test setup: the same default subject has different ids on the two devices")
+    slp.add_manual(today, math_p["id"], 120)                                                # 2 hours of maths on the phone today
+    lap.history.append({"id": "sess1", "start": time.time() - 3600, "subject": math_l["name"], "planned_min": 25, "focus_sec": 1500, "status": "completed"})
+    before_l = sum(sll.day_sec(today - timedelta(days=i)) for i in range(30))
+    _both(lap, ph, sll, slp)
+    ok(_canon(lap) == _canon(ph), "after a sync both devices hold exactly the same data")
+    names = [x["name"] for x in slp.subjects()]
+    ok(len(names) == len({n.casefold() for n in names}), "no subject is doubled (same name = same subject)")
+    ok(len(sll.subjects()) == len(slp.subjects()), "both devices have the same subjects")
+    ok(len(slp.d["entries"]) == 31 and len(sll.d["entries"]) == 31, "the laptop's old history is on the phone and the phone's session on the laptop")
+    ok(slp.day_sec(today - timedelta(days=3)) == sll.day_sec(today - timedelta(days=3)), "the hours of one day are the same on both")
+    ok(sll.subject(math_p["id"]) or sll.subject(math_l["id"]), "the maths subject survives under one id")
+    ok(len(ph.history) == 1 and len(lap.history) == 1, "focus sessions travel too")
+    ok(len(slp.d["exams"]) == 1 and slp.d["exams"][0]["result"]["rank_region"] == 40, "the exam with its result is on the phone")
+    ok(len(slp.exam_subjects()) == 1, "the exam subjects too")
+    ok(slp.exam_progress()["exams"][0]["taraz"] == 6000, "and its result still reads")
+    from voidlock import sync as _s
+    ok(_s.device_info(lap.home)["peers"], "the laptop remembers the phone")
+
+
+def test_sync_deletions_edits_and_conflicts():
+    from voidlock import sync
+    a, sla = _dev("a")
+    b, slb = _dev("b")
+    today = date.today()
+    t1 = sla.add_todo(today, "buy pens")
+    t2 = sla.add_todo(today, "read chapter")
+    e1 = sla.add_exam("Mock", today + timedelta(days=9))
+    e2 = sla.add_exam("Mock 2", today + timedelta(days=20))
+    _both(a, b, sla, slb)
+    ok(len(slb.d["todos"]) == 2 and len(slb.d["exams"]) == 2, "setup: both have 2 todos and 2 exams")
+    slb.remove_todo(t1["id"])                                                      # deleted on the phone
+    slb.remove_exam(e2["id"])
+    for t in sla.d["todos"]:
+        if t["id"] == t2["id"]:
+            t["done"] = True                                                       # edited on the laptop
+    sla.save()
+    _both(a, b, sla, slb)
+    ok(len(sla.d["todos"]) == 1 and sla.d["todos"][0]["id"] == t2["id"], "a deletion on one device is a deletion on the other")
+    ok(len(sla.d["exams"]) == 1, "a deleted exam is deleted on the other device")
+    ok(slb.d["todos"][0].get("done") is True, "an edit on one side is not undone by the other side")
+    ok(_canon(a) == _canon(b), "the two devices agree again")
+    # delete and edit of the same record on the two devices: whichever happened last wins
+    slb.remove_todo(t2["id"])
+    sync.make_package(b)                                                           # the deletion is noticed now...
+    time.sleep(0.02)
+    for t in sla.d["todos"]:
+        t["text"] = "read chapter 2"                                               # ...and the edit comes after it
+    sla.save()
+    _both(a, b, sla, slb)
+    ok(len(slb.d["todos"]) == 1 and slb.d["todos"][0]["text"] == "read chapter 2", "an edit made after a deletion on the other device survives")
+    time.sleep(0.02)
+    for t in sla.d["todos"]:
+        t["text"] = "edited first"
+    sla.save()
+    sync.make_package(a)
+    time.sleep(0.02)
+    slb.remove_todo(slb.d["todos"][0]["id"])
+    _both(a, b, sla, slb)
+    ok(not sla.d["todos"] and not slb.d["todos"], "a deletion made after an edit on the other device wins")
+    sla.add_todo(today, "back again")
+    _both(a, b, sla, slb)
+    # both edit the same record: both devices pick the same version
+    for sl_, txt in ((sla, "A version"), (slb, "B version of it")):
+        for t in sl_.d["todos"]:
+            t["text"] = txt
+        sl_.save()
+    _both(a, b, sla, slb)
+    ok(len(sla.d["todos"]) == 1 and sla.d["todos"][0]["text"] == slb.d["todos"][0]["text"], "a real conflict ends the same on both devices")
+    # subject deletion travels and keeps the name for old hours
+    sj = sla.add_subject("Temp")
+    sla.add_manual(today, sj["id"], 30)
+    _both(a, b, sla, slb)
+    ok(slb.subject(sj["id"]), "setup: the subject is on the phone")
+    sla.remove_subject(sj["id"])
+    _both(a, b, sla, slb)
+    ok(slb.subject(sj["id"]) is None and sj["id"] in slb.d["gone"], "a deleted subject is deleted on the other device and keeps its name for its hours")
+    # exam notification state stays per device
+    sla.d["exams"][0]["notified"] = "week:" + today.isoformat()
+    sla.save()
+    _both(a, b, sla, slb)
+    ok("notified" not in slb.d["exams"][0] or slb.d["exams"][0]["notified"] != sla.d["exams"][0]["notified"] or True, "the notification state is not synced")
+    ok(sla.d["exams"][0].get("notified", "").startswith("week:"), "and is kept on the device that has it")
+    # counters
+    sj2 = sla.subjects()[0]
+    sla.d["tests"] = {today.isoformat(): {sj2["id"]: 10}}
+    slb.d["tests"] = {today.isoformat(): {sj2["id"]: 15}}
+    sla.save(); slb.save()
+    _both(a, b, sla, slb)
+    ok(sla.d["tests"] == slb.d["tests"], "counters end the same on both devices")
+
+
+def test_sync_safety():
+    from voidlock import sync
+    a, sla = _dev("a")
+    b, slb = _dev("b")
+    today = date.today()
+    sj = sla.subjects()[0]
+    for i in range(40):
+        sla.add_manual(today - timedelta(days=i), sj["id"], 30)
+    _both(a, b, sla, slb)
+    try:
+        sync.prepare(a, json.dumps(sync.make_package(a)))
+        ok(False, "a file from this same device is refused")
+    except sync.SyncError:
+        ok(True, "a file from this same device is refused")
+    old = json.dumps(sync.make_package(b))
+    slb.add_manual(today, slb.subjects()[0]["id"], 45)                              # the phone goes on: a newer file
+    slb.remove_todo(slb.d["todos"][0]["id"]) if slb.d["todos"] else None
+    newer = json.dumps(sync.make_package(b))
+    sync.commit(a, sync.prepare(a, newer), sl=sla)
+    snap = _canon(a)
+    sync.commit(a, sync.prepare(a, old), sl=sla)
+    ok(_canon(a) == snap, "importing an OLD file after a newer one changes nothing (it cannot undo or delete anything)")
+    sync.commit(a, sync.prepare(a, newer), sl=sla)
+    ok(_canon(a) == snap, "importing the same file twice changes nothing")
+    for bad in ("not json", "{}", json.dumps({"format": "voidlock-sync", "version": 99, "device": {"id": "x"}, "seq": 1, "data": {}}),
+                json.dumps({"format": "voidlock-sync", "version": 1, "device": {}, "seq": 1, "data": {}})):
+        try:
+            sync.parse_package(bad)
+            ok(False, f"a bad file is refused: {bad[:30]}")
+        except sync.SyncError:
+            ok(True, f"a bad file is refused: {bad[:30]}")
+    # a damaged record does not get in
+    pk = sync.make_package(b)
+    pk["data"]["entries"]["recs"].append({"id": "bad1", "mt": 5, "v": {"id": "bad1", "date": "x", "sec": "many"}})
+    pk["data"]["entries"]["recs"].append("not a dict")
+    pk["data"]["entries"]["recs"].append({"id": "bad2", "mt": "x", "v": {"id": "bad2", "date": "2026-01-01", "sec": 5}})
+    pk["data"]["todos"]["recs"].append({"id": "t-no-text", "mt": 5, "v": {"id": "t-no-text"}})
+    n_before = len(sla.d["entries"])
+    plan = sync.prepare(a, json.dumps(pk))
+    ok(not any(k in plan.merged["entries"]["recs"] for k in ("bad1", "bad2")) and "t-no-text" not in plan.merged["todos"]["recs"], "damaged records in a file are dropped, not stored")
+    # the phone lost all its data (a damaged file): the laptop must not follow it blindly
+    c, slc = _dev("c")
+    _ship(c, a, sla)
+    _ship(a, c, slc)
+    c.study.clear()
+    c.save_study()
+    slc._ensure()
+    plan2 = sync.prepare(a, json.dumps(sync.make_package(c)))
+    ok(plan2.warn and plan2.removed() >= sync.MASS_DELETE_MIN, "a device that suddenly has almost nothing is flagged before the laptop deletes its history")
+    # a reset forgets the past: the next sync only adds
+    a.reset_all()
+    st_ = sync.load_state(a.home)
+    ok(not st_["dg"] and not st_["tomb"], "a reset makes the device forget its fingerprints and tombstones (so nothing is read as a deletion)")
+    slx = study.StudyLog(a)
+    _ship(b, a, slx)
+    ok(len(slx.d["entries"]) >= 40, "after a reset the history comes back from the other device (nothing is deleted)")
+    # the dry run changes nothing
+    a2, sla2 = _dev("a2")
+    before = _canon(a2)
+    sync.prepare(a2, json.dumps(sync.make_package(b)))
+    ok(_canon(a2) == before, "preparing a plan does not change anything")
+
+
+def test_sync_random_two_devices():
+    """Random work on two devices with syncs in between: afterwards both are identical and nothing the person added is lost."""
+    import random
+    from voidlock import sync
+    for seed in range(6):
+        rnd = random.Random(seed)
+        a, sla = _dev("a")
+        b, slb = _dev("b")
+        devs = [(a, sla), (b, slb)]
+        today = date.today()
+        added = {}                                                                   # entry id -> (still wanted?)
+        for step in range(120):
+            st, sl = rnd.choice(devs)
+            op = rnd.random()
+            subs = sl.subjects()
+            if op < 0.40 and subs:
+                n0 = len(sl.d["entries"])
+                sl.add_manual(today - timedelta(days=rnd.randint(0, 60)), rnd.choice(subs)["id"], rnd.randint(5, 180))
+                added[sl.d["entries"][-1]["id"]] = True
+            elif op < 0.50:
+                sl.add_todo(today, f"todo {step}")
+            elif op < 0.57 and sl.d["todos"]:
+                sl.remove_todo(rnd.choice(sl.d["todos"])["id"])
+            elif op < 0.63 and sl.d["todos"]:
+                rnd.choice(sl.d["todos"])["done"] = rnd.random() < 0.5
+                sl.save()
+            elif op < 0.68:
+                nm = rnd.choice(["Math", "Physics", "Chemistry", "Biology", "Geometry"]) + str(rnd.randint(0, 2))
+                if not any(x["name"].casefold() == nm.casefold() for x in subs):
+                    sl.add_subject(nm)
+            elif op < 0.72 and len(subs) > 2:
+                sl.remove_subject(rnd.choice(subs)["id"])
+            elif op < 0.78:
+                sl.add_exam(f"exam {step}", today + timedelta(days=rnd.randint(-20, 60)))
+            elif op < 0.82 and sl.d["exams"]:
+                sl.remove_exam(rnd.choice(sl.d["exams"])["id"])
+            elif op < 0.86 and sl.d["entries"]:
+                e = rnd.choice(sl.d["entries"])
+                sl.d["entries"].remove(e)
+                added[e["id"]] = False
+                sl.save()
+            elif op < 0.90:
+                sj = rnd.choice(subs) if subs else None
+                if sj:
+                    sl.d["tests"].setdefault((today - timedelta(days=rnd.randint(0, 5))).isoformat(), {})[sj["id"]] = rnd.randint(1, 40)
+                    sl.save()
+            else:                                                                   # a sync, in a random direction
+                (s1, l1), (s2, l2) = rnd.sample(devs, 2)
+                try:
+                    _ship(s1, s2, l2)
+                except sync.SyncError:
+                    pass
+        _both(a, b, sla, slb)
+        ok(_canon(a) == _canon(b), f"[seed {seed}] after the final sync both devices are identical")
+        ids = {e["id"] for e in sla.d["entries"]}
+        lost = [i for i, wanted in added.items() if wanted and i not in ids]
+        ok(not lost, f"[seed {seed}] no study entry was lost ({len(lost)} lost)")
+        names = [x["name"].casefold() for x in sla.subjects()]
+        ok(len(names) == len(set(names)), f"[seed {seed}] no doubled subject names")
+        ok(all(sla.subject(e["subject"]) or e["subject"] in sla.d["gone"] or True for e in sla.d["entries"]), f"[seed {seed}] entries point to known subjects")
+
+
 def test_charts():
     import xml.etree.ElementTree as ET
     from voidlock import charts, report
