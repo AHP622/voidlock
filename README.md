@@ -36,6 +36,13 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
+## What changed in 1.10.0
+
+- **VOIDLOCK for Android** (`android/`, see `android/README.md`): study timer, subjects with any colour, tests / words, tasks, daily chart, exams with results and region rank, Persian + English, offline. It is a web UI in a small native shell; the same GitHub release carries `VoidLock.exe` and `VoidLock.apk`, and each app updates itself from it.
+- **Wi-Fi sync with the phone** (`voidlock/lansync.py`): Settings → *Sync with the phone over Wi-Fi* turns on a small server on the local network (any modem, even a SIM modem, or the phone's hotspot; no internet). *Pair a phone…* shows a 6-digit code; the phone finds this computer, you type the code once, and from then on both stay identical by themselves while the phone app is open: a change on either side reaches the other within seconds. The phone sends its data and receives the merged result in one request. A merge that would delete a lot is refused over Wi-Fi (use a file, where the computer asks first). Plain HTTP inside the home network; the token is random and only its hash is stored here.
+- Region rank, own exam subjects and every sync rule from 1.9.0 are the same on the phone; `tests` check that the Python and JavaScript implementations always end with identical data.
+- Subjects, to-dos and other lists keep their order when synced. The device id is saved on first use.
+
 ## What changed in 1.9.0
 
 - **Sync between devices (step 1: files).** Settings → *Sync between devices*: *Save sync file…* writes a `.voidsync` file, *Import sync file…* merges one from another device. Study data is synced: subjects, study time, tests / words per day, to-dos, exams with results and exam subjects, and the focus-session history. Settings, locks, apps and points are not.

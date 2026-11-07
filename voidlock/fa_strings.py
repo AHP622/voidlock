@@ -571,3 +571,18 @@ FA.update({
     "The file has no data.": "این فایل داده‌ای ندارد.",
     "This file was made by this same device.": "این فایل را همین دستگاه ساخته است.",
 })
+
+# ---------------- 1.10.0: Wi-Fi sync with the phone
+FA.update({
+    "Sync with the phone over Wi-Fi": "هماهنگی با گوشی روی وای‌فای",
+    "While VOIDLOCK is running, a paired phone on the same network (your modem, or the phone's hotspot) syncs with this computer by itself. No internet is needed.":
+        "تا وقتی VOIDLOCK باز است، گوشیِ جفت‌شده که روی همان شبکه باشد (مودم شما یا هات‌اسپات خود گوشی) خودکار با این کامپیوتر هماهنگ می‌شود. اینترنت لازم نیست.",
+    "Pair a phone…": "جفت‌کردن گوشی…", "Pair a phone": "جفت‌کردن گوشی", "Forget phones": "فراموش‌کردن گوشی‌ها",
+    "Forget all paired phones?": "همه‌ی گوشی‌های جفت‌شده فراموش شوند؟", "Forget": "فراموش کن",
+    "They stop syncing until you pair them again. Their data stays where it is.": "تا دوباره جفتشان نکنید هماهنگ نمی‌شوند. داده‌هایشان سر جایش می‌ماند.",
+    "Waiting for the phone on": "در انتظار گوشی روی", "no network found": "شبکه‌ای پیدا نشد", "Paired phones": "گوشی‌های جفت‌شده",
+    "Could not start the sync server": "سرور هماهنگی راه نیفتاد", "This computer": "این کامپیوتر", "Turn on Wi-Fi sync first.": "اول هماهنگی روی وای‌فای را روشن کنید.",
+    "On the phone: open VOIDLOCK, go to Sync, tap Find computer and type this code. The code works once and for 10 minutes. If Windows asks about the firewall, allow private networks.":
+        "روی گوشی: VOIDLOCK را باز کنید، به بخش هماهنگی بروید، «پیدا کردن کامپیوتر» را بزنید و این کد را بنویسید. کد فقط یک بار و تا ۱۰ دقیقه کار می‌کند. اگر ویندوز درباره‌ی فایروال پرسید، شبکه‌های خصوصی را مجاز کنید.",
+    "Done": "تمام", "Synced with": "هماهنگ شد با",
+})

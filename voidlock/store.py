@@ -131,6 +131,7 @@ DEFAULT_SETTINGS = {
     "tray_hint_shown": False,
     "update_check": True,
     "update_auto_install": True,
+    "lan_sync": False,           # the Wi-Fi sync server for the phone
     "update_last_check": 0,
     "long_cooldown": 600,        # seconds to wait before a multi-day lock can be released early
     "last_subject": "",
@@ -162,7 +163,7 @@ _INT_RANGES = {
 }
 _ENUMS = {"reduce_motion": ("auto", "on", "off"), "language": ("en", "fa"), "theme": THEME_KEYS,
           "sound": STYLE_ORDER, "week_start": (5, 6, 0)}
-_BOOLS = ("female_mascot", "strict_default", "play_tracking", "game_friday_only", "update_check", "update_auto_install",
+_BOOLS = ("female_mascot", "strict_default", "play_tracking", "game_friday_only", "update_check", "update_auto_install", "lan_sync",
           "close_to_tray", "tray_at_login", "tray_hint_shown")
 # never taken from an imported file: they decide where code comes from
 _NOT_IMPORTED = ("update_last_check", "update_last_tag", "update_notified")

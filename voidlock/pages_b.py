@@ -10,6 +10,7 @@ from PySide6.QtGui import QDesktopServices, QFont
 from PySide6.QtWidgets import (QFileDialog, QHBoxLayout, QLineEdit, QSlider, QVBoxLayout, QWidget)
 
 from . import classes as classtools, i18n, messages, rules, sounds
+from . import lansync
 from .guard import emergency_recover
 from .pages_a import Page
 from .store import completed_count, fmt_hm, last_days, streak_days, today_focus_sec, uid, week_order
@@ -1154,6 +1155,20 @@ class SettingsPage(Page):
                                12, color=T.text2, wrap=True))
         self.sync_info = label("", 12, color=T.text3, wrap=True)
         c6.lay.addWidget(self.sync_info)
+        c6.lay.addWidget(Divider())
+        self.lan_on = Toggle(st.get("lan_sync", False))
+        c6.lay.addLayout(setting_row("Sync with the phone over Wi-Fi", "While VOIDLOCK is running, a paired phone on the same network "
+                                     "(your modem, or the phone's hotspot) syncs with this computer by itself. No internet is needed.", self.lan_on))
+        self.lan_info = label("", 12, color=T.text3, wrap=True)
+        c6.lay.addWidget(self.lan_info)
+        lr = QHBoxLayout()
+        self.b_pair = Button("Pair a phone…", "soft", "plus", height=38)
+        self.b_unpair = Button("Forget phones", "ghost", "trash", height=38)
+        lr.addWidget(self.b_pair)
+        lr.addWidget(self.b_unpair)
+        lr.addStretch(1)
+        c6.lay.addLayout(lr)
+        c6.lay.addWidget(Divider())
         sr = QHBoxLayout()
         self.b_sync_out = Button("Save sync file…", "soft", "download", height=38)
         self.b_sync_in = Button("Import sync file…", "ghost", "folder", height=38)
@@ -1201,6 +1216,10 @@ class SettingsPage(Page):
         self.b_imp.clicked.connect(self.import_settings)
         self.b_sync_out.clicked.connect(self.sync_export)
         self.b_sync_in.clicked.connect(self.sync_import)
+        self.lan_on.toggled.connect(self._lan_toggle)
+        self.b_pair.clicked.connect(self.pair_phone)
+        self.b_unpair.clicked.connect(self.forget_phones)
+        ctx.lan.changed.connect(self._lan_refresh)
         self.b_folder.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(ctx.store.home))))
         self.b_recover.clicked.connect(ctx.recovery_flow)
         self.b_export.clicked.connect(self.export_csv)
@@ -1275,6 +1294,7 @@ class SettingsPage(Page):
         from . import sync
         di = sync.device_info(s.home)
         seen = [f"{p['name']}: {i18n.fmt_when(datetime.fromtimestamp(p['last_sync']))}" for p in di["peers"].values() if p.get("last_sync")]
+        self._lan_refresh()
         self.sync_info.setText(i18n.tr("This device") + f": {di['name']}" + (("\n" + i18n.tr("Last synced with") + " " + " · ".join(seen)) if seen else ""))
 
     def _check_now(self):
@@ -1400,6 +1420,59 @@ class SettingsPage(Page):
             self.ctx.toast("Settings imported.", "success")
         else:
             self.ctx.toast("That file is not a valid VOIDLOCK export.", "error")
+
+    def _lan_toggle(self, on):
+        self._set("lan_sync", bool(on))
+        self.ctx.lan.apply()
+        self._lan_refresh()
+
+    def _lan_refresh(self):
+        lan = self.ctx.lan
+        on = bool(self.ctx.store.settings.get("lan_sync"))
+        self.lan_on.set_silent(on)
+        phones = lan.server.paired() if on else []
+        lines = []
+        if on and lan.server.running:
+            ips = lansync.local_addresses()
+            lines.append(i18n.tr("Waiting for the phone on") + ": " + (" · ".join(f"{i18n.digits(ip)}:{i18n.digits(lan.server.port)}" for ip in ips[:3]) or i18n.tr("no network found")))
+        if on and lan.error:
+            lines.append(i18n.tr("Could not start the sync server") + f": {lan.error}")
+        if phones:
+            lines.append(i18n.tr("Paired phones") + ": " + "، ".join(p["name"] for p in phones) if i18n.is_fa() else
+                         "Paired phones: " + ", ".join(p["name"] for p in phones))
+        self.lan_info.setText("\n".join(lines))
+        self.lan_info.setVisible(bool(lines))
+        self.b_pair.setVisible(on)
+        self.b_unpair.setVisible(bool(phones))
+
+    def pair_phone(self):
+        lan = self.ctx.lan
+        if not lan.server.running:
+            return self.ctx.toast("Turn on Wi-Fi sync first.", "warn")
+        code = lan.server.new_code()
+        ips = lansync.local_addresses()
+        body = QWidget()
+        lay = QVBoxLayout(body)
+        lay.setContentsMargins(0, 4, 0, 0)
+        lay.setSpacing(10)
+        c = label(i18n.digits(f"{code[:3]} {code[3:]}"), 40, QFont.Weight.Bold, T.text, mono=True)
+        c.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lay.addWidget(c)
+        where = " · ".join(f"{i18n.digits(ip)}:{i18n.digits(lan.server.port)}" for ip in ips[:3]) or i18n.tr("no network found")
+        lay.addWidget(label(i18n.tr("This computer") + f": {where}", 12, color=T.text2, wrap=True))
+        lay.addWidget(label("On the phone: open VOIDLOCK, go to Sync, tap Find computer and type this code. The code works once and "
+                            "for 10 minutes. If Windows asks about the firewall, allow private networks.", 12, color=T.text3, wrap=True))
+        self.ctx.new_modal().build("Pair a phone", None, body, "Done", icon="info", width=480).exec_modal()
+        lan.server._code = None
+        self._lan_refresh()
+
+    def forget_phones(self):
+        lan = self.ctx.lan
+        if self.ctx.confirm("Forget all paired phones?", "They stop syncing until you pair them again. Their data stays where it is.",
+                            "Forget", True, "trash"):
+            for p in lan.server.paired():
+                lan.server.unpair(p["id"])
+            self._lan_refresh()
 
     def sync_export(self):
         import json

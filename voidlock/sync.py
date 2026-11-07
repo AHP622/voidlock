@@ -119,13 +119,20 @@ def _state_path(home):
 
 
 def load_state(home):
-    s = read_json(_state_path(home))
-    s = s if isinstance(s, dict) else {}
-    s.setdefault("device_id", uid())
+    raw = read_json(_state_path(home))
+    s = raw if isinstance(raw, dict) else {}
+    fresh = not isinstance(s.get("device_id"), str) or not s["device_id"]
+    if fresh:
+        s["device_id"] = uid()                          # the identity must survive the very first call, not only the first save
     s.setdefault("device_name", platform.node() or "VOIDLOCK")
-    for k in ("dg", "mt", "tomb", "peers"):
+    for k in ("dg", "mt", "tomb", "peers", "paired"):
         if not isinstance(s.get(k), dict):
             s[k] = {}
+    if fresh:
+        try:
+            write_json(_state_path(home), s)
+        except OSError:
+            pass
     return s
 
 
@@ -275,7 +282,7 @@ def merge(local, remote):
     for kind in KINDS:
         L, R = local[kind], remote[kind]
         out = {"recs": {}, "tomb": {}}
-        for rid in set(L["recs"]) | set(R["recs"]) | set(L["tomb"]) | set(R["tomb"]):
+        for rid in dict.fromkeys([*L["recs"], *R["recs"], *L["tomb"], *R["tomb"]]):        # this device's order first, then the other's
             lr, rr = L["recs"].get(rid), R["recs"].get(rid)
             if lr is not None and rr is not None and lr["v"] != rr["v"]:
                 conflicts += 1
@@ -312,7 +319,8 @@ def warnings(local, st):
 
 # ------------------------------------------------------------------ packages (the file / the network message)
 def _pack(state):
-    return {kind: {"recs": [{"id": rid, "mt": e["mt"], "v": e["v"]} for rid, e in sorted(state[kind]["recs"].items())],
+    """Records keep the order of this device's lists (the order of the subjects, to-dos... is part of what is synced)."""
+    return {kind: {"recs": [{"id": rid, "mt": e["mt"], "v": e["v"]} for rid, e in state[kind]["recs"].items()],
                    "tomb": dict(sorted(state[kind]["tomb"].items()))} for kind in KINDS}
 
 
@@ -422,12 +430,21 @@ def prepare(store, raw, home=None):
     return Plan(pkg["device"], mine, pkg["data"], merged, remap, conflicts, st, warnings(mine, st))
 
 
-def commit(store, plan, home=None, sl=None):
-    """Applies a plan: a backup first, then the merged data; then the fingerprints are brought in line with what is now here."""
+BACKUP_EVERY = 30 * 60                              # automatic (Wi-Fi) syncs: at most one safety backup per 30 minutes
+
+
+def commit(store, plan, home=None, sl=None, backup=True):
+    """Applies a plan: a backup first (backup=True always, "auto" at most every 30 minutes, False never), then the merged data;
+    then the fingerprints are brought in line with what is now here."""
     home = home or store.home
-    store.snapshot("before-sync", force=True)
-    apply(store, plan.merged, plan.remap, sl)
     s = load_state(home)
+    if backup == "auto":
+        if time.time() - float(s.get("last_backup", 0)) >= BACKUP_EVERY:
+            store.snapshot("before-sync", force=True)
+            s["last_backup"] = time.time()
+    elif backup:
+        store.snapshot("before-sync", force=True)
+    apply(store, plan.merged, plan.remap, sl)
     cur = _records(store)
     s["dg"], s["mt"] = {}, {}
     for kind in KINDS:
@@ -439,6 +456,23 @@ def commit(store, plan, home=None, sl=None):
     s["tomb"] = {f"{kind}|{rid}": ts for kind in KINDS for rid, ts in plan.merged[kind]["tomb"].items() if rid not in cur[kind]}
     s["peers"][plan.peer["id"]] = {"name": plan.peer["name"], "last_sync": int(time.time())}
     save_state(home, s)
+
+
+def touch_peer(home, peer):
+    """Notes that a sync with this device took place (nothing had to change)."""
+    s = load_state(home)
+    s["peers"][peer["id"]] = {"name": peer["name"], "last_sync": int(time.time())}
+    save_state(home, s)
+
+
+def content_rev(store):
+    """A short fingerprint of the synced content (not of times): it changes exactly when the data changes."""
+    cur = _records(store)
+    h = hashlib.sha1()
+    for kind in KINDS:
+        for rid in sorted(cur[kind]):
+            h.update(f"{kind}|{rid}|{_digest(cur[kind][rid])}\n".encode("utf-8"))
+    return h.hexdigest()[:16]
 
 
 def _sorted_by(items, *keys):

@@ -15,6 +15,7 @@ from . import classes as classtools
 from . import messages, rules, sounds, updater
 from .core import Scanner, SessionController, UpdateWorker
 from . import i18n
+from .lan_ui import LanService
 from .guard import GuardClient, admin_task_outdated, child_env, emergency_recover, is_protected, persist_protection_async
 from .i18n import tr
 from .icons import paint_icon
@@ -318,6 +319,7 @@ class MainWindow(QMainWindow):
         self.study = StudyLog(store)
         self.study.restore()
         self.points = Points(store)
+        self.lan = LanService(self)
         self._last_event_t = time.time()
         self._popups = []
         self._last_hb = 0.0
@@ -365,6 +367,7 @@ class MainWindow(QMainWindow):
         self.session.notify.connect(self.toast)
         self.session.changed.connect(self._on_changed)
         self.session.finished.connect(self._on_finished)
+        self.lan.apply()                                  # the Wi-Fi sync server, if it is switched on
 
         for i, k in enumerate(self.keys):
             QShortcut(QKeySequence(f"Ctrl+{i + 1}"), self, activated=lambda k=k: self.goto(k))
@@ -510,6 +513,7 @@ class MainWindow(QMainWindow):
 
     def quit_app(self):
         self._quitting = True
+        self.lan.stop()
         self.close()                       # (closeEvent asks first when a session is running, and resets the flag on "no")
 
     def closeEvent(self, e):

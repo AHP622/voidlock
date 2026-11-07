@@ -1273,6 +1273,102 @@ def test_sync_random_two_devices():
         ok(all(sla.subject(e["subject"]) or e["subject"] in sla.d["gone"] or True for e in sla.d["entries"]), f"[seed {seed}] entries point to known subjects")
 
 
+def test_lan_sync_server():
+    """The phone's Wi-Fi sync: pairing, login, one request for both directions, and the safety rules."""
+    import urllib.request, urllib.error
+    from voidlock import lansync, sync
+    lap, sll = _dev("laptop")
+    ph, slp = _dev("phone")
+    today = date.today()
+    sj = sll.subjects()[0]
+    for i in range(25):
+        sll.add_manual(today - timedelta(days=i), sj["id"], 30 + i)
+    sll.add_todo(today, "from the laptop")
+    changes = []
+    backend = lansync.StoreBackend(lap, sll, on_changed=lambda plan: changes.append(plan.changes()))
+    srv = lansync.LanServer(backend)
+    port = srv.start()
+    base = f"http://127.0.0.1:{port}"
+
+    def call(method, path, body=None, token=None):
+        req = urllib.request.Request(base + path, data=None if body is None else json.dumps(body).encode("utf-8"), method=method)
+        if body is not None:
+            req.add_header("Content-Type", "application/json")
+        if token:
+            req.add_header("Authorization", "Bearer " + token)
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return r.status, json.loads(r.read().decode("utf-8")), dict(r.headers)
+        except urllib.error.HTTPError as e:
+            return e.code, json.loads(e.read().decode("utf-8") or "{}"), dict(e.headers)
+    try:
+        st, js, hd = call("GET", "/v1/ping")
+        ok(st == 200 and js["app"] == "voidlock" and js["device"]["id"], "ping tells the phone this is a VOIDLOCK computer (no login needed)")
+        ok(hd.get("Access-Control-Allow-Origin") == "*", "answers carry CORS headers (for testing in a browser)")
+        pd = sync.device_info(ph.home)
+        dev = {"id": pd["id"], "name": "My phone"}
+        ok(call("GET", "/v1/rev")[0] == 401, "no token: refused")
+        ok(call("POST", "/v1/sync", {"x": 1})[0] == 401, "sync without a token is refused")
+        ok(call("POST", "/v1/pair", {"code": "000000", "device": dev})[0] == 409, "pairing without a code shown is refused")
+        code = srv.new_code()
+        wrong = "000000" if code != "000000" else "111111"
+        ok(call("POST", "/v1/pair", {"code": wrong, "device": dev})[0] == 403, "a wrong code is refused")
+        st, js, _ = call("POST", "/v1/pair", {"code": code, "device": dev})
+        token = js.get("token")
+        ok(st == 200 and token and len(token) >= 32, "the right code gives a token")
+        ok(call("POST", "/v1/pair", {"code": code, "device": dev})[0] == 409, "a code works only once")
+        ok(srv.paired() and srv.paired()[0]["name"] == "My phone", "the computer lists the paired phone")
+        stored = open(lap.home / "sync.json", encoding="utf-8").read()
+        ok(token not in stored, "the token itself is not stored on the computer (only its hash)")
+        ok(call("GET", "/v1/rev", token="nope")[0] == 401, "a wrong token is refused")
+        st, js, _ = call("GET", "/v1/rev", token=token)
+        rev0 = js["rev"]
+        ok(st == 200 and rev0, "a paired phone can ask for the revision")
+        # lock after 5 wrong codes
+        for _i in range(5):
+            code = srv.new_code()
+            call("POST", "/v1/pair", {"code": "999999" if code != "999999" else "888888", "device": dev})
+        ok(call("POST", "/v1/pair", {"code": srv.new_code(), "device": dev})[0] in (429, 409), "5 wrong codes lock pairing for a while")
+        srv._locked_until = 0
+        # the phone has its own work; one request syncs both ways
+        slp.add_manual(today, slp.subjects()[0]["id"], 120)
+        raw = sync.make_package(ph)
+        st, js, _ = call("POST", "/v1/sync", raw, token)
+        ok(st == 200 and js["changed"] and js["rev"] != rev0, "the phone's data reaches the computer in one request")
+        plan = sync.prepare(ph, json.dumps(js["package"]))
+        sync.commit(ph, plan, sl=slp)
+        ok(_canon(lap) == _canon(ph), "after one request both devices hold the same data")
+        ok(len(slp.d["entries"]) == 26 and len(sll.d["entries"]) == 26, "the laptop's 25 days of history are on the phone, the phone's 2 hours on the laptop")
+        ok(changes and changes[0] > 0, "the app is told that data changed (it refreshes its pages)")
+        st, js2, _ = call("GET", "/v1/rev", token=token)
+        ok(js2["rev"] == js["rev"], "the revision handed back is the computer's current one")
+        sll.add_todo(today, "typed on the laptop later")
+        ok(call("GET", "/v1/rev", token=token)[1]["rev"] != js["rev"], "a change on the computer changes the revision (the phone notices it)")
+        st, js3, _ = call("POST", "/v1/sync", sync.make_package(ph), token)
+        sync.commit(ph, sync.prepare(ph, json.dumps(js3["package"])), sl=slp)
+        ok(any(t["text"] == "typed on the laptop later" for t in slp.d["todos"]), "and the next sync brings it to the phone")
+        n0 = len(changes)
+        st, js4, _ = call("POST", "/v1/sync", sync.make_package(ph), token)
+        ok(st == 200 and not js4["changed"] and len(changes) == n0, "a sync with nothing new changes nothing and does not disturb the app")
+        # a damaged request
+        ok(call("POST", "/v1/sync", {"format": "nope"}, token)[0] == 422, "a request that is not a sync package is refused")
+        # a phone that lost everything must not wipe the computer
+        c, slc = _dev("c")
+        for _i in range(2):
+            plan = sync.prepare(c, json.dumps(sync.make_package(lap)))
+            sync.commit(c, plan, sl=slc)
+        c.study.clear(); c.save_study(); slc._ensure()
+        st, js5, _ = call("POST", "/v1/sync", sync.make_package(c), token)
+        ok(st == 409 and js5["error"] == "needs_review", "a merge that would remove a lot of data is not done automatically")
+        ok(len(sll.d["entries"]) == 26, "nothing was removed")
+        srv.unpair(sync.device_info(ph.home)["id"])
+        ok(call("GET", "/v1/rev", token=token)[0] == 401, "after the computer forgets the phone its token stops working")
+        ok(all(len(a.split(".")) == 4 for a in lansync.local_addresses()), "local addresses are IPv4")
+    finally:
+        srv.stop()
+    ok(not srv.running, "the server stops")
+
+
 def test_charts():
     import xml.etree.ElementTree as ET
     from voidlock import charts, report

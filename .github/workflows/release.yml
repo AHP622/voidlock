@@ -1,11 +1,15 @@
 name: release
+# Push a tag like v1.10.0 (it must equal __version__ in voidlock/__init__.py). One release carries BOTH apps:
+#   VoidLock.exe (+ installer)  built on Windows          -> the computer app updates itself from it
+#   VoidLock.apk                built on Linux (Android)  -> the phone app updates itself from it
+# If the Android build fails, the Windows release is still published (see the "android" job in the Actions tab).
 on:
   push:
     tags: ["v*"]
 permissions:
   contents: write
 jobs:
-  build:
+  windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -47,11 +51,87 @@ jobs:
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$v" installer\voidlock.iss
           $h = (Get-FileHash dist/VoidLock-Setup.exe -Algorithm SHA256).Hash.ToLower()
           "$h  VoidLock-Setup.exe" | Out-File -Encoding ascii dist/VoidLock-Setup.exe.sha256
-      - uses: softprops/action-gh-release@v2
+      - uses: actions/upload-artifact@v4
         with:
-          files: |
+          name: windows-dist
+          path: |
             dist/VoidLock.exe
             dist/VoidLock.exe.sha256
             dist/VoidLock-Setup.exe
             dist/VoidLock-Setup.exe.sha256
+          if-no-files-found: error
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Tests of the phone app's logic
+        run: node android/tests/js_unit_test.js
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Version (same number as the Windows app) and tag check
+        run: |
+          V=$(grep -oP '__version__ = "\K[^"]+' voidlock/__init__.py)
+          if [ "v$V" != "$GITHUB_REF_NAME" ]; then echo "::error::Tag $GITHUB_REF_NAME does not match __version__ $V"; exit 1; fi
+          IFS=. read MA MI PA <<< "$V"
+          echo "VOIDLOCK_VERSION_NAME=$V" >> "$GITHUB_ENV"
+          echo "VOIDLOCK_VERSION_CODE=$((MA*1000000 + MI*1000 + PA))" >> "$GITHUB_ENV"
+          cat > android/app/src/main/assets/www/config.js <<CFG
+          window.VOIDLOCK_CONFIG = { repo: "$GITHUB_REPOSITORY", version: "$V" };
+          CFG
+      - name: Signing key (the same key must sign every release, or phones cannot update)
+        env:
+          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KS" ]; then echo "::error::The secret ANDROID_KEYSTORE_BASE64 is missing. See android/README.md, step 3."; exit 1; fi
+          echo "$KS" | base64 -d > "$RUNNER_TEMP/voidlock.jks"
+          echo "VOIDLOCK_KEYSTORE=$RUNNER_TEMP/voidlock.jks" >> "$GITHUB_ENV"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+      - name: Build the APK
+        env:
+          VOIDLOCK_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          VOIDLOCK_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          VOIDLOCK_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: gradle -p android assembleRelease --no-daemon
+      - name: Name the APK and write its SHA-256
+        run: |
+          mkdir -p apk
+          cp android/app/build/outputs/apk/release/app-release.apk apk/VoidLock.apk
+          (cd apk && sha256sum VoidLock.apk > VoidLock.apk.sha256)
+          cat apk/VoidLock.apk.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: |
+            apk/VoidLock.apk
+            apk/VoidLock.apk.sha256
+          if-no-files-found: error
+
+  release:
+    needs: [windows, android]
+    # publish even if the Android build failed: the computer app must never be held back by the phone app
+    if: ${{ !cancelled() && needs.windows.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-dist
+          path: dist
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: android-apk
+          path: apk
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*
+            apk/*
           generate_release_notes: true

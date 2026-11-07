@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The computer answers over plain HTTP on the home network (see voidlock/lansync.py). The app only talks to private addresses
+     over HTTP (Bridge.kt checks it); everything else, including GitHub, uses HTTPS. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
