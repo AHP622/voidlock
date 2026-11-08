@@ -88,19 +88,24 @@
         h('div', { style: { height: '10px' } }), h('button', { class: 'btn block', onclick: function () { manualSheet(App, sel); } }, UI.ic('plus'), t('add_time'))]));
 
       var times = Core.daySubjectTimes(db, today), by = {}; times.forEach(function (x) { by[x.subject.id] = x.sec; });
-      var rows = db.subjects.map(function (s) {
-        var sec = by[s.id] || 0, row = h('div', { class: 'item' },
+      function subjectRow(s) {
+        var sec = by[s.id] || 0;
+        return h('div', { class: 'item' },
           h('div', { class: 'grow', onclick: function () { if (!running) { db.settings.last_subject = s.id; App.refresh(); } } },
             h('div', { class: 'row' }, subjectDot(s.color), h('b', null, s.name), h('span', { class: 'muted small num', style: { marginInlineStart: 'auto' } }, I18n.dur(sec))),
             h('div', { class: 'bar', style: { '--c': s.color, marginTop: '6px' } }, h('i', { style: { width: Math.min(100, goal ? sec / goal * 100 * Math.max(1, db.subjects.length / 2) : 0) + '%' } }))),
           stepper(db, App, 'tests', s, today, s.tests !== false), stepper(db, App, 'words', s, today, !!s.words));
-        return row;
-      });
-      host.appendChild(card(t('by_subject'), h('div', { class: 'list' }, rows)));
+      }
+      // subjects with a tests counter and subjects with a words counter are two separate groups, so they do not get mixed up
+      var testSubjects = db.subjects.filter(function (s) { return !s.words; }), wordSubjects = db.subjects.filter(function (s) { return !!s.words; });
+      var groups = [];
+      if (testSubjects.length) groups.push(h('div', { class: 'group' }, wordSubjects.length ? h('div', { class: 'group-title' }, t('group_tests')) : null, h('div', { class: 'list' }, testSubjects.map(subjectRow))));
+      if (wordSubjects.length) groups.push(h('div', { class: 'group' }, h('div', { class: 'group-title' }, t('group_words')), h('div', { class: 'list' }, wordSubjects.map(subjectRow))));
+      host.appendChild(card(t('by_subject'), groups));
       var ents = db.entries.filter(function (e) { return e.date === today; }).sort(function (a, b) { return (b.t || 0) - (a.t || 0); });
       host.appendChild(card(t('entries_today'), ents.length ? h('div', { class: 'list' }, ents.map(function (e) {
         var s = Core.subjectOrGhost(db, e.subject);
-        return h('div', { class: 'item' }, subjectDot(s.color), h('div', { class: 'grow' }, h('b', null, s.name), h('div', { class: 'small dim' }, I18n.dur(e.sec) + (e.source === 'manual' ? ' · ✎' : ''))),
+        return h('div', { class: 'item' }, subjectDot(s.color), h('div', { class: 'grow' }, h('b', null, I18n.subjName(s)), h('div', { class: 'small dim' }, I18n.dur(e.sec) + (e.source === 'manual' ? ' · ✎' : ''))),
           h('button', { class: 'icon-btn', 'aria-label': t('delete'), html: UI.icon('trash'), onclick: function () { Core.removeEntry(db, e.id); App.changed(); } }));
       })) : h('div', { class: 'empty' }, t('no_entries'))));
       if (db.sessions.some(function (r) { return Core.dkey(new Date(r.start * 1000)) === today; })) host.appendChild(h('div', { class: 'small dim', style: { textAlign: 'center', marginBottom: '10px' } }, t('sessions_note')));
@@ -132,9 +137,9 @@
       var d = Core.addDays(today, -i), dk = Core.dkey(d), parts = Core.daySubjectTimes(db, dk), sec = Core.daySec(db, dk);
       var first = (fa ? Jalali.toJalali(d.getFullYear(), d.getMonth() + 1, d.getDate()).jd : d.getDate()) === 1;
       days.push({ dk: dk, label: I18n.dayShort(dk), month: first || i === n - 1 ? I18n.monthShort(dk) : '', exam: !!examDays[dk], sec: sec, tip: I18n.dateStr(dk, true),
-        parts: parts.map(function (x) { return { name: x.subject.name, color: x.subject.color, sec: x.sec }; }) });
+        parts: parts.map(function (x) { return { name: I18n.subjName(x.subject), color: x.subject.color, sec: x.sec }; }) });
       sum += sec; if (sec > best.sec) best = { sec: sec, dk: dk }; if (sec > 0) active++;
-      parts.forEach(function (x) { var k = x.subject.name; subjTot[k] = subjTot[k] || { color: x.subject.color, sec: 0 }; subjTot[k].sec += x.sec; });
+      parts.forEach(function (x) { var k = I18n.subjName(x.subject); subjTot[k] = subjTot[k] || { color: x.subject.color, sec: 0 }; subjTot[k].sec += x.sec; });
     }
     // a month label only on the first bar of a month (the first bar always carries one)
     var W = Math.min(host.clientWidth || 340, 720) - 34;

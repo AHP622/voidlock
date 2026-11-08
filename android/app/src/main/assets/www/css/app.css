@@ -122,3 +122,6 @@ svg.chart text{font-family:inherit}
 
 .btn svg,.chip svg,.fab svg{width:20px;height:20px;flex:none}
 .btn.block svg{width:22px;height:22px}
+
+.group+.group{margin-top:22px;padding-top:6px;border-top:2px dashed var(--border-hi)}
+.group-title{font-size:12px;font-weight:700;color:var(--accent);margin:4px 2px 0;letter-spacing:.04em}

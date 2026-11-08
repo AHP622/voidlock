@@ -83,8 +83,17 @@ try:
         code = srv.new_code()
         page.locator(".sheet input.code").fill("000000" if code != "000000" else "111111"); page.get_by_role("button", name="Pair", exact=True).click(); page.wait_for_timeout(800)
         ok("not right" in page.locator(".sheet").inner_text(), "a wrong code shows a clear message")
-        page.locator(".sheet input.code").fill(code[:3] + " " + code[3:]); page.get_by_role("button", name="Pair", exact=True).click(); page.wait_for_timeout(2500); flush()
-        d = db(); ok(d["sync"]["laptop"] and d["sync"]["laptop"]["token"], "pairing with the right code stores the token")
+        page.locator(".sheet input.code").fill(code[:3] + " " + code[3:]); page.get_by_role("button", name="Pair", exact=True).click()
+        pend = None
+        for _ in range(50):
+            pend = srv.pending()
+            if pend: break
+            page.wait_for_timeout(100)
+        ok(pend is not None, "after the code the computer asks the person to allow the pairing")
+        shown = page.locator(".sheet .timer").inner_text().replace(" ", "")
+        ok(pend and shown == pend["sas"], "the phone shows the same confirmation number as the computer (%s)" % shown)
+        srv.approve(pend["pid"]); page.wait_for_timeout(5500); flush()
+        d = db(); ok(d["sync"]["laptop"] and d["sync"]["laptop"]["key"] and "token" not in d["sync"]["laptop"], "pairing stores the shared key (no plain token)")
         ok(len(d["entries"]) >= 11 and any(t["text"] == "from the computer" for t in d["todos"]), "the first sync brought the computer's history to the phone")
         ok(len(sl.d["entries"]) >= 12 and len(sl.d["exams"]) >= 1, "and the phone's work reached the computer")
         ok(any(s["name"] == "Organic" and s["color"] == "#14B8A6" for s in sl.subjects()), "a custom colour travels to the computer unchanged")

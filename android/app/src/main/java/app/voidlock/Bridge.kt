@@ -2,18 +2,25 @@ package app.voidlock
 
 import android.app.Activity
 import android.content.ContentValues
+import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.print.PrintAttributes
+import android.print.PrintManager
 import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Base64
 import android.view.WindowManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import org.json.JSONArray
@@ -30,9 +37,15 @@ import java.security.MessageDigest
 /**
  * What the web page can ask the phone to do (window.Android in the page, see assets/www/js/native.js).
  * Calls from the page arrive on a background thread; results go back by calling window.__native.* on the main thread.
+ * `activity` is null when the page runs without a screen (the background sync, see SyncWorker): then only the network and
+ * device functions are used.
  */
-class Bridge(private val activity: Activity, private val web: WebView) {
+class Bridge(private val ctx: Context, private val web: WebView, private val activity: Activity?) {
     private val main = Handler(Looper.getMainLooper())
+    private var printView: WebView? = null
+
+    /** Called by the page when a background sync is over. */
+    var onBgDone: (() -> Unit)? = null
 
     private fun js(code: String) {
         main.post { web.evaluateJavascript(code, null) }
@@ -48,7 +61,7 @@ class Bridge(private val activity: Activity, private val web: WebView) {
     @JavascriptInterface
     fun appVersion(): String {
         return try {
-            activity.packageManager.getPackageInfo(activity.packageName, 0).versionName ?: "0"
+            ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "0"
         } catch (e: Exception) {
             "0"
         }
@@ -78,9 +91,37 @@ class Bridge(private val activity: Activity, private val web: WebView) {
 
     @JavascriptInterface
     fun keepAwake(on: Boolean) {
+        val a = activity ?: return
         main.post {
-            if (on) activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            else activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            if (on) a.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            else a.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
+    /** The page tells whether it should sync by itself in the background (every ~15 minutes and when the app is left). */
+    @JavascriptInterface
+    fun setBackgroundSync(on: Boolean) {
+        BgSync.apply(ctx, on)
+    }
+
+    @JavascriptInterface
+    fun bgDone(ok: Boolean) {
+        onBgDone?.invoke()
+    }
+
+    /** The Wi-Fi network itself (not the VPN on top of it): a VPN app on the phone sends everything, even addresses of the home
+     *  network, into its tunnel; a connection bound to the Wi-Fi network goes straight to the computer. */
+    private fun lanNetwork(): Network? {
+        return try {
+            val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            @Suppress("DEPRECATION")
+            cm.allNetworks.firstOrNull { n ->
+                val c = cm.getNetworkCapabilities(n)
+                c != null && !c.hasTransport(NetworkCapabilities.TRANSPORT_VPN) &&
+                    (c.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) || c.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET))
+            }
+        } catch (e: Exception) {
+            null
         }
     }
 
@@ -94,7 +135,8 @@ class Bridge(private val activity: Activity, private val web: WebView) {
                 val u = URL(url)
                 val allowed = u.protocol == "https" || (u.protocol == "http" && isPrivateHost(u.host ?: ""))
                 if (!allowed) throw IOException("blocked address")
-                val c = u.openConnection() as HttpURLConnection
+                val lan = if (u.protocol == "http") lanNetwork() else null
+                val c = (if (lan != null) lan.openConnection(u) else u.openConnection()) as HttpURLConnection
                 c.requestMethod = method
                 c.connectTimeout = timeoutMs
                 c.readTimeout = timeoutMs
@@ -134,18 +176,43 @@ class Bridge(private val activity: Activity, private val web: WebView) {
     fun shareFile(name: String, mime: String, text: String) {
         main.post {
             try {
-                val dir = File(activity.cacheDir, "share")
+                val dir = File(ctx.cacheDir, "share")
                 dir.mkdirs()
                 val f = File(dir, name.replace(Regex("[^A-Za-z0-9._-]"), "_"))
                 f.writeText(text, Charsets.UTF_8)
-                val uri = FileProvider.getUriForFile(activity, activity.packageName + ".fileprovider", f)
+                val uri = FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", f)
                 val send = Intent(Intent.ACTION_SEND)
                 send.type = mime
                 send.putExtra(Intent.EXTRA_STREAM, uri)
                 send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                activity.startActivity(Intent.createChooser(send, name))
+                val chooser = Intent.createChooser(send, name)
+                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                ctx.startActivity(chooser)
             } catch (e: Exception) {
-                Toast.makeText(activity, "Could not share the file: " + e.message, Toast.LENGTH_LONG).show()
+                Toast.makeText(ctx, "Could not share the file: " + e.message, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    /** Prints an HTML page (the report): in the Android print dialog the person can choose "Save as PDF". */
+    @JavascriptInterface
+    fun printHtml(title: String, html: String) {
+        val a = activity ?: return
+        main.post {
+            try {
+                val wv = WebView(a)
+                wv.settings.javaScriptEnabled = false
+                wv.webViewClient = object : WebViewClient() {
+                    override fun onPageFinished(view: WebView, url: String) {
+                        val pm = a.getSystemService(Context.PRINT_SERVICE) as PrintManager
+                        val attrs = PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).build()
+                        pm.print(title, view.createPrintDocumentAdapter(title), attrs)
+                    }
+                }
+                printView = wv // keep it alive while the print dialog is open
+                wv.loadDataWithBaseURL("https://appassets.androidplatform.net/", html, "text/html", "utf-8", null)
+            } catch (e: Exception) {
+                Toast.makeText(ctx, "Could not print: " + e.message, Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -158,10 +225,10 @@ class Bridge(private val activity: Activity, private val web: WebView) {
                 v.put(MediaStore.Downloads.DISPLAY_NAME, name)
                 v.put(MediaStore.Downloads.MIME_TYPE, mime)
                 v.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-                val uri = activity.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v) ?: return "error"
-                activity.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray(Charsets.UTF_8)) }
+                val uri = ctx.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v) ?: return "error"
+                ctx.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray(Charsets.UTF_8)) }
             } else {
-                val dir = activity.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+                val dir = ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
                 File(dir, name).writeText(text, Charsets.UTF_8)
             }
             "ok"
@@ -175,8 +242,9 @@ class Bridge(private val activity: Activity, private val web: WebView) {
     fun openInstallSettings() {
         main.post {
             try {
-                val i = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + activity.packageName))
-                activity.startActivity(i)
+                val i = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + ctx.packageName))
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                ctx.startActivity(i)
             } catch (e: Exception) {
                 // the person can open it from the system settings
             }
@@ -193,7 +261,7 @@ class Bridge(private val activity: Activity, private val web: WebView) {
                     js("window.__native.onApk('error'," + JSONObject.quote("blocked address") + ",0)")
                     return@Thread
                 }
-                if (Build.VERSION.SDK_INT >= 26 && !activity.packageManager.canRequestPackageInstalls()) {
+                if (Build.VERSION.SDK_INT >= 26 && !ctx.packageManager.canRequestPackageInstalls()) {
                     js("window.__native.onApk('need_permission',0,0)")
                     return@Thread
                 }
@@ -203,18 +271,18 @@ class Bridge(private val activity: Activity, private val web: WebView) {
                 js("window.__native.onApk('verifying',0,0)")
                 val got = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
                 if (got != expected) throw IOException("the checksum does not match")
-                val dir = File(activity.cacheDir, "updates")
+                val dir = File(ctx.cacheDir, "updates")
                 dir.mkdirs()
                 dir.listFiles()?.forEach { it.delete() }
                 val f = File(dir, "VoidLock.apk")
                 f.writeBytes(bytes)
-                val info = activity.packageManager.getPackageArchiveInfo(f.absolutePath, 0)
-                if (info == null || info.packageName != activity.packageName) throw IOException("this is not a VOIDLOCK package")
-                val uri = FileProvider.getUriForFile(activity, activity.packageName + ".fileprovider", f)
+                val info = ctx.packageManager.getPackageArchiveInfo(f.absolutePath, 0)
+                if (info == null || info.packageName != ctx.packageName) throw IOException("this is not a VOIDLOCK package")
+                val uri = FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", f)
                 val view = Intent(Intent.ACTION_VIEW)
                 view.setDataAndType(uri, "application/vnd.android.package-archive")
                 view.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-                main.post { activity.startActivity(view) }
+                main.post { ctx.startActivity(view) }
                 js("window.__native.onApk('ready',0,0)")
             } catch (e: Exception) {
                 js("window.__native.onApk('error'," + JSONObject.quote(e.message ?: e.toString()) + ",0)")

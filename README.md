@@ -36,6 +36,13 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
+## What changed in 1.11.0
+
+- **Wi-Fi sync is now encrypted.** Pairing: the 6-digit code only lets a phone ask; both devices do an ECDH (P-256) key exchange and show the same 6-digit confirmation number; you press *Allow* on the computer only if the numbers match (somebody in the middle gets a different number). After that every call is an AES-256-GCM envelope (key from HKDF-SHA256) with a growing counter, so nothing readable travels over the network and a recorded request cannot be replayed. Needs the `cryptography` package (in `requirements.txt`, bundled in the exe). The phone uses the browser's Web Crypto with the same constructions. Older phone apps (protocol 1) cannot connect: update both.
+- **Charts run left to right** everywhere (windows app, reports, phone): the oldest day / exam is at the left, the value axis at the left, also in Persian. Persian text and digits are unchanged.
+- **Computer addresses while a VPN is on:** the address list puts Wi-Fi / Ethernet first and hides VPN / virtual adapters (their addresses are not reachable from the phone).
+- **Phone:** report export (PDF through the Android print dialog, a web page, or CSV for Excel), sync in the background (about every 15 minutes and shortly after leaving the app, only on the same network), the phone's Wi-Fi traffic is bound to the Wi-Fi network so a VPN on the phone does not swallow it, tests and words subjects are separate groups on Today.
+
 ## What changed in 1.10.0
 
 - **VOIDLOCK for Android** (`android/`, see `android/README.md`): study timer, subjects with any colour, tests / words, tasks, daily chart, exams with results and region rank, Persian + English, offline. It is a web UI in a small native shell; the same GitHub release carries `VoidLock.exe` and `VoidLock.apk`, and each app updates itself from it.

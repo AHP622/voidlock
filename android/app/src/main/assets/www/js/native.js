@@ -45,6 +45,12 @@
     appVersion: function () { try { if (A && A.appVersion) return String(A.appVersion()); } catch (e) {} return (root.VOIDLOCK_CONFIG || {}).version || '0'; },
     localIps: function () { try { if (A && A.localIps) return JSON.parse(A.localIps()); } catch (e) {} return []; },
     keepAwake: function (on) { try { if (A && A.keepAwake) A.keepAwake(!!on); } catch (e) {} },
+    setBackgroundSync: function (on) { try { if (A && A.setBackgroundSync) A.setBackgroundSync(!!on); } catch (e) {} },
+    bgDone: function (ok) { try { if (A && A.bgDone) A.bgDone(!!ok); } catch (e) {} },
+    printHtml: function (title, html) {
+      if (A && A.printHtml) { try { A.printHtml(title, html); return true; } catch (e) { return false; } }
+      var w = root.open('', '_blank'); if (!w) return false; w.document.write(html); w.document.close(); setTimeout(function () { try { w.print(); } catch (e) {} }, 400); return true;
+    },
     shareFile: function (name, mime, text) {
       if (A && A.shareFile) { try { A.shareFile(name, mime, text); return true; } catch (e) { return false; } }
       var url = URL.createObjectURL(new Blob([text], { type: mime })), a = document.createElement('a');
@@ -69,7 +75,7 @@
   function ping(addr, timeout) {
     return http('GET', base(addr) + '/v1/ping', { timeout: timeout || 1500 }).then(function (r) {
       var j = r.status === 200 ? json(r) : null;
-      return j && j.app === 'voidlock' && j.device ? { addr: addr, device: j.device, version: j.version } : null;
+      return j && j.app === 'voidlock' && j.device ? { addr: addr, device: j.device, version: j.version, proto: j.proto || 1 } : null;
     });
   }
   function scan(onFound, onProgress) {
@@ -95,31 +101,100 @@
       for (var k = 0; k < 40; k++) next();
     });
   }
-  function pair(addr, code, device) {
-    return http('POST', base(addr) + '/v1/pair', { body: JSON.stringify({ code: String(code).replace(/\s+/g, ''), device: device }),
-      headers: { 'Content-Type': 'application/json' }, timeout: 8000 }).then(function (r) {
-      var j = json(r);
-      if (r.status === 200 && j && j.token) return { ok: true, token: j.token, device: j.device };
-      var err = j && j.error ? j.error : (r.status === 0 ? 'network' : 'bad');
-      return { ok: false, error: err };
+  // ---- encryption (same constructions as voidlock/lansync.py: ECDH P-256 -> HKDF-SHA256 -> AES-256-GCM)
+  var te = new TextEncoder();
+  function subtle() { var c = root.crypto && root.crypto.subtle; if (!c) throw new Error('Web Crypto is not available'); return c; }
+  function b64e(u8) { var s = ''; for (var i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
+  function b64d(str) { var bin = atob(str), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
+  function concat(a, b) { var o = new Uint8Array(a.length + b.length); o.set(a, 0); o.set(b, a.length); return o; }
+  function hkdf(keyBytes, salt, info, n) {
+    return subtle().importKey('raw', keyBytes, 'HKDF', false, ['deriveBits']).then(function (k) {
+      return subtle().deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: te.encode(salt), info: typeof info === 'string' ? te.encode(info) : info }, k, n * 8);
+    }).then(function (b) { return new Uint8Array(b); });
+  }
+  function newKeyPair() {
+    return subtle().generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']).then(function (kp) {
+      return subtle().exportKey('raw', kp.publicKey).then(function (pub) { return { priv: kp.privateKey, pub: new Uint8Array(pub) }; });
     });
   }
-  function authed(method, path, lap, body, timeout) {
-    var h = { Authorization: 'Bearer ' + lap.token }; if (body) h['Content-Type'] = 'application/json';
-    return http(method, base(lap.addr) + path, { headers: h, body: body, timeout: timeout || 20000 });
+  function deriveKey(priv, peerPub, phonePub, serverPub) {
+    return subtle().importKey('raw', peerPub, { name: 'ECDH', namedCurve: 'P-256' }, false, []).then(function (peer) {
+      return subtle().deriveBits({ name: 'ECDH', public: peer }, priv, 256);
+    }).then(function (z) { return hkdf(new Uint8Array(z), 'voidlock-pair-v2', concat(phonePub, serverPub), 32); });
   }
-  function rev(lap) { return authed('GET', '/v1/rev', lap, null, 5000).then(function (r) { var j = json(r); return { status: r.status, rev: j && j.rev }; }); }
+  function sasOf(K) { return hkdf(K, 'voidlock-sas-v2', 'sas', 4).then(function (b) { var n = ((b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3]) >>> 0; return ('000000' + (n % 1000000)).slice(-6); }); }
+  function aesKey(K) { return hkdf(K, 'voidlock-v2', 'enc', 32).then(function (raw) { return subtle().importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']); }); }
+  function seal(K, did, kind, obj) {
+    var iv = root.crypto.getRandomValues(new Uint8Array(12));
+    return aesKey(K).then(function (key) { return subtle().encrypt({ name: 'AES-GCM', iv: iv, additionalData: te.encode(did + '|' + kind) }, key, te.encode(JSON.stringify(obj))); })
+      .then(function (ct) { return { d: did, n: b64e(iv), c: b64e(new Uint8Array(ct)) }; });
+  }
+  function openEnv(K, did, kind, env) {
+    return aesKey(K).then(function (key) { return subtle().decrypt({ name: 'AES-GCM', iv: b64d(env.n), additionalData: te.encode(did + '|' + kind) }, key, b64d(env.c)); })
+      .then(function (pt) { return JSON.parse(new TextDecoder('utf-8').decode(pt)); });
+  }
+
+  // ---- pairing: the code only lets the phone ASK; both devices then show the same 6-digit number and the person allows it on the computer
+  function pairStart(addr, code, device) {
+    return newKeyPair().then(function (kp) {
+      return http('POST', base(addr) + '/v2/pair/start', { body: JSON.stringify({ code: String(code).replace(/\s+/g, ''), device: device, pub: b64e(kp.pub) }),
+        headers: { 'Content-Type': 'application/json' }, timeout: 8000 }).then(function (r) {
+        var j = json(r);
+        if (r.status !== 200 || !j || !j.pid) return { ok: false, error: j && j.error ? j.error : (r.status === 0 ? 'network' : 'bad') };
+        var spub = b64d(j.pub);
+        return deriveKey(kp.priv, spub, kp.pub, spub).then(function (K) {
+          return sasOf(K).then(function (sas) { return { ok: true, pid: j.pid, K: K, sas: sas, device: j.device, addr: addr, did: device.id }; });
+        });
+      });
+    });
+  }
+  /* waits until the person allows (or refuses) on the computer; then proves with a first encrypted call that both have the key */
+  function pairFinish(st, shouldStop) {
+    var deadline = Date.now() + 100000;
+    function poll() {
+      if (shouldStop && shouldStop()) return Promise.resolve({ ok: false, error: 'cancelled' });
+      if (Date.now() > deadline) return Promise.resolve({ ok: false, error: 'expired' });
+      return http('POST', base(st.addr) + '/v2/pair/status', { body: JSON.stringify({ pid: st.pid }), headers: { 'Content-Type': 'application/json' }, timeout: 6000 }).then(function (r) {
+        var j = json(r), state = j && j.state;
+        if (state === 'approved') {
+          var lap = { addr: st.addr, key: b64e(st.K), did: st.did, id: st.device && st.device.id, name: (st.device && st.device.name) || '?', seq: 0, lastRev: null };
+          return secureCall(lap, 'hello', null, 8000).then(function (c) { return c.status === 200 ? { ok: true, lap: lap } : { ok: false, error: 'key' }; });
+        }
+        if (state === 'denied') return { ok: false, error: 'denied' };
+        return new Promise(function (res) { setTimeout(res, 1500); }).then(poll);
+      });
+    }
+    return poll();
+  }
+
+  // ---- encrypted calls: {d, n, c} envelopes; the counter must grow (an old recorded request is refused by the computer)
+  function secureCall(lap, op, extra, timeout) {
+    lap.seq = Math.max((lap.seq || 0) + 1, Date.now());
+    if (Net.persist) Net.persist();
+    var seq = lap.seq, K = b64d(lap.key), body = { seq: seq, op: op };
+    if (extra) Object.keys(extra).forEach(function (k) { body[k] = extra[k]; });
+    return seal(K, lap.did, 'req', body).then(function (env) {
+      return http('POST', base(lap.addr) + '/v2/call', { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(env), timeout: timeout || 20000 });
+    }).then(function (r) {
+      if (r.status === 401) return { status: 401 };
+      if (r.status !== 200) return { status: r.status };
+      var env = json(r); if (!env) return { status: 0 };
+      return openEnv(K, lap.did, 'res', env).then(function (d) { return d.seq === seq ? { status: 200, data: d } : { status: 0, error: 'replay' }; })
+        .catch(function () { return { status: 0, error: 'decrypt' }; });
+    }).catch(function (e) { return { status: 0, error: String(e && e.message || e) }; });
+  }
+  function rev(lap) { return secureCall(lap, 'rev', null, 6000).then(function (c) { return { status: c.status, rev: c.data && c.data.rev }; }); }
   function syncOnce(db, lap) {
     var pkg = Core.makePackage(db);
-    return authed('POST', '/v1/sync', lap, JSON.stringify(pkg), 60000).then(function (r) {
-      var j = json(r);
-      if (r.status === 200 && j && j.package) {
-        var plan = Core.prepare(db, j.package);
-        var changes = plan.changes();
+    return secureCall(lap, 'sync', { package: pkg }, 60000).then(function (c) {
+      var d = c.data;
+      if (c.status === 200 && d && d.ok && d.package) {
+        var plan = Core.prepare(db, d.package), changes = plan.changes();
         Core.commit(db, plan);
-        return { ok: true, changes: changes, rev: j.rev, plan: plan };
+        return { ok: true, changes: changes, rev: d.rev, plan: plan };
       }
-      return { ok: false, status: r.status, error: j && j.error ? j.error : (r.status === 0 ? 'network' : 'bad'), message: j && j.message };
+      if (c.status === 200 && d) return { ok: false, status: d.error === 'invalid' ? 422 : 409, error: d.error, message: d.message };
+      return { ok: false, status: c.status, error: c.status === 0 ? 'network' : 'bad' };
     });
   }
 
@@ -140,7 +215,8 @@
       return { ok: true, tag: j.tag_name, version: j.tag_name.replace(/^v/, ''), newer: cmpVer(j.tag_name, cur) > 0, hasApk: !!(apk && sha), url: apk && apk.browser_download_url, shaUrl: sha && sha.browser_download_url };
     });
   }
-  var Net = { PORTS: PORTS, ping: ping, scan: scan, pair: pair, rev: rev, syncOnce: syncOnce, checkUpdate: checkUpdate, cmpVer: cmpVer };
+  var Net = { PORTS: PORTS, ping: ping, scan: scan, pairStart: pairStart, pairFinish: pairFinish, secureCall: secureCall, rev: rev, syncOnce: syncOnce, checkUpdate: checkUpdate, cmpVer: cmpVer,
+              persist: null, crypto: { newKeyPair: newKeyPair, deriveKey: deriveKey, sasOf: sasOf, seal: seal, openEnv: openEnv, b64e: b64e, b64d: b64d } };
   root.Native = Native; root.Net = Net;
   if (typeof module !== 'undefined' && module.exports) module.exports = { Native: Native, Net: Net };
 })(typeof window !== 'undefined' ? window : globalThis);

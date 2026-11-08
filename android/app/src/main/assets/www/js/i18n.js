@@ -27,7 +27,7 @@
       colour_lifted: 'مشکی و سفید کمی روشن‌تر می‌شوند تا دیده شوند.',
       sync_card: 'هماهنگی با کامپیوتر', sync_intro: 'همه‌ی اطلاعات (درس‌ها، زمان‌ها، آزمون‌ها، کارها و تاریخچه) بین گوشی و VOIDLOCK کامپیوتر یکسان می‌شود.',
       wifi: 'وای‌فای', wifi_hint: 'گوشی و کامپیوتر باید روی یک شبکه باشند (مودم، حتی سیم‌کارتی، یا هات‌اسپات گوشی). اینترنت لازم نیست.',
-      find_computer: 'پیدا کردن کامپیوتر', finding: 'در حال جستجو…', computers_found: 'کامپیوترهای پیداشده', none_found: 'کامپیوتری پیدا نشد. مطمئن شوید VOIDLOCK روی کامپیوتر باز است و «هماهنگی روی وای‌فای» روشن است.',
+      find_computer: 'پیدا کردن کامپیوتر', finding: 'در حال جستجو…', computers_found: 'کامپیوترهای پیداشده', none_found: 'کامپیوتری پیدا نشد. مطمئن شوید VOIDLOCK روی کامپیوتر باز است و «هماهنگی روی وای‌فای» روشن است و هر دو روی یک شبکه‌اند.',
       enter_address: 'یا آدرس را دستی بنویسید', address_ph: 'مثلاً 192.168.1.20:47821', connect: 'اتصال', enter_code: 'کد ۶ رقمی نمایش‌داده‌شده روی کامپیوتر', pair: 'جفت‌شدن',
       paired_with: 'جفت‌شده با {name}', sync_now: 'هماهنگی همین حالا', unpair: 'فراموش‌کردن کامپیوتر', last_sync: 'آخرین هماهنگی', never: 'هنوز نشده', auto_sync: 'هماهنگی خودکار وقتی برنامه باز است',
       st_ok: 'هماهنگ است', st_busy: 'در حال هماهنگی…', st_err: 'کامپیوتر در دسترس نیست', st_off: 'جفت نشده', synced_ok: 'هماهنگ شد.', up_to_date: 'همه‌چیز به‌روز است.',
@@ -48,6 +48,16 @@
       err_not_sync: 'این فایل یک فایل هماهنگی VOIDLOCK نیست.', err_version: 'این فایل با نسخه‌ی دیگری از VOIDLOCK ساخته شده. هر دو دستگاه را به‌روز کنید.',
       err_same: 'این فایل را همین دستگاه ساخته است.', err_nodev: 'این فایل هماهنگی شناسه‌ی دستگاه ندارد.', err_nodata: 'این فایل داده‌ای ندارد.',
       unauthorized: 'کامپیوتر این گوشی را نمی‌شناسد. دوباره جفت کنید.', paired_phone_name: 'نام این گوشی', retry: 'تلاش دوباره', manual_pair: 'جفت‌کردن دستی',
+      group_tests: 'درس‌های تستی', group_words: 'لغت (زبان)',
+      pair_confirm_msg: 'روی کامپیوتر باید همین عدد را ببینید. اگر همین بود، آنجا «اجازه» را بزنید؛ اگر عدد فرق داشت، «رد» را بزنید.', waiting_allow: 'منتظر اجازه‌ی شما روی کامپیوتر…', sas_number: 'عدد تأیید',
+      pair_denied: 'کامپیوتر اجازه نداد.', pair_expired: 'زمان تمام شد. دوباره امتحان کنید.', pair_key: 'کلید رمزنگاری با کامپیوتر یکی نشد. دوباره جفت کنید.',
+      proto_old: 'برنامه‌ی کامپیوتر قدیمی است. هر دو دستگاه را به آخرین نسخه به‌روز کنید.',
+      report: 'گزارش', report_make: 'ساخت گزارش…', report_title: 'گزارش مطالعه', report_hint: 'گزارش مطالعه و آزمون‌ها را به‌صورت صفحه‌ی وب، PDF یا فایل اکسل (CSV) بگیرید.', generated: 'تهیه‌شده در',
+      r_7: '۷ روز', r_14: '۱۴ روز', r_30: '۳۰ روز', r_90: '۹۰ روز', r_all: 'همه', r_custom: 'دلخواه', r_from: 'از تاریخ', r_to: 'تا تاریخ', fmt_html: 'صفحه‌ی وب (HTML)', fmt_pdf: 'PDF (چاپ)', fmt_csv: 'اکسل (CSV)',
+      col_time: 'زمان', col_share: 'سهم', col_avg_day: 'میانگین در روزِ مطالعه', weekly_bars: 'هر ستون یک هفته', report_ready: 'گزارش آماده شد.', report_empty: 'در این بازه داده‌ای نیست.',
+      bg_sync: 'هماهنگی در پس‌زمینه (حدود هر ۱۵ دقیقه)', bg_hint: 'وقتی برنامه بسته است هم گاهی با کامپیوتر هماهنگ می‌شود (فقط وقتی هر دو روی یک شبکه باشند). اندروید زمان دقیق را تعیین می‌کند.',
+      vpn_hint: 'اگر فیلترشکن روشن است: در فیلترشکن گزینه‌ی «دسترسی به شبکه‌ی محلی (LAN)» را مجاز کنید، یا آن را روی کامپیوتر/گوشی خاموش کنید.',
+      unknown_subject: 'درس نامشخص',
       avg: 'میانگین', over_goal: 'بیش از هدف', no_data: 'داده‌ای نیست.', enter_name: 'یک نام بنویسید.', name_taken: 'این نام قبلاً هست.', timer_hint: 'زمان‌سنج با بسته‌شدن برنامه هم ادامه دارد.'
     },
     en: {
@@ -96,6 +106,16 @@
       err_not_sync: 'That file is not a VOIDLOCK sync file.', err_version: 'This sync file was made by a different version of VOIDLOCK. Update both devices.',
       err_same: 'This file was made by this same device.', err_nodev: 'That sync file has no device id.', err_nodata: 'The file has no data.',
       unauthorized: 'The computer does not know this phone. Pair again.', paired_phone_name: 'This phone’s name', retry: 'Try again', manual_pair: 'Pair manually',
+      group_tests: 'Test subjects', group_words: 'Words (languages)',
+      pair_confirm_msg: 'The computer must show the same number. If it does, press “Allow” there; if the number is different, press “Deny”.', waiting_allow: 'Waiting for you to allow it on the computer…', sas_number: 'Confirmation number',
+      pair_denied: 'The computer did not allow it.', pair_expired: 'Time ran out. Try again.', pair_key: 'The encryption key did not match the computer. Pair again.',
+      proto_old: 'The computer app is out of date. Update both devices to the latest version.',
+      report: 'Report', report_make: 'Create report…', report_title: 'Study report', report_hint: 'Get a report of your study and exams as a web page, a PDF or a spreadsheet (CSV).', generated: 'generated',
+      r_7: '7 days', r_14: '14 days', r_30: '30 days', r_90: '90 days', r_all: 'All', r_custom: 'Custom', r_from: 'From', r_to: 'To', fmt_html: 'Web page (HTML)', fmt_pdf: 'PDF (print)', fmt_csv: 'Spreadsheet (CSV)',
+      col_time: 'Time', col_share: 'Share', col_avg_day: 'Average per study day', weekly_bars: 'one bar per week', report_ready: 'Report ready.', report_empty: 'There is no data in this period.',
+      bg_sync: 'Sync in the background (about every 15 minutes)', bg_hint: 'Even when the app is closed it syncs with the computer now and then (only when both are on the same network). Android decides the exact time.',
+      vpn_hint: 'If a VPN is on: allow “local network (LAN) access” in the VPN, or turn it off on the computer / phone.',
+      unknown_subject: 'Unknown subject',
       avg: 'Average', over_goal: 'Over the goal', no_data: 'No data.', enter_name: 'Type a name.', name_taken: 'That name already exists.', timer_hint: 'The timer keeps running when the app is closed.'
     }
   };
@@ -149,8 +169,9 @@
     var d = new Date(sec * 1000);
     return dateStr(d, false) + ' · ' + digits(('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2));
   }
+  function subjName(s) { return !s ? '?' : (s.name === '?' ? t('unknown_subject') : s.name); }
   function setLang(l) { lang = l === 'en' ? 'en' : 'fa'; if (typeof document !== 'undefined') { document.documentElement.lang = lang; document.documentElement.dir = lang === 'fa' ? 'rtl' : 'ltr'; } }
   var I18n = { S: S, t: t, digits: digits, num: num, dur: dur, clock: clock, dateStr: dateStr, dayShort: dayShort, monthShort: monthShort, dateTimeStr: dateTimeStr,
-               setLang: setLang, get lang() { return lang; } };
+               setLang: setLang, subjName: subjName, get lang() { return lang; } };
   if (typeof module !== 'undefined' && module.exports) module.exports = I18n; else root.I18n = I18n;
 })(typeof window !== 'undefined' ? window : globalThis);

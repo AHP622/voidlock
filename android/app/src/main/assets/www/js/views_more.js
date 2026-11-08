@@ -38,7 +38,7 @@
 
   // ------------------------------------------------------------------ pairing with the computer
   function pairFlow(App) {
-    var db = App.db, body = h('div'), s, scanning = false, found = [];
+    var db = App.db, body = h('div'), s, scanning = false, found = [], cancelled = false;
     function listStep() {
       body.innerHTML = '';
       var status = h('div', { class: 'small muted', style: { margin: '6px 0 10px' } }, scanning ? t('finding') : '');
@@ -46,13 +46,13 @@
       var addr = h('input', { type: 'text', class: 'hex', placeholder: t('address_ph'), inputmode: 'url', autocapitalize: 'none', spellcheck: 'false' });
       function drawFound() {
         res.innerHTML = '';
-        found.forEach(function (f) { res.appendChild(h('button', { class: 'btn block', style: { justifyContent: 'space-between' }, onclick: function () { codeStep(f.addr, f.device.name); } }, h('span', null, f.device.name), h('span', { class: 'dim small hex' }, f.addr))); });
-        if (!scanning && !found.length) res.appendChild(h('div', { class: 'banner' }, t('none_found')));
+        found.forEach(function (f) { res.appendChild(h('button', { class: 'btn block', style: { justifyContent: 'space-between' }, onclick: function () { if ((f.proto || 1) < 2) return UI.toast(t('proto_old'), 'error'); codeStep(f.addr, f.device.name); } }, h('span', null, f.device.name), h('span', { class: 'dim small hex' }, f.addr))); });
+        if (!scanning && !found.length) res.appendChild(h('div', { class: 'banner' }, t('none_found'), h('div', { style: { marginTop: '6px' } }, t('vpn_hint'))));
       }
       body.append(h('div', { class: 'small dim' }, t('wifi_hint')), status, res, h('label', { class: 'field' }, t('enter_address')),
         h('div', { class: 'row' }, h('div', { class: 'grow' }, addr), h('button', { class: 'btn soft', onclick: function () {
           var v = addr.value.trim(); if (!v) return; if (v.indexOf(':') < 0) v += ':' + Net.PORTS[0];
-          status.textContent = t('working'); Net.ping(v, 4000).then(function (r) { if (r) codeStep(r.addr, r.device.name); else { status.textContent = ''; UI.toast(t('network_error'), 'error'); } });
+          status.textContent = t('working'); Net.ping(v, 4000).then(function (r) { if (r && (r.proto || 1) < 2) { status.textContent = ''; UI.toast(t('proto_old'), 'error'); } else if (r) codeStep(r.addr, r.device.name); else { status.textContent = ''; UI.toast(t('network_error'), 'error'); } });
         } }, t('connect'))));
       if (!scanning && !found.length) { scanning = true; found = []; drawFound(); status.textContent = t('finding');
         Net.scan(function (f) { found.push(f); drawFound(); }, null).then(function () { scanning = false; status.textContent = ''; drawFound(); }); }
@@ -63,16 +63,31 @@
       var code = h('input', { type: 'text', class: 'code', inputmode: 'numeric', maxlength: 7, placeholder: '------', autocomplete: 'one-time-code' });
       var err = h('div', { class: 'small', style: { color: 'var(--red)', minHeight: '20px', marginTop: '8px' } });
       var btn = h('button', { class: 'btn primary block', style: { marginTop: '10px' }, onclick: function () {
-        var c = Views.parseNum(code.value); if (c === null || isNaN(c) || String(code.value).replace(/\D/g, '').length < 6) { err.textContent = t('wrong_code'); return; }
+        var digitsOnly = String(code.value).replace(/[۰-۹]/g, function (d) { return d.charCodeAt(0) - 1776; }).replace(/\D/g, '');
+        if (digitsOnly.length < 6) { err.textContent = t('wrong_code'); return; }
         btn.disabled = true; err.textContent = t('working');
-        Net.pair(addr, String(code.value).replace(/[۰-۹]/g, function (d) { return d.charCodeAt(0) - 1776; }).replace(/\D/g, ''), { id: db.sync.device_id, name: db.sync.device_name || Native.deviceName() }).then(function (r) {
+        Net.pairStart(addr, digitsOnly, { id: db.sync.device_id, name: db.sync.device_name || Native.deviceName() }).then(function (r) {
           btn.disabled = false;
-          if (r.ok) { db.sync.laptop = { addr: addr, token: r.token, id: r.device && r.device.id, name: (r.device && r.device.name) || name, lastRev: null }; App.changed(); s.close(); UI.toast(t('pair_ok'), 'success'); App.syncNow(true); }
-          else err.textContent = r.error === 'wrong' ? t('wrong_code') : r.error === 'no_code' ? t('no_code') : r.error === 'locked' ? t('locked') : t('network_error');
-        });
+          if (r.ok) return confirmStep(r);
+          err.textContent = r.error === 'wrong' ? t('wrong_code') : r.error === 'no_code' ? t('no_code') : r.error === 'locked' ? t('locked') : t('network_error');
+        }).catch(function (e) { btn.disabled = false; err.textContent = String(e && e.message || e); });
       } }, t('pair'));
       body.append(h('div', { class: 'row sb' }, h('b', null, name), h('span', { class: 'dim small hex' }, addr)), h('label', { class: 'field' }, t('enter_code')), code, err, btn);
       setTimeout(function () { code.focus(); }, 200);
+    }
+    // both devices show the same number; the person allows the pairing on the computer (a man in the middle would get another number)
+    function confirmStep(st) {
+      body.innerHTML = ''; cancelled = false;
+      var big = h('div', { class: 'timer num', style: { fontSize: '44px', letterSpacing: '.12em' } }, I18n.digits(st.sas.slice(0, 3) + ' ' + st.sas.slice(3)));
+      var msg = h('div', { class: 'small muted', style: { textAlign: 'center', margin: '4px 0 10px' } }, t('pair_confirm_msg'));
+      var status = h('div', { class: 'small dim', style: { textAlign: 'center' } }, t('waiting_allow'));
+      body.append(h('div', { class: 'dim small', style: { textAlign: 'center' } }, t('sas_number')), big, msg, status);
+      Net.pairFinish(st, function () { return cancelled || s.closed; }).then(function (r) {
+        if (s.closed) return;
+        if (r.ok) { db.sync.laptop = r.lap; Native.setBackgroundSync(db.settings.bg_sync !== false); App.changed(); s.close(); UI.toast(t('pair_ok'), 'success'); App.syncNow(true); return; }
+        status.style.color = 'var(--red)';
+        status.textContent = r.error === 'denied' ? t('pair_denied') : r.error === 'expired' ? t('pair_expired') : r.error === 'key' ? t('pair_key') : t('network_error');
+      });
     }
     s = UI.sheet({ title: t('find_computer'), body: body, actions: [h('button', { class: 'btn', onclick: function () { s.close(); } }, t('close'))] });
     listStep();
@@ -89,10 +104,15 @@
       kids.push(h('div', { class: 'small dim' }, t('last_sync') + ': ' + last + (App.syncMsg ? ' · ' + App.syncMsg : '')));
       kids.push(h('div', { class: 'row', style: { marginTop: '12px', gap: '8px', flexWrap: 'wrap' } },
         h('button', { class: 'btn primary', disabled: st === 'busy', onclick: function () { App.syncNow(true); } }, UI.ic('sync'), t('sync_now')),
-        h('button', { class: 'btn danger', onclick: function () { UI.confirm(t('unpair'), lap.name, t('unpair'), true).then(function (ok) { if (ok) { db.sync.laptop = null; App.syncState = 'off'; App.changed(); } }); } }, t('unpair'))));
+        h('button', { class: 'btn danger', onclick: function () { UI.confirm(t('unpair'), lap.name, t('unpair'), true).then(function (ok) { if (ok) { db.sync.laptop = null; App.syncState = 'off'; Native.setBackgroundSync(false); App.changed(); } }); } }, t('unpair'))));
       var auto = h('input', { type: 'checkbox' }); auto.checked = db.settings.auto_sync !== false;
       auto.addEventListener('change', function () { db.settings.auto_sync = auto.checked; App.save(); });
       kids.push(h('label', { class: 'row sb', style: { padding: '12px 0 0' } }, h('span', null, t('auto_sync')), auto));
+      if (Native.available) {
+        var bg = h('input', { type: 'checkbox' }); bg.checked = db.settings.bg_sync !== false;
+        bg.addEventListener('change', function () { db.settings.bg_sync = bg.checked; App.save(); Native.setBackgroundSync(bg.checked && !!db.sync.laptop); });
+        kids.push(h('label', { class: 'row sb', style: { padding: '12px 0 0' } }, h('span', null, t('bg_sync')), bg), h('div', { class: 'small dim', style: { marginTop: '4px' } }, t('bg_hint')));
+      }
     } else {
       kids.push(h('div', { class: 'row', style: { marginBottom: '4px' } }, h('span', { class: 'status-dot' }), h('span', { class: 'muted' }, t('st_off'))));
       kids.push(h('div', { class: 'small dim', style: { marginBottom: '10px' } }, t('wifi_hint')));
@@ -108,6 +128,42 @@
         } }, UI.ic('share'), t('save_file')),
         h('button', { class: 'btn', style: { flex: 1 }, onclick: function () { Native.pickFile().then(function (f) { if (f) importText(App, f.text); }); } }, UI.ic('file'), t('import_file'))));
     return card(t('sync_card'), kids);
+  }
+
+  function reportSheet(App) {
+    var db = App.db, range = 14, today = Core.dkey();
+    var fromF = UI.dateField(Core.dkey(Core.addDays(new Date(), -13))), toF = UI.dateField(today);
+    var custom = h('div', { class: 'hide' }, UI.field(t('r_from'), fromF.el), UI.field(t('r_to'), toF.el));
+    var segBox = h('div');
+    var firstDay = db.entries.concat(db.sessions.map(function (r) { return { date: Core.dkey(new Date(r.start * 1000)) }; })).map(function (e) { return e.date; }).sort()[0] || today;
+    function draw() {
+      segBox.innerHTML = '';
+      segBox.appendChild(seg([[7, t('r_7')], [14, t('r_14')], [30, t('r_30')], [90, t('r_90')], ['all', t('r_all')], ['custom', t('r_custom')]], range, function (v) { range = v; custom.classList.toggle('hide', v !== 'custom'); draw(); }));
+    }
+    draw();
+    function period() {
+      if (range === 'custom') { var f = fromF.get(), e = toF.get(); return f <= e ? [f, e] : [e, f]; }
+      if (range === 'all') return [firstDay, today];
+      return [Core.dkey(Core.addDays(new Date(), -(range - 1))), today];
+    }
+    function make(kind) {
+      var p = period(), r = Report.build(db, p[0], p[1]);
+      var any = db.entries.some(function (e) { return e.date >= p[0] && e.date <= p[1]; }) || db.sessions.length || db.exams.some(function (e) { return e.date >= p[0] && e.date <= p[1]; });
+      if (!any) return UI.toast(t('report_empty'), 'warn');
+      if (kind === 'html') Native.shareFile(r.base + '.html', 'text/html', r.html);
+      else if (kind === 'csv') Native.shareFile(r.base + '.csv', 'text/csv', r.csv);
+      else Native.printHtml(r.title, r.html);
+    }
+    var s = UI.sheet({ title: t('report_title'), message: t('report_hint'), body: [segBox, custom],
+      actions: [h('div', { class: 'col', style: { width: '100%', gap: '8px' } },
+        h('button', { class: 'btn primary block', onclick: function () { make('pdf'); } }, UI.ic('file'), t('fmt_pdf')),
+        h('button', { class: 'btn block', onclick: function () { make('html'); } }, UI.ic('globe'), t('fmt_html')),
+        h('button', { class: 'btn block', onclick: function () { make('csv'); } }, UI.ic('stats'), t('fmt_csv')))] });
+    s.el.querySelector('.actions').style.display = 'block';
+  }
+  Views.reportSheet = reportSheet;
+  function reportCard(App) {
+    return card(t('report'), [h('div', { class: 'small dim', style: { marginBottom: '10px' } }, t('report_hint')), h('button', { class: 'btn block', onclick: function () { reportSheet(App); } }, UI.ic('file'), t('report_make'))]);
   }
 
   function subjectsCard(App) {
@@ -153,6 +209,7 @@
 
   Views.more = function (host, App) {
     host.appendChild(syncCard(App));
+    host.appendChild(reportCard(App));
     host.appendChild(subjectsCard(App));
     host.appendChild(settingsCard(App));
     host.appendChild(aboutCard(App));

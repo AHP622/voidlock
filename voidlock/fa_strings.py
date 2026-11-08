@@ -586,3 +586,14 @@ FA.update({
         "روی گوشی: VOIDLOCK را باز کنید، به بخش هماهنگی بروید، «پیدا کردن کامپیوتر» را بزنید و این کد را بنویسید. کد فقط یک بار و تا ۱۰ دقیقه کار می‌کند. اگر ویندوز درباره‌ی فایروال پرسید، شبکه‌های خصوصی را مجاز کنید.",
     "Done": "تمام", "Synced with": "هماهنگ شد با",
 })
+
+# ---------------- 1.11.0: encrypted Wi-Fi sync, confirmation number
+FA.update({
+    "Allow": "اجازه", "Deny": "رد", "wants to pair.": "می‌خواهد جفت شود.", "wants to pair. Does the phone show this number?": "می‌خواهد جفت شود. آیا گوشی همین عدد را نشان می‌دهد؟",
+    "Press Allow only if the phone shows exactly this number. If it is different, press Deny: someone else on the network may be trying to connect.":
+        "فقط اگر گوشی دقیقاً همین عدد را نشان می‌دهد «اجازه» را بزنید. اگر فرق داشت «رد» را بزنید: ممکن است کس دیگری در شبکه بخواهد وصل شود.",
+    "On the phone: open VOIDLOCK, go to More, tap Find computer and type this code. Then the same confirmation number appears on both devices: if it is the same, press Allow. The code works once and for 10 minutes. If Windows asks about the firewall, allow private networks. If a VPN is on, allow local network access in it or turn it off.":
+        "روی گوشی: VOIDLOCK را باز کنید، به «بیشتر» بروید، «پیدا کردن کامپیوتر» را بزنید و این کد را بنویسید. بعد همان عدد تأیید روی هر دو دستگاه نمایش داده می‌شود: اگر یکی بود «اجازه» را بزنید. کد فقط یک بار و تا ۱۰ دقیقه کار می‌کند. اگر ویندوز درباره‌ی فایروال پرسید، شبکه‌های خصوصی را مجاز کنید. اگر فیلترشکن روشن است، در آن «دسترسی به شبکه‌ی محلی» را مجاز کنید یا خاموشش کنید.",
+    "Phone paired.": "گوشی جفت شد.", "The request has expired. Start again.": "درخواست منقضی شد. دوباره شروع کنید.", "Cancel": "انصراف",
+    "The encryption library is missing, so Wi-Fi sync is off.": "کتابخانه‌ی رمزنگاری نصب نیست، پس هماهنگی وای‌فای خاموش است.",
+})

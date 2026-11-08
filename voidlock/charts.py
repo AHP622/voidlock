@@ -76,10 +76,11 @@ class Scene:
 
     # ---- SVG backend
     def to_svg(self, label="", rtl=False):
-        # In SVG, text-anchor start / end follow the element's direction: in a right-to-left page "start" is the RIGHT edge.
-        # The scene uses geometric meaning (start = text begins at x and runs to the right), so swap them for rtl.
-        flip = {"start": "end", "end": "start", "middle": "middle"} if rtl else {"start": "start", "end": "end", "middle": "middle"}
-        out = [f'<svg viewBox="0 0 {self.w:.0f} {self.h:.0f}" direction="{"rtl" if rtl else "ltr"}" role="img" aria-label="{html.escape(label)}">']
+        # Charts are ALWAYS drawn left to right (time runs from the left, the value axis is on the left), also in Persian pages;
+        # `rtl` is kept for old callers and ignored. direction="ltr" makes text-anchor start / end mean the left / right edge even
+        # when the page around the picture is right-to-left. (The Persian text itself still reads right to left.)
+        flip = {"start": "start", "end": "end", "middle": "middle"}
+        out = [f'<svg viewBox="0 0 {self.w:.0f} {self.h:.0f}" direction="ltr" style="direction:ltr" role="img" aria-label="{html.escape(label)}">']
         for it in self.items:
             k = it[0]
             if k == "rect":
@@ -221,7 +222,7 @@ def study_chart(R, pal=LIGHT, w=760):
     if not bars:
         return Scene(w, 10)
     legend, has_other = _group_parts(bars, R, t["deleted"])
-    ml, mr, mt, mb = (14, 40, 30, 30) if fa else (40, 14, 30, 30)
+    ml, mr, mt, mb = 40, 14, 30, 30                    # always left to right: the value axis is on the left
     h_plot = 270
     pw, ph = w - ml - mr, h_plot - mt - mb
     goal = R["goal_sec"] if mode == "day" else 0
@@ -232,8 +233,8 @@ def study_chart(R, pal=LIGHT, w=760):
     slot = pw / n
     bw = max(4.0, min(30.0 if mode == "day" else 64.0, slot * 0.64))
     sc = Scene(w, h_plot)
-    axis_x = (w - mr + 8) if fa else (ml - 8)
-    anchor = "start" if fa else "end"
+    axis_x = ml - 8
+    anchor = "end"
     base = mt + ph
     for tv in ticks:
         y = base - ph * (tv * 3600 / ymax)
@@ -242,7 +243,7 @@ def study_chart(R, pal=LIGHT, w=760):
     sc.text(axis_x, mt - 14, t["h"], 10, pal["muted"], anchor)
 
     def cx(i):
-        return (ml + pw - (i + 0.5) * slot) if fa else (ml + (i + 0.5) * slot)
+        return ml + (i + 0.5) * slot                   # the oldest day is at the left, the newest at the right
 
     # labels: every bar that has room; the first day of a month always carries its month name
     step = 1
@@ -272,14 +273,13 @@ def study_chart(R, pal=LIGHT, w=760):
     if goal:
         gy = base - ph * goal / ymax
         sc.line(ml, gy, w - mr, gy, pal["goal"], 1.5, "6 4")
-        gx = (w - mr - 2) if not fa else (ml + 2)
-        sc.text(gx, gy - 5, f"{t['goal']} {digits(f'{goal / 3600:g}', fa)} {t['h']}", 10, pal["goal"], "end" if not fa else "start", True)
+        sc.text(w - mr - 2, gy - 5, f"{t['goal']} {digits(f'{goal / 3600:g}', fa)} {t['h']}", 10, pal["goal"], "end", True)
     ent = [("dot", c, nm) for c, nm in legend]
     if has_other:
         ent.append(("dot", "#b6bfcc", t["other_subjects"]))
     if any(b["exam"] for b in bars):
         ent.append(("tri", pal["exam"], t["legend_exam"]))
-    used = _legend(sc, ent, h_plot + 2, w, fa, pal)
+    used = _legend(sc, ent, h_plot + 2, w, False, pal)
     sc.h = h_plot + 2 + used
     return sc
 
@@ -306,7 +306,7 @@ def weekday_chart(R, pal=LIGHT, w=380, h=200):
     bw = min(34, slot * 0.7)
     best = max(range(7), key=lambda i: avg[i]) if any(avg) else -1
     for i, v in enumerate(avg):
-        cx = (w - 8 - (i + 0.5) * slot) if fa else (8 + (i + 0.5) * slot)
+        cx = 8 + (i + 0.5) * slot                      # left to right: the first day of the week is at the left
         hh = ph * v / mx
         sc.rect(cx - bw / 2, mt + ph - hh, bw, hh, pal["accent"] if i == best else pal["accent2"], 3,
                 f"{i18n.FA_DAYS[order[i]] if fa else date(2024, 1, 1 + order[i]).strftime('%A')}: {report.fmt_dur(v, lang)}")
@@ -321,12 +321,12 @@ def weekday_chart(R, pal=LIGHT, w=380, h=200):
 # ------------------------------------------------------------------ progress (line) charts
 def line_chart(spec, pal=LIGHT, w=760, h=260, rtl=False, fa=None):
     """spec: {labels:[...], series:[{name,color,values:[v|None], width, markers, value_labels}], invert:bool, trend:bool, unit}.
-    The first label is the oldest point; for right-to-left reports it is drawn at the right."""
+    The first label is the oldest point and is always drawn at the left (`rtl` only tells that the text is Persian: digits)."""
     fa = rtl if fa is None else fa
     labels, series = spec["labels"], spec["series"]
     invert = bool(spec.get("invert"))
     vals = [v for s in series for v in s["values"] if v is not None]
-    ml, mr, mt, mb = (30, 58, 24, 34) if rtl else (58, 30, 24, 34)
+    ml, mr, mt, mb = 58, 30, 24, 34
     sc = Scene(w, h)
     if not vals:
         return sc
@@ -336,8 +336,8 @@ def line_chart(spec, pal=LIGHT, w=760, h=260, rtl=False, fa=None):
     ylo, yhi = ticks[0], ticks[-1]
     pw, ph = w - ml - mr, h - mt - mb
     n = len(labels)
-    axis_x = (w - mr + 6) if rtl else (ml - 6)
-    anchor = "start" if rtl else "end"
+    axis_x = ml - 6
+    anchor = "end"
 
     def py(v):
         f = (v - ylo) / (yhi - ylo or 1)
@@ -346,8 +346,7 @@ def line_chart(spec, pal=LIGHT, w=760, h=260, rtl=False, fa=None):
     def px(i):
         if n == 1:
             return ml + pw / 2
-        f = i / (n - 1)
-        return (ml + pw - f * pw) if rtl else (ml + f * pw)
+        return ml + i / (n - 1) * pw
 
     fmt = spec.get("fmt") or (lambda v: fmt_int(v, fa))
     for tv in ticks:
@@ -390,6 +389,6 @@ def line_chart(spec, pal=LIGHT, w=760, h=260, rtl=False, fa=None):
                 sc.text(px(i), py(v) - 9, fmt(v), 10, pal["text"], "middle", i == best_i)
     if not single:
         ent = [("line", s["color"], s["name"]) for s in series]
-        used = _legend(sc, ent, h + 2, w, rtl, pal)
+        used = _legend(sc, ent, h + 2, w, False, pal)
         sc.h = h + 2 + used
     return sc

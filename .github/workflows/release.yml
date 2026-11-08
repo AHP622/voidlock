@@ -36,7 +36,7 @@ jobs:
             $p = Join-Path $env:SystemRoot "System32\$n"
             if (Test-Path $p) { $bins += @('--add-binary', "$p;.") } else { Write-Host "not found: $n" }
           }
-          python -m PyInstaller --noconsole --onefile --name VoidLock --icon assets/icon.ico --add-data "assets;assets" @bins main.py
+          python -m PyInstaller --noconsole --onefile --name VoidLock --icon assets/icon.ico --add-data "assets;assets" --collect-submodules cryptography @bins main.py
       - name: SHA-256 checksum
         shell: pwsh
         run: |

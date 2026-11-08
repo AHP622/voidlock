@@ -131,8 +131,21 @@
   }
   root.__back = function () { if (UI.closeTop()) return true; if (App.view !== 'today') { App.go('today'); return true; } return false; };
 
+  // "#bg": the Android background sync opens this page without a screen: one sync, save, tell the shell, nothing else
+  function bgMode() {
+    App.bg = true; App.render = function () {}; App.renderStatus = function () {};
+    App.load(); Net.persist = App.saveNow;
+    var finished = false;
+    function finish() { if (finished) return; finished = true; App.saveNow(); Native.bgDone(true); }
+    setTimeout(finish, 65000);
+    if (!App.db.sync.laptop || App.db.settings.auto_sync === false) return finish();
+    App.syncNow(false).then(finish, finish);
+  }
+
   App.boot = function () {
+    if (location.hash === '#bg') return bgMode();
     App.load();
+    Net.persist = App.saveNow;                                  // the request counter is saved before every encrypted call
     var a = App.db.active;
     if (a && Core.elapsed(App.db) > 12 * 3600) { App.db.active = null; App.saveNow(); UI.toast(t('timer_hint'), 'warn'); }
     App.syncState = App.db.sync.laptop ? 'ok' : 'off';
@@ -140,14 +153,15 @@
     setInterval(function () { if (App.tick) App.tick(); }, 1000);
     setInterval(App.poll, 12000);
     document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'hidden') App.saveNow(); else { App.render(); setTimeout(App.poll, 400); }
+      if (document.visibilityState === 'hidden') App.saveNow();
+      else { App.load(); Net.persist = App.saveNow; App.render(); setTimeout(App.poll, 400); }       // the background sync may have changed the data
     });
     root.addEventListener('pagehide', App.saveNow);
     Native.onOpenFile(function (name, text) { App.go('more'); Views.importText(App, text); });
     setTimeout(welcome, 500);
     var st = App.db.settings;
     if (st.update_check !== false && Date.now() - (st.last_update_check || 0) > 12 * 3600 * 1000) setTimeout(function () { App.checkUpdate(false); }, 4000);
-    if (App.db.sync.laptop) setTimeout(App.poll, 1500);
+    if (App.db.sync.laptop) { setTimeout(App.poll, 1500); Native.setBackgroundSync(App.db.settings.bg_sync !== false); }
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', App.boot); else App.boot();
 })(window);

@@ -45,13 +45,14 @@ class MainThreadCaller(QObject):
 class LanService(QObject):
     """Owns the sync server. Started / stopped by the setting `lan_sync`."""
     changed = Signal()                                    # the paired phones list changed (Settings refreshes)
+    pair_request = Signal(object)                         # a phone entered the right code: {name, sas, pid} - the person must allow it
 
     def __init__(self, win):
         super().__init__()
         self.win = win
         self.caller = MainThreadCaller()
         self.backend = lansync.StoreBackend(win.store, win.study, call=self.caller.call, on_changed=self._data_changed,
-                                            on_paired=lambda: self.changed.emit())
+                                            on_paired=lambda: self.changed.emit(), on_pair_request=lambda info: self.pair_request.emit(info))
         self.server = lansync.LanServer(self.backend)
         self.error = ""
 
@@ -62,6 +63,8 @@ class LanService(QObject):
         if want and not self.server.running:
             try:
                 self.server.start()
+            except lansync.CryptoMissing as e:
+                self.error = i18n.tr("The encryption library is missing, so Wi-Fi sync is off.") + f" ({e})"
             except OSError as e:
                 self.error = str(e)
         elif not want and self.server.running:

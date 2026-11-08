@@ -31,12 +31,13 @@
   function studyChart(o) {
     var T = o.t, fa = o.fa, days = JSON.parse(JSON.stringify(o.days)), W = o.width || 340, H = 240;
     var g = groupParts(days, 5);
-    var ml = fa ? 8 : 34, mr = fa ? 34 : 8, mt = 28, mb = 26, pw = W - ml - mr, ph = H - mt - mb, base = mt + ph;
+    var ml = 34, mr = 8, mt = 28, mb = 26,                 // always left to right (also in Persian): oldest day at the left, axis on the left
+         pw = W - ml - mr, ph = H - mt - mb, base = mt + ph;
     var goal = o.goalSec || 0, maxSec = Math.max(3600, goal, Math.max.apply(null, days.map(function (d) { return d.sec; })));
     var ticks = niceTicks(maxSec * 1.06 / 3600, 4), ymax = ticks[ticks.length - 1] * 3600, n = days.length, slot = pw / n;
     var bw = Math.max(4, Math.min(30, slot * 0.64)), s = '';
-    function cx(i) { return fa ? ml + pw - (i + 0.5) * slot : ml + (i + 0.5) * slot; }
-    var axisX = fa ? W - mr + 6 : ml - 6, anchor = fa ? 'start' : 'end';
+    function cx(i) { return ml + (i + 0.5) * slot; }
+    var axisX = ml - 6, anchor = 'end';
     ticks.forEach(function (tv) {
       var y = base - ph * (tv * 3600 / ymax);
       s += '<line x1="' + ml + '" x2="' + (W - mr) + '" y1="' + y + '" y2="' + y + '" style="stroke:var(--border-hi)" stroke-width="' + (tv ? 1 : 1.4) + '"' + (tv ? ' stroke-dasharray="2 4"' : '') + ' opacity="' + (tv ? 0.7 : 1) + '"/>';
@@ -75,7 +76,7 @@
 
   /* series: [{name,color,values:[number|null]}], labels: [string]; invert = lower is better (drawn upwards) */
   function lineChart(o) {
-    var T = o.t, fa = o.fa, W = o.width || 340, H = o.height || 230, ml = fa ? 8 : 40, mr = fa ? 40 : 8, mt = 22, mb = 34, pw = W - ml - mr, ph = H - mt - mb;
+    var T = o.t, fa = o.fa, W = o.width || 340, H = o.height || 230, ml = 40, mr = 8, mt = 22, mb = 34, pw = W - ml - mr, ph = H - mt - mb;
     var vals = []; o.series.forEach(function (s) { s.values.forEach(function (v) { if (v !== null && v !== undefined) vals.push(v); }); });
     if (!vals.length) return { svg: '', legend: [] };
     var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals), pad = (hi - lo) * 0.18 || Math.max(1, Math.abs(hi) * 0.1);
@@ -83,8 +84,8 @@
     var ticks = niceTicks(hi - lo, 4).map(function (v) { return lo + v; }), top = ticks[ticks.length - 1]; if (top < hi) top = hi;
     function y(v) { var f = (v - lo) / (top - lo || 1); return o.invert ? mt + ph * f : mt + ph * (1 - f); }
     var n = o.labels.length, step = n > 1 ? pw / (n - 1) : 0;
-    function x(i) { var xx = n > 1 ? i * step : pw / 2; return fa ? ml + pw - xx : ml + xx; }
-    var s = '', axisX = fa ? W - mr + 6 : ml - 6, anchor = fa ? 'start' : 'end';
+    function x(i) { var xx = n > 1 ? i * step : pw / 2; return ml + xx; }
+    var s = '', axisX = ml - 6, anchor = 'end';
     ticks.forEach(function (tv) {
       var yy = y(tv); if (yy < mt - 1 || yy > mt + ph + 1) return;
       s += '<line x1="' + ml + '" x2="' + (W - mr) + '" y1="' + yy + '" y2="' + yy + '" style="stroke:var(--border-hi)" stroke-dasharray="2 4" opacity=".7"/>';

@@ -49,7 +49,7 @@ class MainActivity : Activity() {
         s.textZoom = 100
         s.setSupportZoom(false)
 
-        web.addJavascriptInterface(Bridge(this, web), "Android")
+        web.addJavascriptInterface(Bridge(this, web, this), "Android")
 
         web.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
@@ -117,6 +117,17 @@ class MainActivity : Activity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        visible = true
+    }
+
+    override fun onStop() {
+        visible = false
+        BgSync.soon(applicationContext, 20) // what was just typed reaches the computer soon, without waiting for the periodic run
+        super.onStop()
+    }
+
     override fun onDestroy() {
         web.destroy()
         super.onDestroy()
@@ -162,6 +173,8 @@ class MainActivity : Activity() {
     }
 
     companion object {
+        @Volatile
+        var visible = false
         const val START_URL = "https://appassets.androidplatform.net/assets/www/index.html"
         const val REQ_FILE = 41
     }

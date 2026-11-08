@@ -1168,6 +1168,30 @@ class SettingsPage(Page):
         lr.addWidget(self.b_unpair)
         lr.addStretch(1)
         c6.lay.addLayout(lr)
+        # the pairing box: first the code, then (when the phone asks) the confirmation number and Allow / Deny
+        self.pair_box = QWidget()
+        pb = QVBoxLayout(self.pair_box)
+        pb.setContentsMargins(0, 6, 0, 0)
+        pb.setSpacing(8)
+        self.pair_code = label("", 38, QFont.Weight.Bold, T.text, mono=True)
+        self.pair_code.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.pair_where = label("", 12, color=T.text2, wrap=True)
+        self.pair_note = label("", 12, color=T.text3, wrap=True)
+        self.pair_ask = label("", 14, QFont.Weight.DemiBold, T.text, wrap=True)
+        self.pair_ask.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        for w_ in (self.pair_code, self.pair_where, self.pair_note, self.pair_ask):
+            pb.addWidget(w_)
+        pr = QHBoxLayout()
+        self.b_allow = Button("Allow", "primary", "check", height=38)
+        self.b_deny = Button("Deny", "danger", "trash", height=38)
+        self.b_pair_cancel = Button("Cancel", "ghost", height=38)
+        for b_ in (self.b_allow, self.b_deny, self.b_pair_cancel):
+            pr.addWidget(b_)
+        pr.addStretch(1)
+        pb.addLayout(pr)
+        self.pair_box.setVisible(False)
+        c6.lay.addWidget(self.pair_box)
+        self._pair_pid = None
         c6.lay.addWidget(Divider())
         sr = QHBoxLayout()
         self.b_sync_out = Button("Save sync file…", "soft", "download", height=38)
@@ -1219,7 +1243,11 @@ class SettingsPage(Page):
         self.lan_on.toggled.connect(self._lan_toggle)
         self.b_pair.clicked.connect(self.pair_phone)
         self.b_unpair.clicked.connect(self.forget_phones)
+        self.b_allow.clicked.connect(lambda _=False: self._pair_decide(True))
+        self.b_deny.clicked.connect(lambda _=False: self._pair_decide(False))
+        self.b_pair_cancel.clicked.connect(lambda _=False: self._pair_close(cancel=True))
         ctx.lan.changed.connect(self._lan_refresh)
+        ctx.lan.pair_request.connect(self._pair_request)
         self.b_folder.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(ctx.store.home))))
         self.b_recover.clicked.connect(ctx.recovery_flow)
         self.b_export.clicked.connect(self.export_csv)
@@ -1442,8 +1470,10 @@ class SettingsPage(Page):
                          "Paired phones: " + ", ".join(p["name"] for p in phones))
         self.lan_info.setText("\n".join(lines))
         self.lan_info.setVisible(bool(lines))
-        self.b_pair.setVisible(on)
+        self.b_pair.setVisible(on and not self.pair_box.isVisibleTo(self))
         self.b_unpair.setVisible(bool(phones))
+        if not on:
+            self.pair_box.setVisible(False)
 
     def pair_phone(self):
         lan = self.ctx.lan
@@ -1451,19 +1481,49 @@ class SettingsPage(Page):
             return self.ctx.toast("Turn on Wi-Fi sync first.", "warn")
         code = lan.server.new_code()
         ips = lansync.local_addresses()
-        body = QWidget()
-        lay = QVBoxLayout(body)
-        lay.setContentsMargins(0, 4, 0, 0)
-        lay.setSpacing(10)
-        c = label(i18n.digits(f"{code[:3]} {code[3:]}"), 40, QFont.Weight.Bold, T.text, mono=True)
-        c.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lay.addWidget(c)
         where = " · ".join(f"{i18n.digits(ip)}:{i18n.digits(lan.server.port)}" for ip in ips[:3]) or i18n.tr("no network found")
-        lay.addWidget(label(i18n.tr("This computer") + f": {where}", 12, color=T.text2, wrap=True))
-        lay.addWidget(label("On the phone: open VOIDLOCK, go to Sync, tap Find computer and type this code. The code works once and "
-                            "for 10 minutes. If Windows asks about the firewall, allow private networks.", 12, color=T.text3, wrap=True))
-        self.ctx.new_modal().build("Pair a phone", None, body, "Done", icon="info", width=480).exec_modal()
-        lan.server._code = None
+        self._pair_pid = None
+        self.pair_code.setText(i18n.digits(f"{code[:3]} {code[3:]}"))
+        self.pair_where.setText(i18n.tr("This computer") + f": {where}")
+        self.pair_note.setText(i18n.tr("On the phone: open VOIDLOCK, go to More, tap Find computer and type this code. Then the same confirmation number appears on both devices: if it is the same, press Allow. The code works once and for 10 minutes. If Windows asks about the firewall, allow private networks. If a VPN is on, allow local network access in it or turn it off."))
+        self.pair_ask.setText("")
+        self.b_allow.setVisible(False)
+        self.b_deny.setVisible(False)
+        self.pair_box.setVisible(True)
+        self.b_pair.setVisible(False)
+
+    def _pair_request(self, info):
+        """A phone typed the right code. Both devices show the same number; the person decides."""
+        self._pair_pid = info["pid"]
+        sas = i18n.digits(f"{info['sas'][:3]} {info['sas'][3:]}")
+        self.pair_code.setText(sas)
+        self.pair_ask.setText(f"{info['name']} " + i18n.tr("wants to pair. Does the phone show this number?"))
+        self.pair_note.setText(i18n.tr("Press Allow only if the phone shows exactly this number. If it is different, press Deny: someone else on the network may be trying to connect."))
+        self.b_allow.setVisible(True)
+        self.b_deny.setVisible(True)
+        self.pair_box.setVisible(True)
+        self.b_pair.setVisible(False)
+        self.ctx.toast(f"{info['name']} " + i18n.tr("wants to pair."), "info")
+
+    def _pair_decide(self, allow):
+        lan = self.ctx.lan
+        pid = self._pair_pid
+        if not pid:
+            return
+        if allow:
+            if lan.server.approve(pid):
+                self.ctx.toast("Phone paired.", "success")
+            else:
+                self.ctx.toast("The request has expired. Start again.", "warn")
+        else:
+            lan.server.deny(pid)
+        self._pair_close()
+
+    def _pair_close(self, cancel=False):
+        if cancel:
+            self.ctx.lan.server.cancel_pairing()
+        self._pair_pid = None
+        self.pair_box.setVisible(False)
         self._lan_refresh()
 
     def forget_phones(self):

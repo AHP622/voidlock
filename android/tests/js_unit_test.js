@@ -3,6 +3,7 @@ const fs = require('fs'), path = require('path');
 const www = path.join(__dirname, '../app/src/main/assets/www/js');
 global.Core = require(path.join(www, 'core.js')); global.Jalali = require(path.join(www, 'jalali.js'));
 const I18n = global.I18n = require(path.join(www, 'i18n.js'));
+global.Charts = require(path.join(www, 'charts.js')); global.Report = require(path.join(www, 'report.js'));
 let fails = 0;
 const ok = (c, n) => { console.log((c ? 'PASS ' : 'FAIL ') + n); if (!c) fails++; };
 const fresh = (name) => { const d = Core.ensure(Core.newDb()); d.sync.device_name = name || 'x'; return d; };
@@ -76,4 +77,27 @@ const old = JSON.stringify(Core.makePackage(A)); const before = JSON.stringify(C
 Core.commit(B, Core.prepare(B, old)); ok(JSON.stringify(Core.records(B)) === before, 'an old package changes nothing');
 try { Core.prepare(B, JSON.stringify(Core.makePackage(B))); ok(false, 'own package refused'); } catch (e) { ok(e.name === 'SyncError', 'a package from this same device is refused'); }
 try { Core.prepare(B, '{"format":"voidlock-sync","version":9,"device":{"id":"x"},"data":{}}'); ok(false, 'version'); } catch (e) { ok(/different version/.test(e.message), 'another format version is refused with a clear message'); }
+
+// ---- report (HTML / CSV) and charts run left to right
+db = fresh(); const rm = Core.addSubject(db, 'Math', '#8B5CF6'), rp = Core.addSubject(db, 'Physics', '#00C2FF');
+const dayN = (n) => Core.dkey(Core.addDays(new Date(), -n));
+Core.addManual(db, Core.addDays(new Date(), -2), rm.id, 90); Core.addManual(db, Core.addDays(new Date(), -1), rp.id, 45);
+db.entries.push({ id: 'orph1', date: dayN(1), subject: 'gone-a', sec: 600, source: 'manual', t: 1 }, { id: 'orph2', date: dayN(1), subject: 'gone-b', sec: 300, source: 'manual', t: 2 });
+Core.setCounter(db, 'tests', dayN(1), rp.id, 12);
+const ex2 = Core.addExam(db, 'Mock A', dayN(1)), xs2 = Core.addExamSubject(db, 'Calculus');
+Core.setExamResult(db, ex2.id, { taraz: 7000, rank: 900, rank_region: 40, subjects: [{ sid: xs2.id, pct: 55, taraz: 6100 }] });
+for (const lang of ['fa', 'en']) {
+  I18n.setLang(lang);
+  const rep = Report.build(db, dayN(6), dayN(0)), lines = rep.csv.replace('\uFEFF', '').split('\r\n');
+  ok(rep.html.includes('Math') && rep.html.includes('Physics') && rep.html.includes('Mock A') && rep.html.includes('<svg'), `[${lang}] the HTML report has subjects, the exam and charts`);
+  ok(rep.csv.charCodeAt(0) === 0xFEFF && lines[0].split(',').length >= 7 && lines.length >= 8, `[${lang}] the CSV starts with the UTF-8 mark and has one row per day`);
+  ok((rep.html.match(new RegExp(I18n.t('unknown_subject'), 'g')) || []).length >= 1 && lines[0].split(I18n.t('unknown_subject')).length === 2, `[${lang}] old deleted subjects are one line called "${I18n.t('unknown_subject')}"`);
+  ok(rep.html.includes(`dir="${lang === 'fa' ? 'rtl' : 'ltr'}"`) && rep.html.includes('direction:ltr'), `[${lang}] the page follows the language, the charts stay left to right`);
+}
+I18n.setLang('fa');
+const dd = [0, 1, 2, 3, 4].map((i) => ({ dk: dayN(4 - i), label: String(i), month: '', exam: false, sec: 3600 * (i + 1), parts: [{ name: 'Math', color: '#8B5CF6', sec: 3600 * (i + 1) }] }));
+const chart = Charts.studyChart({ t: I18n.t, fa: true, days: dd, goalSec: 7200, width: 340 });
+const barXs = [...chart.svg.matchAll(/<rect x="([\d.]+)" y="[\d.]+" width="[\d.]+" height="[\d.]+" rx="\d" fill="#8B5CF6"/g)].map((m) => +m[1]);
+ok(barXs.length === 5 && barXs.every((x, i) => i === 0 || x > barXs[i - 1]), 'a Persian study chart runs from the left (oldest) to the right (newest)');
+ok(/<text x="(2[0-9]|3[0-3])(\.\d+)?" y="[\d.]+" font-size="10.5" text-anchor="end"/.test(chart.svg), 'and its value axis is on the left');
 console.log(fails ? `\n${fails} failure(s)` : '\nALL PASSED'); process.exit(fails ? 1 : 0);

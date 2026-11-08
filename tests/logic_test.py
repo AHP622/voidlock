@@ -1273,9 +1273,53 @@ def test_sync_random_two_devices():
         ok(all(sla.subject(e["subject"]) or e["subject"] in sla.d["gone"] or True for e in sla.d["entries"]), f"[seed {seed}] entries point to known subjects")
 
 
+class _Phone:
+    """A phone for the tests: speaks the encrypted Wi-Fi protocol (voidlock/lansync.py) with the same helpers the server uses."""
+
+    def __init__(self, base, store):
+        from voidlock import sync
+        self.base, self.store, self.k, self.seq = base, store, None, 0
+        self.did = sync.load_state(store.home)["device_id"]
+        self.last_raw = b""
+
+    def post(self, path, obj):
+        import urllib.request, urllib.error
+        raw = json.dumps(obj).encode("utf-8")
+        self.last_raw = raw
+        req = urllib.request.Request(self.base + path, data=raw, method="POST")
+        req.add_header("Content-Type", "application/json")
+        try:
+            with urllib.request.urlopen(req, timeout=15) as r:
+                body = r.read()
+                return r.status, json.loads(body.decode("utf-8")), body
+        except urllib.error.HTTPError as e:
+            body = e.read()
+            return e.code, json.loads(body.decode("utf-8") or "{}"), body
+
+    def pair_start(self, code, name="My phone", pub_override=None):
+        from voidlock import lansync
+        self.priv, self.pub = lansync.new_keypair()
+        st, js, _ = self.post("/v2/pair/start", {"code": code, "device": {"id": self.did, "name": name}, "pub": lansync.b64e(pub_override or self.pub)})
+        if st != 200:
+            return st, js
+        spub = lansync.b64d(js["pub"])
+        self.k = lansync.derive_key(self.priv, spub, self.pub, spub)
+        self.sas, self.pid = lansync.sas_of(self.k), js["pid"]
+        return st, js
+
+    def call(self, op, **extra):
+        from voidlock import lansync
+        self.seq += 1
+        st, env, raw = self.post("/v2/call", lansync.seal(self.k, self.did, "req", {"seq": self.seq, "op": op, **extra}))
+        self.last_response = raw
+        if st != 200:
+            return st, env
+        out = lansync.open_env(self.k, self.did, "res", env)
+        return st, out
+
+
 def test_lan_sync_server():
-    """The phone's Wi-Fi sync: pairing, login, one request for both directions, and the safety rules."""
-    import urllib.request, urllib.error
+    """The phone's Wi-Fi sync: pairing with a confirmation number, encrypted calls, one request for both directions, safety rules."""
     from voidlock import lansync, sync
     lap, sll = _dev("laptop")
     ph, slp = _dev("phone")
@@ -1283,87 +1327,114 @@ def test_lan_sync_server():
     sj = sll.subjects()[0]
     for i in range(25):
         sll.add_manual(today - timedelta(days=i), sj["id"], 30 + i)
-    sll.add_todo(today, "from the laptop")
-    changes = []
-    backend = lansync.StoreBackend(lap, sll, on_changed=lambda plan: changes.append(plan.changes()))
+    sll.add_todo(today, "secret todo from the laptop")
+    changes, requests = [], []
+    backend = lansync.StoreBackend(lap, sll, on_changed=lambda plan: changes.append(plan.changes()), on_pair_request=lambda info: requests.append(info))
     srv = lansync.LanServer(backend)
     port = srv.start()
     base = f"http://127.0.0.1:{port}"
-
-    def call(method, path, body=None, token=None):
-        req = urllib.request.Request(base + path, data=None if body is None else json.dumps(body).encode("utf-8"), method=method)
-        if body is not None:
-            req.add_header("Content-Type", "application/json")
-        if token:
-            req.add_header("Authorization", "Bearer " + token)
-        try:
-            with urllib.request.urlopen(req, timeout=10) as r:
-                return r.status, json.loads(r.read().decode("utf-8")), dict(r.headers)
-        except urllib.error.HTTPError as e:
-            return e.code, json.loads(e.read().decode("utf-8") or "{}"), dict(e.headers)
+    import urllib.request
     try:
-        st, js, hd = call("GET", "/v1/ping")
-        ok(st == 200 and js["app"] == "voidlock" and js["device"]["id"], "ping tells the phone this is a VOIDLOCK computer (no login needed)")
+        with urllib.request.urlopen(base + "/v1/ping", timeout=10) as r:
+            js = json.loads(r.read().decode("utf-8")); hd = dict(r.headers)
+        ok(js["app"] == "voidlock" and js["proto"] == 2 and js["device"]["id"], "ping tells the phone this is a VOIDLOCK computer and the protocol version")
         ok(hd.get("Access-Control-Allow-Origin") == "*", "answers carry CORS headers (for testing in a browser)")
-        pd = sync.device_info(ph.home)
-        dev = {"id": pd["id"], "name": "My phone"}
-        ok(call("GET", "/v1/rev")[0] == 401, "no token: refused")
-        ok(call("POST", "/v1/sync", {"x": 1})[0] == 401, "sync without a token is refused")
-        ok(call("POST", "/v1/pair", {"code": "000000", "device": dev})[0] == 409, "pairing without a code shown is refused")
+        phone = _Phone(base, ph)
+        phone.k, phone.seq = b"\x01" * 32, 1
+        ok(phone.call("hello")[0] == 401, "a call from a device that never paired is refused")
+        ok(phone.post("/v1/rev", {})[0] == 404 and phone.post("/v1/sync", {})[0] == 404, "the old unencrypted endpoints are gone")
+        ok(phone.pair_start("000000")[0] == 409, "pairing without a code shown is refused")
         code = srv.new_code()
         wrong = "000000" if code != "000000" else "111111"
-        ok(call("POST", "/v1/pair", {"code": wrong, "device": dev})[0] == 403, "a wrong code is refused")
-        st, js, _ = call("POST", "/v1/pair", {"code": code, "device": dev})
-        token = js.get("token")
-        ok(st == 200 and token and len(token) >= 32, "the right code gives a token")
-        ok(call("POST", "/v1/pair", {"code": code, "device": dev})[0] == 409, "a code works only once")
+        ok(phone.pair_start(wrong)[0] == 403, "a wrong code is refused")
+        st, js = phone.pair_start(code)
+        ok(st == 200 and js["pid"] and len(lansync.b64d(js["pub"])) == 65, "the right code starts pairing and returns the computer's public key")
+        ok(requests and requests[0]["sas"] == phone.sas == srv.pending()["sas"], "both devices show the SAME confirmation number")
+        ok(phone.call("hello")[0] == 401, "before the person allows it on the computer, the phone cannot do anything")
+        ok(phone.post("/v2/pair/status", {"pid": phone.pid})[1]["state"] == "waiting", "the phone is told to wait")
+        ok(phone.pair_start(code)[0] == 409, "a code starts only one pairing")
+        # a man in the middle: the phone's key is replaced by the attacker's; the numbers differ
+        code = srv.new_code()
+        mitm = _Phone(base, ph)
+        evil_priv, evil_pub = lansync.new_keypair()
+        st, js = mitm.pair_start(code, "Evil", pub_override=evil_pub)
+        ok(st == 200 and mitm.sas != srv.pending()["sas"], "somebody in the middle gets a DIFFERENT number than the computer shows (the person refuses)")
+        ok(srv.deny(srv.pending()["pid"]) and mitm.post("/v2/pair/status", {"pid": mitm.pid})[1]["state"] == "denied", "denying stops it")
+        ok(not srv.paired(), "nobody is paired")
+        code = srv.new_code()
+        st, js = phone.pair_start(code)
+        ok(srv.approve(srv.pending()["pid"]), "the person allows it on the computer")
+        ok(phone.post("/v2/pair/status", {"pid": phone.pid})[1]["state"] == "approved", "the phone sees that it was allowed")
+        st, out = phone.call("hello")
+        ok(st == 200 and out["ok"] and out["rev"] and out["seq"] == phone.seq, "the first encrypted call works (and proves both have the same key)")
         ok(srv.paired() and srv.paired()[0]["name"] == "My phone", "the computer lists the paired phone")
-        stored = open(lap.home / "sync.json", encoding="utf-8").read()
-        ok(token not in stored, "the token itself is not stored on the computer (only its hash)")
-        ok(call("GET", "/v1/rev", token="nope")[0] == 401, "a wrong token is refused")
-        st, js, _ = call("GET", "/v1/rev", token=token)
-        rev0 = js["rev"]
-        ok(st == 200 and rev0, "a paired phone can ask for the revision")
+        ok(phone.pair_start(srv.new_code())[0] == 200 and not srv.approve("nope"), "a wrong pairing id cannot be approved")
+        srv.cancel_pairing()
+        phone.k = None
+        # the phone object lost its key above: pair again properly
+        phone = _Phone(base, ph)
+        phone.pair_start(srv.new_code()); srv.approve(srv.pending()["pid"])
         # lock after 5 wrong codes
+        c2 = _Phone(base, ph)
         for _i in range(5):
             code = srv.new_code()
-            call("POST", "/v1/pair", {"code": "999999" if code != "999999" else "888888", "device": dev})
-        ok(call("POST", "/v1/pair", {"code": srv.new_code(), "device": dev})[0] in (429, 409), "5 wrong codes lock pairing for a while")
+            c2.pair_start("999999" if code != "999999" else "888888")
+        ok(c2.pair_start(srv.new_code())[0] in (429, 409), "5 wrong codes lock pairing for a while")
         srv._locked_until = 0
-        # the phone has its own work; one request syncs both ways
+        # confidentiality and integrity
         slp.add_manual(today, slp.subjects()[0]["id"], 120)
-        raw = sync.make_package(ph)
-        st, js, _ = call("POST", "/v1/sync", raw, token)
-        ok(st == 200 and js["changed"] and js["rev"] != rev0, "the phone's data reaches the computer in one request")
-        plan = sync.prepare(ph, json.dumps(js["package"]))
-        sync.commit(ph, plan, sl=slp)
+        pkg = sync.make_package(ph)
+        st, out = phone.call("sync", package=pkg)
+        ok(st == 200 and out["ok"] and out["changed"], "the phone's data reaches the computer in one request")
+        ok(b"secret todo" not in phone.last_raw and b"secret todo" not in phone.last_response and b"Math" not in phone.last_response, "nothing readable travels over the network (request and answer are encrypted)")
+        sync.commit(ph, sync.prepare(ph, json.dumps(out["package"])), sl=slp)
+        ok(any(t["text"] == "secret todo from the laptop" for t in slp.d["todos"]), "the answer carries the computer's data, decrypted by the phone")
         ok(_canon(lap) == _canon(ph), "after one request both devices hold the same data")
-        ok(len(slp.d["entries"]) == 26 and len(sll.d["entries"]) == 26, "the laptop's 25 days of history are on the phone, the phone's 2 hours on the laptop")
+        ok(len(slp.d["entries"]) == 26 and len(sll.d["entries"]) == 26, "25 days of history to the phone, the phone's 2 hours to the computer")
         ok(changes and changes[0] > 0, "the app is told that data changed (it refreshes its pages)")
-        st, js2, _ = call("GET", "/v1/rev", token=token)
-        ok(js2["rev"] == js["rev"], "the revision handed back is the computer's current one")
+        rev1 = out["rev"]
+        st, out = phone.call("rev")
+        ok(out["rev"] == rev1, "the revision handed back is the computer's current one")
         sll.add_todo(today, "typed on the laptop later")
-        ok(call("GET", "/v1/rev", token=token)[1]["rev"] != js["rev"], "a change on the computer changes the revision (the phone notices it)")
-        st, js3, _ = call("POST", "/v1/sync", sync.make_package(ph), token)
-        sync.commit(ph, sync.prepare(ph, json.dumps(js3["package"])), sl=slp)
-        ok(any(t["text"] == "typed on the laptop later" for t in slp.d["todos"]), "and the next sync brings it to the phone")
+        ok(phone.call("rev")[1]["rev"] != rev1, "a change on the computer changes the revision (the phone notices it)")
         n0 = len(changes)
-        st, js4, _ = call("POST", "/v1/sync", sync.make_package(ph), token)
-        ok(st == 200 and not js4["changed"] and len(changes) == n0, "a sync with nothing new changes nothing and does not disturb the app")
-        # a damaged request
-        ok(call("POST", "/v1/sync", {"format": "nope"}, token)[0] == 422, "a request that is not a sync package is refused")
+        st, out = phone.call("sync", package=sync.make_package(ph))
+        sync.commit(ph, sync.prepare(ph, json.dumps(out["package"])), sl=slp)
+        ok(any(t["text"] == "typed on the laptop later" for t in slp.d["todos"]), "and the next sync brings it to the phone")
+        st, out = phone.call("sync", package=sync.make_package(ph))
+        ok(st == 200 and not out["changed"], "a sync with nothing new changes nothing")
+        # replay, tampering, wrong direction
+        phone.seq += 1
+        env = lansync.seal(phone.k, phone.did, "req", {"seq": phone.seq, "op": "rev"})
+        ok(phone.post("/v2/call", env)[0] == 200, "a fresh request is accepted")
+        ok(phone.post("/v2/call", env)[0] == 401, "the same recorded request sent again (replay) is refused")
+        phone.seq += 1
+        env = lansync.seal(phone.k, phone.did, "req", {"seq": phone.seq, "op": "rev"})
+        raw = bytearray(lansync.b64d(env["c"])); raw[5] ^= 1; env["c"] = lansync.b64e(bytes(raw))
+        ok(phone.post("/v2/call", env)[0] == 401, "a request changed on the way is refused")
+        phone.seq += 1
+        env = lansync.seal(phone.k, phone.did, "res", {"seq": phone.seq, "op": "rev"})
+        ok(phone.post("/v2/call", env)[0] == 401, "a response cannot be passed off as a request")
+        env = lansync.seal(b"\x02" * 32, phone.did, "req", {"seq": 999, "op": "rev"})
+        ok(phone.post("/v2/call", env)[0] == 401, "a request under another key is refused")
+        ok(phone.post("/v2/call", {"d": phone.did})[0] == 401 and phone.post("/v2/call", {"x": 1})[0] == 401, "malformed envelopes are refused")
+        # a damaged sync package gets a clear error inside the encrypted answer
+        st, out = phone.call("sync", package={"format": "nope"})
+        ok(st == 200 and out["ok"] is False and out["error"] == "invalid", "a request that is not a sync package is answered with an error")
         # a phone that lost everything must not wipe the computer
         c, slc = _dev("c")
         for _i in range(2):
             plan = sync.prepare(c, json.dumps(sync.make_package(lap)))
             sync.commit(c, plan, sl=slc)
         c.study.clear(); c.save_study(); slc._ensure()
-        st, js5, _ = call("POST", "/v1/sync", sync.make_package(c), token)
-        ok(st == 409 and js5["error"] == "needs_review", "a merge that would remove a lot of data is not done automatically")
+        st, out = phone.call("sync", package=sync.make_package(c))
+        ok(out["ok"] is False and out["error"] == "needs_review", "a merge that would remove a lot of data is not done automatically")
         ok(len(sll.d["entries"]) == 26, "nothing was removed")
-        srv.unpair(sync.device_info(ph.home)["id"])
-        ok(call("GET", "/v1/rev", token=token)[0] == 401, "after the computer forgets the phone its token stops working")
+        srv.unpair(phone.did)
+        ok(phone.call("rev")[0] == 401, "after the computer forgets the phone its key stops working")
         ok(all(len(a.split(".")) == 4 for a in lansync.local_addresses()), "local addresses are IPv4")
+        st_ = sync.load_state(lap.home)
+        ok("paired" in st_ and not st_["paired"], "the pairing is really gone from the computer")
     finally:
         srv.stop()
     ok(not srv.running, "the server stops")
@@ -1392,11 +1463,18 @@ def test_charts():
         xs = [i[1] for i in sc.items if i[0] == "rect" and i[8] is None]
         bars = sorted({round(i[1]) for i in sc.items if i[0] == "rect"})
         first_day_x = [i[1] for i in sc.items if i[0] == "rect"][0]
-        ok((first_day_x > sc.w / 2) == (lang == "fa"), f"[{lang}] the first day is drawn at the reading start (right for Persian)")
+        ok(first_day_x < sc.w / 2, f"[{lang}] charts always run left to right: the oldest day is at the left, also in Persian")
+        ok(all(i[6] == "end" for i in sc.items if i[0] == "text" and i[1] < 40 and i[2] > 40 and i[2] < 230 and i[6] != "middle"), f"[{lang}] the value axis is on the left")
         ok(any(i[0] == "line" and i[5] == charts.LIGHT["goal"] for i in sc.items) and any(i[0] == "polygon" for i in sc.items), f"[{lang}] goal line and exam marker")
     ok(('text-anchor="end"' in svg) or True, "")
     fa_svg = charts.study_chart(report.collect(st, sl, today - timedelta(days=19), today, "", "fa", goal_min=90)).to_svg("t", True)
-    ok('direction="rtl"' in fa_svg and 'text-anchor="start"' in fa_svg, "SVG text anchors are flipped for right-to-left (start/end follow direction in SVG)")
+    ok('direction="ltr"' in fa_svg and 'direction:ltr' in fa_svg and 'direction="rtl"' not in fa_svg, "a Persian chart is still an LTR picture (anchors keep their geometric meaning inside an RTL page)")
+    wk_fa = charts.weekday_chart(report.collect(st, sl, today - timedelta(days=19), today, "", "fa", goal_min=90))
+    xs = [i[1] + i[3] / 2 for i in wk_fa.items if i[0] == "rect"]
+    ok(xs == sorted(xs), "the weekday chart also runs from the left to the right")
+    ls = charts.line_chart({"labels": ["a", "b", "c"], "series": [{"name": "r", "color": "#000", "values": [1, 2, 3]}]}, charts.LIGHT, 600, 240, True)
+    cxs = [i[1] for i in ls.items if i[0] == "circle"]
+    ok(cxs == sorted(cxs), "a Persian progress chart also has its first exam at the left")
     # line chart: rank axis inverted
     sc = charts.line_chart({"labels": ["a", "b", "c"], "invert": True, "series": [{"name": "r", "color": "#000", "values": [40000, 30000, 20000]}]}, charts.LIGHT, 600, 240, False)
     ys = [i[2] for i in sc.items if i[0] == "circle"]
