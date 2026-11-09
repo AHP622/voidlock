@@ -36,6 +36,9 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
+## What changed in 1.11.2
+- **Android release check fixed.** Added the missing Persian and English report labels so the phone app's logic tests pass in GitHub Actions.
+
 ## What changed in 1.11.1
 
 - **Android study reports now carry the same core sections as Windows:** study summaries, daily/monthly tables, weekday averages, focus-session details, exam progress and subject matrices, plus the weekly class/study timetable received from the computer.
