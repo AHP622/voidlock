@@ -25,7 +25,7 @@ import platform
 import time
 from datetime import date
 
-from .store import clean_history, read_json, uid, write_json
+from .store import clean_classes, clean_history, clean_schedule, read_json_checked, uid, write_json
 
 FORMAT = "voidlock-sync"
 VERSION = 2
@@ -119,8 +119,10 @@ def _state_path(home):
 
 
 def load_state(home):
-    raw = read_json(_state_path(home))
-    s = raw if isinstance(raw, dict) else {}
+    status, raw = read_json_checked(_state_path(home), retries=10)
+    if status == "error":                               # the file exists but is locked for a moment: never start a new identity over it
+        raise OSError("sync.json cannot be read right now")
+    s = raw if status == "ok" and isinstance(raw, dict) else {}
     fresh = not isinstance(s.get("device_id"), str) or not s["device_id"]
     if fresh:
         s["device_id"] = uid()                          # the identity must survive the very first call, not only the first save
@@ -331,7 +333,40 @@ def make_package(store, home=None):
     state = observe(store, s)
     save_state(home, s)
     return {"format": FORMAT, "version": VERSION, "device": {"id": s["device_id"], "name": s["device_name"]},
-            "created": int(time.time()), "data": _pack(state)}
+            "created": int(time.time()), "data": _pack(state), "timetable": _timetable(store)}
+
+
+def _timetable(store):
+    classes = clean_classes(getattr(store, "classes", []))
+    for item in classes:
+        item.pop("rem_done", None)
+        item.pop("start_done", None)
+    sessions = clean_schedule(getattr(store, "schedule", []))
+    for item in sessions:
+        item.pop("last_fired", None)
+    return {"classes": classes,
+            "sessions": sessions,
+            "week_start": int(store.settings.get("week_start", 5))}
+
+
+def _clean_timetable(value):
+    if not isinstance(value, dict):
+        return None
+    try:
+        week_start = int(value.get("week_start", 5))
+    except (TypeError, ValueError):
+        week_start = 5
+    if week_start not in (0, 5, 6):
+        week_start = 5
+    classes = clean_classes(value.get("classes"))
+    for item in classes:
+        item.pop("rem_done", None)
+        item.pop("start_done", None)
+    sessions = clean_schedule(value.get("sessions"))
+    for item in sessions:
+        item.pop("last_fired", None)
+    return {"classes": classes,
+            "sessions": sessions, "week_start": week_start}
 
 
 def _clean_state(data):
@@ -394,7 +429,7 @@ def parse_package(raw):
     if not isinstance(dev, dict) or not isinstance(dev.get("id"), str) or not dev["id"]:
         raise SyncError("That sync file has no device id.")
     return {"device": {"id": dev["id"], "name": str(dev.get("name") or "?")[:60]}, "created": pkg.get("created"),
-            "data": _clean_state(pkg.get("data"))}
+            "data": _clean_state(pkg.get("data")), "timetable": _clean_timetable(pkg.get("timetable"))}
 
 
 class Plan:
@@ -472,6 +507,7 @@ def content_rev(store):
     for kind in KINDS:
         for rid in sorted(cur[kind]):
             h.update(f"{kind}|{rid}|{_digest(cur[kind][rid])}\n".encode("utf-8"))
+    h.update(("timetable|" + _digest(_timetable(store)) + "\n").encode("utf-8"))
     return h.hexdigest()[:16]
 
 

@@ -13,6 +13,7 @@
   }
   function card(title, kids) { return h('section', { class: 'card' }, title ? h('h3', null, title) : null, kids); }
   function seg(items, cur, on) { return h('div', { class: 'seg' }, items.map(function (i) { return h('button', { class: i[0] === cur ? 'on' : '', onclick: function () { on(i[0]); } }, i[1]); })); }
+  function countMap(m) { return m ? Object.keys(m).reduce(function (n, k) { return n + (Number(m[k]) || 0); }, 0) : 0; }
 
   // ------------------------------------------------------------------ summaries of an import
   function planLines(plan) {
@@ -39,6 +40,7 @@
   // ------------------------------------------------------------------ pairing with the computer
   function pairFlow(App) {
     var db = App.db, body = h('div'), s, scanning = false, found = [], cancelled = false;
+    App.dialogOpen = true;
     function listStep() {
       body.innerHTML = '';
       var status = h('div', { class: 'small muted', style: { margin: '6px 0 10px' } }, scanning ? t('finding') : '');
@@ -89,7 +91,7 @@
         status.textContent = r.error === 'denied' ? t('pair_denied') : r.error === 'expired' ? t('pair_expired') : r.error === 'key' ? t('pair_key') : t('network_error');
       });
     }
-    s = UI.sheet({ title: t('find_computer'), body: body, actions: [h('button', { class: 'btn', onclick: function () { s.close(); } }, t('close'))] });
+    s = UI.sheet({ title: t('find_computer'), body: body, onClose: function () { App.dialogOpen = false; }, actions: [h('button', { class: 'btn', onclick: function () { s.close(); } }, t('close'))] });
     listStep();
   }
   Views.pairFlow = pairFlow;
@@ -133,9 +135,11 @@
   function reportSheet(App) {
     var db = App.db, range = 14, today = Core.dkey();
     var fromF = UI.dateField(Core.dkey(Core.addDays(new Date(), -13))), toF = UI.dateField(today);
+    var studentName = h('input', { type: 'text', maxlength: 80, placeholder: t('name'), value: db.settings.report_name || '' });
     var custom = h('div', { class: 'hide' }, UI.field(t('r_from'), fromF.el), UI.field(t('r_to'), toF.el));
     var segBox = h('div');
-    var firstDay = db.entries.concat(db.sessions.map(function (r) { return { date: Core.dkey(new Date(r.start * 1000)) }; })).map(function (e) { return e.date; }).sort()[0] || today;
+    var dates = db.entries.map(function (e) { return e.date; }).concat(db.sessions.map(function (r) { return Core.dkey(new Date(r.start * 1000)); }), Object.keys(db.tests), Object.keys(db.words), db.exams.map(function (e) { return e.date; }));
+    var firstDay = dates.filter(Boolean).sort()[0] || today;
     function draw() {
       segBox.innerHTML = '';
       segBox.appendChild(seg([[7, t('r_7')], [14, t('r_14')], [30, t('r_30')], [90, t('r_90')], ['all', t('r_all')], ['custom', t('r_custom')]], range, function (v) { range = v; custom.classList.toggle('hide', v !== 'custom'); draw(); }));
@@ -147,14 +151,19 @@
       return [Core.dkey(Core.addDays(new Date(), -(range - 1))), today];
     }
     function make(kind) {
-      var p = period(), r = Report.build(db, p[0], p[1]);
-      var any = db.entries.some(function (e) { return e.date >= p[0] && e.date <= p[1]; }) || db.sessions.length || db.exams.some(function (e) { return e.date >= p[0] && e.date <= p[1]; });
+      var p = period(), r = Report.build(db, p[0], p[1], studentName.value.trim());
+      db.settings.report_name = studentName.value.trim(); App.save();
+      var any = db.entries.some(function (e) { return e.date >= p[0] && e.date <= p[1]; }) ||
+        db.sessions.some(function (x) { var d = Core.dkey(new Date(x.start * 1000)); return d >= p[0] && d <= p[1]; }) ||
+        db.exams.some(function (e) { return e.date >= p[0] && e.date <= p[1]; }) ||
+        (db.weekly_schedule && ((db.weekly_schedule.classes || []).some(function (x) { return x.enabled !== false; }) || (db.weekly_schedule.sessions || []).some(function (x) { return x.enabled !== false; }))) ||
+        Object.keys(db.tests).concat(Object.keys(db.words)).some(function (d) { return d >= p[0] && d <= p[1] && (countMap(db.tests[d]) || countMap(db.words[d])); });
       if (!any) return UI.toast(t('report_empty'), 'warn');
       if (kind === 'html') Native.shareFile(r.base + '.html', 'text/html', r.html);
       else if (kind === 'csv') Native.shareFile(r.base + '.csv', 'text/csv', r.csv);
       else Native.printHtml(r.title, r.html);
     }
-    var s = UI.sheet({ title: t('report_title'), message: t('report_hint'), body: [segBox, custom],
+    var s = UI.sheet({ title: t('report_title'), message: t('report_hint'), body: [UI.field(t('name'), studentName), segBox, custom],
       actions: [h('div', { class: 'col', style: { width: '100%', gap: '8px' } },
         h('button', { class: 'btn primary block', onclick: function () { make('pdf'); } }, UI.ic('file'), t('fmt_pdf')),
         h('button', { class: 'btn block', onclick: function () { make('html'); } }, UI.ic('globe'), t('fmt_html')),
@@ -201,6 +210,7 @@
     var auto = h('input', { type: 'checkbox' }); auto.checked = db.settings.update_check !== false;
     auto.addEventListener('change', function () { db.settings.update_check = auto.checked; App.save(); });
     kids.push(h('label', { class: 'row sb', style: { padding: '12px 0 0' } }, h('span', null, t('update_auto')), auto), h('div', { class: 'small dim', style: { marginTop: '6px' } }, t('update_hint')));
+    kids.push(h('div', { class: 'small dim', style: { textAlign: 'center', margin: '12px 0 4px' } }, t('made_by')));
     kids.push(h('button', { class: 'btn danger block', style: { marginTop: '16px' }, onclick: function () {
       UI.confirm(t('reset_q'), t('reset_msg'), t('delete'), true).then(function (ok) { if (ok) App.resetAll(); });
     } }, t('reset_data')));

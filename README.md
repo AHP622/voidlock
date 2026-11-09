@@ -36,6 +36,12 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
+## What changed in 1.11.1
+
+- **Android study reports now carry the same core sections as Windows:** study summaries, daily/monthly tables, weekday averages, focus-session details, exam progress and subject matrices, plus the weekly class/study timetable received from the computer.
+- **Wi-Fi sync recovers from temporary failures:** the phone retries transient busy responses, and looks for the paired computer again if its address changed. A revoked pairing is reported separately.
+- **New users get short section guides.** A concise update note appears after an app update. The app credits Novum in a small, visible place, and the Windows desktop shortcut reads `Voidlock`.
+
 ## What changed in 1.11.0
 
 - **Wi-Fi sync is now encrypted.** Pairing: the 6-digit code only lets a phone ask; both devices do an ECDH (P-256) key exchange and show the same 6-digit confirmation number; you press *Allow* on the computer only if the numbers match (somebody in the middle gets a different number). After that every call is an AES-256-GCM envelope (key from HKDF-SHA256) with a growing counter, so nothing readable travels over the network and a recorded request cannot be replayed. Needs the `cryptography` package (in `requirements.txt`, bundled in the exe). The phone uses the browser's Web Crypto with the same constructions. Older phone apps (protocol 1) cannot connect: update both.

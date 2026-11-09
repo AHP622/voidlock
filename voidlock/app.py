@@ -245,6 +245,7 @@ class Sidebar(QWidget):
         bc.setSpacing(0)
         bc.addWidget(label("VOIDLOCK", 17, QFont.Weight.Bold, T.text, spacing=3.2))
         bc.addWidget(label("FOCUS GUARD", 9, QFont.Weight.DemiBold, T.cyan, spacing=2.6))
+        bc.addWidget(label("by Novum", 8, color=T.text3))
         brand.addLayout(bc)
         brand.addStretch(1)
         lay.addLayout(brand)
@@ -400,6 +401,7 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(1500, self._repair_subjects)
         QTimer.singleShot(20000, self.guard.ensure)      # swaps a guard that still runs older code after an update
         QTimer.singleShot(3500, self.process_points)
+        QTimer.singleShot(1800, self.show_whats_new)
 
     # ------------------------------------------------------------ window chrome
     def toggle_max(self):
@@ -551,10 +553,60 @@ class MainWindow(QMainWindow):
         self.sidebar.set_active(key)
         pg.on_show()
         self.stack.show_index(i)
+        QTimer.singleShot(500, lambda k=key: self.show_page_intro(k))
         self._first = False
 
     def current_key(self):
         return self.keys[self.stack.currentIndex()]
+
+    def show_whats_new(self):
+        if self.root.findChildren(Modal):
+            QTimer.singleShot(700, self.show_whats_new)
+            return
+        if self.store.settings.get("whats_new_seen") == __version__:
+            return
+        fa = self.store.settings.get("language") == "fa"
+        title = "تغییرات نسخه‌ی جدید" if fa else "What’s new in VOIDLOCK"
+        pending = self.store.settings.get("whats_new_pending")
+        message = (pending.get("notes") or "") if isinstance(pending, dict) and pending.get("version") == __version__ else ""
+        if not message:
+            message = ("گزارش اندروید کامل‌تر شده است. هماهنگی گوشی و کامپیوتر در برابر خطاهای موقت شبکه مقاوم‌تر شده و برای هر بخش برنامه راهنمای کوتاه اضافه شده است."
+                       if fa else
+                       "The Android report now includes more detail. Phone-to-computer sync handles temporary network errors better, and quick guides introduce the app’s sections.")
+        self.store.settings.pop("whats_new_pending", None)
+        self.store.settings["whats_new_seen"] = __version__
+        self.store.save_settings()
+        m = self.new_modal().build(title, message, None, "شروع کنیم" if fa else "Let’s go", "", icon="info", width=520)
+        m.exec_modal()
+
+    def show_page_intro(self, key):
+        seen = self.store.settings.get("tab_tours")
+        if not isinstance(seen, dict):
+            seen = {}
+            self.store.settings["tab_tours"] = seen
+        if seen.get(key):
+            return
+        if self.root.findChildren(Modal):
+            QTimer.singleShot(700, lambda k=key: self.show_page_intro(k))
+            return
+        fa = self.store.settings.get("language") == "fa"
+        text = {
+            "overview": ("نمای کلی", "هدف روزانه، زمان مطالعه و وضعیت تمرکزت را یک‌جا ببین.", "Overview", "See your daily goal, study time and focus status in one place."),
+            "study": ("زمان‌سنج مطالعه", "درس را انتخاب کن و زمان‌سنج را شروع کن؛ زمان دستی و شمارش تست و لغت را هم ثبت کن.", "Study Timer", "Choose a subject and start the timer. You can also add time manually and track tests or words."),
+            "apps": ("مدیریت برنامه‌ها", "برنامه‌های حواس‌پرت‌کن را انتخاب کن و برای جلسه یا ساعت‌های مشخص مسدودشان کن.", "Application Control", "Choose distracting apps and block them during a session or scheduled lock hours."),
+            "sessions": ("جلسه‌های مطالعه", "جلسه‌های تمرکز را شروع کن و زمان برنامه‌ریزی‌شده، تمرکز واقعی و نتیجه را مرور کن.", "Study Sessions", "Start focus sessions and review planned time, focused time and outcomes."),
+            "schedule": ("برنامه‌ی هفتگی", "کلاس‌ها و جلسه‌های مطالعه را زمان‌بندی کن تا یادآوری‌ها و شروع خودکار را مدیریت کنی.", "Schedule", "Plan classes and study sessions, with reminders and optional automatic starts."),
+            "exams": ("آزمون‌ها", "تاریخ آزمون‌ها و نتیجه‌ی هر درس را ثبت کن و روند تراز و رتبه را دنبال کن.", "Exams", "Add exam dates and subject results, then follow taraz and rank trends."),
+            "rewards": ("امتیازها", "با روزهای پیوسته‌ی تمرکز امتیاز بگیر و برای استراحت برنامه‌ریزی‌شده از آن استفاده کن.", "Rewards", "Earn points for consistent focus days and use them for planned breaks."),
+            "analytics": ("گزارش و آمار", "روند مطالعه و آزمون‌ها را بررسی کن و گزارش PDF، صفحه‌ی وب یا CSV بگیر.", "Analytics", "Review study and exam trends, and export a PDF, web page or CSV report."),
+            "settings": ("تنظیمات", "هدف روزانه، زبان، تم، پشتیبان‌گیری، هماهنگی گوشی و به‌روزرسانی‌ها را مدیریت کن.", "Settings", "Manage your daily goal, language, theme, backups, phone sync and updates."),
+            "help": ("راهنما", "راهنمای کامل قابلیت‌ها و پاسخ پرسش‌های رایج را اینجا پیدا کن.", "Help", "Find a full guide to the app’s features and answers to common questions."),
+        }[key]
+        seen[key] = True
+        self.store.save_settings()
+        m = self.new_modal().build(("خوش آمدی · " + text[0]) if fa else ("Welcome · " + text[2]),
+                                  text[1] if fa else text[3], None, "متوجه شدم" if fa else "Got it", "", icon="info", width=520)
+        m.exec_modal()
 
     def _find(self):
         self.goto("apps")
@@ -1076,6 +1128,7 @@ class MainWindow(QMainWindow):
         except updater.UpdateError as e:
             return self._on_update_failed(str(e), True)
         self.store.settings["update_last_tag"] = self.update_info["tag"]
+        self.store.settings["whats_new_pending"] = {"version": self.update_info["version"], "notes": self.update_info.get("notes", "")}
         self.store.save_settings()
         if not (self.session.active or self.store.active_locks()):
             self.guard.stop()          # nothing enforced right now: let the new guard code take over

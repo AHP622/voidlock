@@ -300,6 +300,8 @@ class LanServer:
             return (b64d(p["key"]), int(p.get("seq", 0))) if p and p.get("key") else None
         try:
             return self.backend.call(find)
+        except OSError:
+            raise                                       # the file is busy for a moment: a temporary 503, not "unknown phone"
         except Exception:
             return None
 
@@ -326,6 +328,8 @@ class LanServer:
             seq = int(req["seq"])
             if seq <= last or not self._bump_seq(did, seq):
                 return 401, {"error": "unauthorized"}
+        except OSError:
+            return 503, {"error": "busy"}
         except Exception:
             return 401, {"error": "unauthorized"}
         op = req.get("op")

@@ -166,7 +166,7 @@ _ENUMS = {"reduce_motion": ("auto", "on", "off"), "language": ("en", "fa"), "the
 _BOOLS = ("female_mascot", "strict_default", "play_tracking", "game_friday_only", "update_check", "update_auto_install", "lan_sync",
           "close_to_tray", "tray_at_login", "tray_hint_shown")
 # never taken from an imported file: they decide where code comes from
-_NOT_IMPORTED = ("update_last_check", "update_last_tag", "update_notified")
+_NOT_IMPORTED = ("update_last_check", "update_last_tag", "update_notified", "tab_tours", "whats_new_seen", "whats_new_pending")
 
 
 def sanitize_settings(s):

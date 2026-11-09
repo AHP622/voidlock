@@ -7,7 +7,8 @@ The phone app is the same web UI that you can open in any browser (`app/src/main
   (total taraz, overall rank, **region rank**, per-subject percent / taraz) and their progress charts. Persian (Jalali dates, RTL) and English.
 * **Sync with the computer** over Wi-Fi (any modem, even a SIM modem, or the phone's hotspot; no internet needed) or with a `.voidsync` file.
   The rules are described at the top of `voidlock/sync.py`; the computer side of the Wi-Fi sync is `voidlock/lansync.py`.
-* **Reports** (More → Report): a period (7 / 14 / 30 / 90 days, everything, or custom) as PDF (Android print dialog → *Save as PDF*), a web page, or CSV.
+* **Reports** (More → Report): a period (7 / 14 / 30 / 90 days, everything, or custom) as PDF (Android print dialog → *Save as PDF*), a web page, or CSV. They include study summaries, daily/monthly tables, weekday averages, focus sessions, exam progress and the weekly class/study timetable from the computer.
+* **First-run guides** introduce the main tabs when they are first opened. Each version can show its release notes once after updating.
 * **Background sync**: `SyncWorker` opens the app page without a screen (`#bg`), does one encrypted sync and closes (every ~15 minutes on the same network, and ~20 s after the app is left). Android decides the exact time; it is not live.
 * **Encrypted sync**: ECDH + a confirmation number shown on both devices, then AES-256-GCM (see the top of `voidlock/lansync.py`).
 * **Updates** come from this repository's GitHub Releases: *More → About → Check for updates* downloads `VoidLock.apk`, checks its SHA-256
