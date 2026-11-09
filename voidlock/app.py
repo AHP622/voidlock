@@ -316,6 +316,11 @@ class MainWindow(QMainWindow):
         self.resize(1280, 800)
         self.setMinimumSize(1040, 680)
         self.store, self.guard = store, guard
+        if store.is_first_install:
+            store.settings["show_section_guides"] = True
+            store.settings["section_guides_version"] = __version__
+            store.settings["whats_new_seen"] = __version__
+            store.save_settings()
         self.session = SessionController(store, guard)
         self.study = StudyLog(store)
         self.study.restore()
@@ -580,6 +585,9 @@ class MainWindow(QMainWindow):
         m.exec_modal()
 
     def show_page_intro(self, key):
+        if (not self.store.settings.get("show_section_guides", False)
+                or self.store.settings.get("section_guides_version") != __version__):
+            return
         seen = self.store.settings.get("tab_tours")
         if not isinstance(seen, dict):
             seen = {}

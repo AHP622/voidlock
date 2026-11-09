@@ -36,6 +36,10 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
+## What changed in 1.11.3
+- **Guides are for first installs.** Section introductions now appear only during the installation version; updates still show their release notes without repeating the tour.
+- **Reports fit narrow screens.** The report page and its tables now wrap within the available screen width.
+
 ## What changed in 1.11.2
 - **Android release check fixed.** Added the missing Persian and English report labels so the phone app's logic tests pass in GitHub Actions.
 

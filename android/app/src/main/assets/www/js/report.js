@@ -10,7 +10,8 @@
     '.stat b{display:block;font-size:18px}.stat span{font-size:12px;color:var(--text3)}table{width:100%;border-collapse:collapse;margin:6px 0}th,td{padding:7px 8px;border-bottom:1px solid #e5e7ee;text-align:start}' +
     'th{background:var(--panel2);font-size:12px;color:var(--text2)}.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-inline-end:6px}.leg{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--text2);margin:6px 0 12px}' +
     '.foot{margin-top:30px;color:var(--text3);font-size:12px;text-align:center}svg.chart{width:100%;height:auto;display:block;direction:ltr}.num{font-variant-numeric:tabular-nums}' +
-    '@page{size:A4;margin:12mm}@media print{.page{padding:0}h2{break-after:avoid}table,svg{break-inside:avoid}}@media(max-width:560px){.grid{grid-template-columns:1fr 1fr}}';
+    'html,body{width:100%;max-width:100%;overflow-x:hidden}.page{width:100%;min-width:0}table{max-width:100%;table-layout:fixed}th,td{min-width:0;overflow-wrap:anywhere;word-break:break-word}' +
+    '@page{size:A4;margin:12mm}@media print{html,body{overflow:visible}.page{padding:0}h2{break-after:avoid}table,svg{break-inside:avoid}}@media(max-width:560px){.page{padding:14px}h1{font-size:clamp(18px,5vw,24px);overflow-wrap:anywhere}.grid{grid-template-columns:1fr 1fr;gap:7px}.stat{padding:8px}.stat b{font-size:clamp(14px,4vw,18px)}table{font-size:10px}th,td{padding:5px 3px}}';
 
   function rangeDays(from, to) {
     var out = [], d = Core.parseDkey(from), end = Core.parseDkey(to), n = 0;

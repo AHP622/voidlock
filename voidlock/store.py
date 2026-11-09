@@ -131,6 +131,8 @@ DEFAULT_SETTINGS = {
     "tray_hint_shown": False,
     "update_check": True,
     "update_auto_install": True,
+    "show_section_guides": False,
+    "section_guides_version": "",
     "lan_sync": False,           # the Wi-Fi sync server for the phone
     "update_last_check": 0,
     "long_cooldown": 600,        # seconds to wait before a multi-day lock can be released early
@@ -163,10 +165,10 @@ _INT_RANGES = {
 }
 _ENUMS = {"reduce_motion": ("auto", "on", "off"), "language": ("en", "fa"), "theme": THEME_KEYS,
           "sound": STYLE_ORDER, "week_start": (5, 6, 0)}
-_BOOLS = ("female_mascot", "strict_default", "play_tracking", "game_friday_only", "update_check", "update_auto_install", "lan_sync",
+_BOOLS = ("female_mascot", "strict_default", "play_tracking", "game_friday_only", "update_check", "update_auto_install", "show_section_guides", "lan_sync",
           "close_to_tray", "tray_at_login", "tray_hint_shown")
 # never taken from an imported file: they decide where code comes from
-_NOT_IMPORTED = ("update_last_check", "update_last_tag", "update_notified", "tab_tours", "whats_new_seen", "whats_new_pending")
+_NOT_IMPORTED = ("update_last_check", "update_last_tag", "update_notified", "tab_tours", "whats_new_seen", "whats_new_pending", "show_section_guides", "section_guides_version")
 
 
 def sanitize_settings(s):
@@ -361,6 +363,7 @@ class Store:
         self.windows, self.study = [], {}
         if not service:
             self._import_legacy_if_first_run()
+        self.is_first_install = not any((self.home / name).exists() for name in DATA_FILES) and not self.backup_dir.exists()
         self.load()
         if not service:
             self._migrate()

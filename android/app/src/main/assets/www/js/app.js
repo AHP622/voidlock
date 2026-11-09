@@ -11,6 +11,14 @@
     try { raw = localStorage.getItem(KEY); } catch (e) {}
     try { db = raw ? JSON.parse(raw) : null; } catch (e) { db = null; }
     App.db = Core.ensure(db);
+    if (App.db.settings.show_section_guides === undefined) {
+      App.db.settings.show_section_guides = !db;
+      if (!db) {
+        App.db.settings.section_guides_version = Native.appVersion() || (root.VOIDLOCK_CONFIG || {}).version || '0';
+        App.db.settings.whats_new_seen = App.db.settings.section_guides_version;
+      }
+      try { localStorage.setItem(KEY, JSON.stringify(App.db)); } catch (e) {}
+    }
     if (!App.db.sync.device_name) App.db.sync.device_name = Native.deviceName();
     I18n.setLang(App.db.settings.lang); App.applyTheme();
   };
@@ -106,7 +114,8 @@
   function syncMessage(r) { return r.message || t('unknown_error'); }
   var TOUR_KEYS = { today: 'tour_today', stats: 'tour_stats', exams: 'tour_exams', tasks: 'tour_tasks', more: 'tour_more' };
   App.showTour = function (view) {
-    var key = TOUR_KEYS[view]; if (!key || !App.db || App.dialogOpen) return;
+    var version = Native.appVersion() || (root.VOIDLOCK_CONFIG || {}).version || '0';
+    var key = TOUR_KEYS[view]; if (!key || !App.db || !App.db.settings.show_section_guides || App.db.settings.section_guides_version !== version || App.dialogOpen) return;
     var seen = App.db.settings.tab_tours;
     if (!seen || typeof seen !== 'object' || Array.isArray(seen)) seen = {};
     if (seen[view]) return;
@@ -169,7 +178,7 @@
   App.resetAll = function () {
     var lang = App.db.settings.lang, theme = App.db.settings.theme;
     try { localStorage.removeItem(KEY); } catch (e) {}
-    App.db = Core.ensure(null); App.db.settings.lang = lang; App.db.settings.theme = theme; App.db.settings.welcomed = true; App.db.sync.device_name = Native.deviceName();
+    App.db = Core.ensure(null); App.db.settings.lang = lang; App.db.settings.theme = theme; App.db.settings.welcomed = true; App.db.settings.show_section_guides = false; App.db.settings.whats_new_seen = Native.appVersion() || (root.VOIDLOCK_CONFIG || {}).version || '0'; App.db.sync.device_name = Native.deviceName();
     App.syncState = 'off'; App.saveNow(); App.render(); UI.toast(t('saved'), 'success');
   };
 
