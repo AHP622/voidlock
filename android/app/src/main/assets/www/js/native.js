@@ -78,8 +78,8 @@
       return j && j.app === 'voidlock' && j.device ? { addr: addr, device: j.device, version: j.version, proto: j.proto || 1 } : null;
     });
   }
-  function scan(onFound, onProgress) {
-    var ips = Native.localIps(), hosts = [], seen = {}, found = [];
+  function scan(onFound, onProgress, stopWhen) {
+    var ips = Native.localIps(), hosts = [], seen = {}, found = [], stopped = false;
     ips.forEach(function (ip) {
       var p = ip.split('.'); if (p.length !== 4) return;
       var pre = p.slice(0, 3).join('.');
@@ -90,50 +90,15 @@
     return new Promise(function (resolve) {
       if (!total) return resolve(found);
       function next() {
-        if (idx >= jobs.length) return;
+        if (idx >= jobs.length || stopped) return;
         var addr = jobs[idx++];
         ping(addr, 900).then(function (res) {
-          if (res) { found.push(res); if (onFound) onFound(res); }
+          if (res) { found.push(res); if (onFound) onFound(res); if (stopWhen && stopWhen(res)) { stopped = true; return resolve(found); } }
           done++; if (onProgress) onProgress(done, total);
           if (done >= total) resolve(found); else next();
         });
       }
       for (var k = 0; k < 40; k++) next();
-    });
-  }
-  /* The computer's address can change (the router hands out a new one after a while). The pairing key stays valid, so instead of failing
-   * we look for the SAME computer (by its device id) at the saved address first, then on the local networks, and return its current address. */
-  var lastScan = 0;
-  function rediscover(lap, force) {
-    var raw = String(lap.addr).replace(/^https?:\/\//, '').replace(/\/+$/, '').split(':'), host = raw[0], port = raw[1] || String(PORTS[0]);
-    function same(r) { return !!(r && r.device && (lap.id ? r.device.id === lap.id : r.device.name === lap.name)); }
-    return ping(lap.addr, 2500).then(function (r) {
-      if (same(r)) return lap.addr;
-      if (!force && Date.now() - lastScan < 60000) return null;
-      lastScan = Date.now();
-      var ips = Native.localIps().slice(), pre = {}, hosts = [], jobs = [], hp = host.split('.');
-      if (hp.length === 4) ips.push(host);
-      ips.forEach(function (ip) {
-        var p = ip.split('.'); if (p.length !== 4) return;
-        var pf = p.slice(0, 3).join('.'); if (pre[pf]) return; pre[pf] = 1;
-        for (var i = 1; i < 255; i++) hosts.push(pf + '.' + i);
-      });
-      var ports = [port]; if (String(PORTS[0]) !== String(port)) ports.push(String(PORTS[0]));
-      ports.forEach(function (pt) { hosts.forEach(function (h) { jobs.push(h + ':' + pt); }); });
-      if (!jobs.length) return null;
-      return new Promise(function (resolve) {
-        var idx = 0, done = 0, finished = false;
-        function end(v) { if (!finished) { finished = true; resolve(v); } }
-        function next() {
-          if (finished || idx >= jobs.length) return;
-          var addr = jobs[idx++];
-          ping(addr, 1000).then(function (res) {
-            if (same(res)) return end(addr);
-            done++; if (done >= jobs.length) end(null); else next();
-          });
-        }
-        for (var k = 0; k < 40; k++) next();
-      });
     });
   }
   // ---- encryption (same constructions as voidlock/lansync.py: ECDH P-256 -> HKDF-SHA256 -> AES-256-GCM)
@@ -218,10 +183,37 @@
         .catch(function () { return { status: 0, error: 'decrypt' }; });
     }).catch(function (e) { return { status: 0, error: String(e && e.message || e) }; });
   }
-  function rev(lap) { return secureCall(lap, 'rev', null, 6000).then(function (c) { return { status: c.status, rev: c.data && c.data.rev }; }); }
-  function syncOnce(db, lap) {
+  // ---- the computer moved: the router gave it a new address (a DHCP lease lasts only a few hours), the app was restarted on another port,
+  // the Wi-Fi reconnected ... The phone used to keep calling the old address until the pairing was deleted and made again. Now it looks for the
+  // computer by its id (first the same address on every port, then the phone's own network) and carries on.
+  var finding = null, lastFindAt = 0;                         // kept here, not on `lap`: lap is saved with the app data
+  function relocate(lap, opts) {
+    opts = opts || {};
+    if (finding) return finding;
+    var now = Date.now();
+    if (!opts.force && lastFindAt && now - lastFindAt < 90000) return Promise.resolve(false);          // the computer may simply be off: do not scan all the time
+    lastFindAt = now;
+    var host = String(lap.addr).replace(/^https?:\/\//, '').split(':')[0];
+    function mine(res) { return !!res && (!lap.id || (res.device && res.device.id === lap.id)); }
+    function use(res) { if (res.addr !== lap.addr) { lap.addr = res.addr; } lastFindAt = 0; if (Net.persist) Net.persist(); return true; }
+    var p = Promise.all(PORTS.map(function (port) { return ping(host + ':' + port, 1500); })).then(function (rs) {
+      var hit = rs.filter(mine)[0];
+      if (hit) return use(hit);
+      return scan(null, null, mine).then(function (found) { var h = found.filter(mine)[0]; return h ? use(h) : false; });
+    }).catch(function () { return false; }).then(function (r) { finding = null; return r; });
+    finding = p;
+    return p;
+  }
+  function withFind(lap, opts, call) {
+    return call().then(function (r) {
+      if (r && r.status === 0 && r.error !== 'decrypt' && r.error !== 'replay') return relocate(lap, opts).then(function (found) { return found ? call() : r; });
+      return r;
+    });
+  }
+  function rev(lap, opts) { return withFind(lap, opts, function () { return secureCall(lap, 'rev', null, 6000); }).then(function (c) { return { status: c.status, rev: c.data && c.data.rev }; }); }
+  function syncOnce(db, lap, opts) {
     var pkg = Core.makePackage(db);
-    return secureCall(lap, 'sync', { package: pkg }, 60000).then(function (c) {
+    return withFind(lap, opts, function () { return secureCall(lap, 'sync', { package: pkg }, 60000); }).then(function (c) {
       var d = c.data;
       if (c.status === 200 && d && d.ok && d.package) {
         var plan = Core.prepare(db, d.package), changes = plan.changes();
@@ -247,10 +239,10 @@
       var apk = (j.assets || []).find(function (a) { return a.name === 'VoidLock.apk'; });
       var sha = (j.assets || []).find(function (a) { return a.name === 'VoidLock.apk.sha256'; });
       var cur = Native.appVersion();
-      return { ok: true, tag: j.tag_name, version: j.tag_name.replace(/^v/, ''), newer: cmpVer(j.tag_name, cur) > 0, hasApk: !!(apk && sha), url: apk && apk.browser_download_url, shaUrl: sha && sha.browser_download_url, notes: String(j.body || '').slice(0, 600) };
+      return { ok: true, tag: j.tag_name, version: j.tag_name.replace(/^v/, ''), newer: cmpVer(j.tag_name, cur) > 0, hasApk: !!(apk && sha), url: apk && apk.browser_download_url, shaUrl: sha && sha.browser_download_url };
     });
   }
-  var Net = { PORTS: PORTS, ping: ping, scan: scan, rediscover: rediscover, pairStart: pairStart, pairFinish: pairFinish, secureCall: secureCall, rev: rev, syncOnce: syncOnce, checkUpdate: checkUpdate, cmpVer: cmpVer,
+  var Net = { PORTS: PORTS, ping: ping, scan: scan, relocate: relocate, pairStart: pairStart, pairFinish: pairFinish, secureCall: secureCall, rev: rev, syncOnce: syncOnce, checkUpdate: checkUpdate, cmpVer: cmpVer,
               persist: null, crypto: { newKeyPair: newKeyPair, deriveKey: deriveKey, sasOf: sasOf, seal: seal, openEnv: openEnv, b64e: b64e, b64d: b64d } };
   root.Native = Native; root.Net = Net;
   if (typeof module !== 'undefined' && module.exports) module.exports = { Native: Native, Net: Net };

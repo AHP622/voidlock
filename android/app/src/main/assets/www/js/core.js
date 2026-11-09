@@ -75,7 +75,7 @@
   function newDb() {
     return {
       v: 1, subjects: [], entries: [], tests: {}, words: {}, gone: {}, exams: [], exam_subjects: [], todos: [], sessions: [],
-      active: null, weekly_schedule: { classes: [], sessions: [], week_start: 5 },
+      active: null,
       settings: { lang: 'fa', goal_min: 120 },
       sync: { device_id: uid(), device_name: '', dg: {}, mt: {}, tomb: {}, peers: {}, laptop: null }
     };
@@ -93,7 +93,6 @@
     ['dg', 'mt', 'tomb', 'peers'].forEach(function (k) { if (!isObj(s[k])) s[k] = {}; });
     if (s.laptop === undefined) s.laptop = null;
     if (db.active === undefined) db.active = null;
-    db.weekly_schedule = cleanTimetable(db.weekly_schedule) || { classes: [], sessions: [], week_start: 5 };
     return db;
   }
 
@@ -436,22 +435,7 @@
   function makePackage(db) {
     var st = observe(db);
     return { format: FORMAT, version: VERSION, device: { id: db.sync.device_id, name: db.sync.device_name || 'Phone' },
-             created: Math.floor(Date.now() / 1000), data: packState(st), timetable: clone(db.weekly_schedule) };
-  }
-  function cleanTimetable(value) {
-    if (!isObj(value)) return null;
-    function items(list, classes) {
-      if (!Array.isArray(list)) return [];
-      return list.filter(function (x) {
-        return isObj(x) && Number.isInteger(Number(x.day)) && Number(x.day) >= 0 && Number(x.day) <= 6 &&
-          /^\d{2}:\d{2}$/.test(String(x.time || '')) && Number(x.minutes) >= 1 && (!classes || String(x.name || '') !== '');
-      }).map(function (x) {
-        return classes ? { id: String(x.id || ''), name: String(x.name || '').slice(0, 40), day: Number(x.day), time: String(x.time), minutes: Math.max(1, Math.min(600, Number(x.minutes))), enabled: x.enabled !== false, place: String(x.place || '').slice(0, 40) } :
-          { id: String(x.id || ''), subject: String(x.subject || '').slice(0, 40), day: Number(x.day), time: String(x.time), minutes: Math.max(1, Math.min(600, Number(x.minutes))), enabled: x.enabled !== false };
-      });
-    }
-    var ws = Number(value.week_start);
-    return { classes: items(value.classes, true), sessions: items(value.sessions, false), week_start: [0, 5, 6].indexOf(ws) >= 0 ? ws : 5 };
+             created: Math.floor(Date.now() / 1000), data: packState(st) };
   }
   function validRec(kind, r) {
     try {
@@ -490,7 +474,7 @@
     if (!isObj(pkg) || pkg.format !== FORMAT) throw new SyncError('That file is not a VOIDLOCK sync file.');
     if (parseInt(pkg.version, 10) !== VERSION) throw new SyncError('This sync file was made by a different version of VOIDLOCK. Update both devices.');
     if (!isObj(pkg.device) || typeof pkg.device.id !== 'string' || !pkg.device.id) throw new SyncError('That sync file has no device id.');
-    return { device: { id: pkg.device.id, name: String(pkg.device.name || '?').slice(0, 60) }, created: pkg.created, data: cleanState(pkg.data), timetable: cleanTimetable(pkg.timetable) };
+    return { device: { id: pkg.device.id, name: String(pkg.device.name || '?').slice(0, 60) }, created: pkg.created, data: cleanState(pkg.data) };
   }
   function prepare(db, raw) {
     var pkg = parsePackage(raw);
@@ -499,9 +483,8 @@
     var sm = {}, em = {};
     Object.keys(mg.remap).forEach(function (k) { if (local.subjects.recs[k]) sm[k] = mg.remap[k]; if (local.exam_subjects.recs[k]) em[k] = mg.remap[k]; });
     var mine = remapState(clone(local), sm, em), st = statsOf(mine, mg.merged);
-    var timetableChanged = !!pkg.timetable && !eq(db.weekly_schedule, pkg.timetable);
-    var plan = { peer: pkg.device, local: mine, remote: pkg.data, merged: mg.merged, remap: mg.remap, conflicts: mg.conflicts, stats: st, warn: warningsOf(mine, st), timetable: pkg.timetable, timetableChanged: timetableChanged };
-    plan.changes = function () { var n = timetableChanged ? 1 : 0; Object.keys(st).forEach(function (k) { n += st[k].added + st[k].updated + st[k].removed; }); return n; };
+    var plan = { peer: pkg.device, local: mine, remote: pkg.data, merged: mg.merged, remap: mg.remap, conflicts: mg.conflicts, stats: st, warn: warningsOf(mine, st) };
+    plan.changes = function () { var n = 0; Object.keys(st).forEach(function (k) { n += st[k].added + st[k].updated + st[k].removed; }); return n; };
     plan.removed = function () { var n = 0; LIST_KINDS.forEach(function (k) { n += st[k].removed; }); return n; };
     plan.added = function () { var n = 0; LIST_KINDS.forEach(function (k) { n += st[k].added; }); return n; };
     return plan;
@@ -537,7 +520,6 @@
   }
   function commit(db, plan) {
     applyMerged(db, plan.merged, plan.remap);
-    if (plan.timetable) db.weekly_schedule = clone(plan.timetable);
     var s = db.sync, cur = records(db);
     s.dg = {}; s.mt = {};
     KINDS.forEach(function (kind) {

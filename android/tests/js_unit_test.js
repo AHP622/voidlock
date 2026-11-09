@@ -90,8 +90,8 @@ for (const lang of ['fa', 'en']) {
   I18n.setLang(lang);
   const rep = Report.build(db, dayN(6), dayN(0)), lines = rep.csv.replace('\uFEFF', '').split('\r\n');
   ok(rep.html.includes('Math') && rep.html.includes('Physics') && rep.html.includes('Mock A') && rep.html.includes('<svg'), `[${lang}] the HTML report has subjects, the exam and charts`);
-  ok(rep.csv.charCodeAt(0) === 0xFEFF && lines[0].split(',').length >= 7 && lines.length >= 8, `[${lang}] the CSV starts with the UTF-8 mark and has one row per day`);
-  ok((rep.html.match(new RegExp(I18n.t('unknown_subject'), 'g')) || []).length >= 1 && lines[0].split(I18n.t('unknown_subject')).length === 2, `[${lang}] old deleted subjects are one line called "${I18n.t('unknown_subject')}"`);
+  ok(rep.csv.charCodeAt(0) === 0xFEFF && lines[0].startsWith(lang === 'fa' ? 'گزارش مطالعه,VOIDLOCK' : 'Study report,VOIDLOCK') && lines.length >= 30, `[${lang}] the CSV starts with the UTF-8 mark, is made of the computer's sections and has one row per day`);
+  ok(rep.R.subjects.filter((s) => s.ghost).length === 1 && rep.R.subjects.filter((s) => s.ghost)[0].sec === 900, `[${lang}] old deleted subjects (two ids, no name) are ONE line, as on the computer`);
   ok(rep.html.includes(`dir="${lang === 'fa' ? 'rtl' : 'ltr'}"`) && rep.html.includes('direction:ltr'), `[${lang}] the page follows the language, the charts stay left to right`);
 }
 I18n.setLang('fa');

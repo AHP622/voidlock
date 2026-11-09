@@ -1,11 +1,11 @@
 """Help page: every feature in one place, with search across titles and text."""
-from PySide6.QtWidgets import QLineEdit, QVBoxLayout
+from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QVBoxLayout
 
-from . import i18n
+from . import i18n, intro
 
 from .pages_a import Page
 from .theme import T
-from .widgets import Card, label
+from .widgets import Button, Card, label
 
 # (tab, title, text). Searched by words in any of the three fields. Persian and English versions of the same topics.
 TOPICS_FA = [
@@ -168,6 +168,16 @@ class HelpPage(Page):
             f"padding:6px 14px; color:{T.text}; font-size:13px;}}"
             f"QLineEdit:focus{{border:1px solid {T.cyan};}}")
         self.search.textChanged.connect(self._filter)
+        tools = QHBoxLayout()
+        tools.setSpacing(10)
+        b_tour = Button(intro.t("replay"), "soft")
+        b_tour.clicked.connect(lambda *_: ctx.run_tour())
+        b_news = Button(intro.t("whats_new"), "soft")
+        b_news.clicked.connect(lambda *_: ctx.show_whats_new())
+        tools.addWidget(b_tour)
+        tools.addWidget(b_news)
+        tools.addStretch(1)
+        self.body.addLayout(tools)
         self.body.addWidget(self.search)
         self.list_box = QVBoxLayout()
         self.list_box.setSpacing(12)

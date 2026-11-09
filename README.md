@@ -36,18 +36,13 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
-## What changed in 1.11.3
-- **Guides are for first installs.** Section introductions now appear only during the installation version; updates still show their release notes without repeating the tour.
-- **Reports fit narrow screens.** The report page and its tables now wrap within the available screen width.
-
-## What changed in 1.11.2
-- **Android release check fixed.** Added the missing Persian and English report labels so the phone app's logic tests pass in GitHub Actions.
-
-## What changed in 1.11.1
-
-- **Android study reports now carry the same core sections as Windows:** study summaries, daily/monthly tables, weekday averages, focus-session details, exam progress and subject matrices, plus the weekly class/study timetable received from the computer.
-- **Wi-Fi sync recovers from temporary failures:** the phone retries transient busy responses, and looks for the paired computer again if its address changed. A revoked pairing is reported separately.
-- **New users get short section guides.** A concise update note appears after an app update. The app credits Novum in a small, visible place, and the Windows desktop shortcut reads `Voidlock`.
+## What changed in 1.12.0
+* **Phone report = computer report.** The Android report is now a port of the computer's report (`android/.../js/report.js`, `wincharts.js`, texts generated from `report.py`): same sections, numbers, charts, tables and CSV, plus your name on it. `android/tests/report_parity_test.py` builds both from the same data and compares them (HTML text, every chart coordinate, CSV).
+* **The phone reconnects by itself.** Previously the phone kept calling the computer's old address; after a DHCP renewal, a restart on another port or a Wi-Fi change, sync failed with "could not connect" until the pairing was deleted and made again. Now the phone looks for the computer by its id (same address on every port, then a scan of its own network) and carries on. A computer that is simply off gives a clear message and keeps the pairing.
+* **First-run help** (computer and phone): a welcome with a short tour of the tabs, a small tip the first time each tab is opened, and a **What's new** page after every update (`voidlock/intro.py`, `android/.../js/intro.js`). Replay them from Help (computer) or More (phone).
+* The signature **Novum** sits under the version in the sidebar, in the phone's About and in the welcome.
+* Exact Jalali calendar on the computer too (it was a day off after 1407); checked against the phone's on 40 000 days.
+* Fixes found on the way: the phone's totals no longer add focus sessions (as on the computer), seeds/tests updated.
 
 ## What changed in 1.11.0
 

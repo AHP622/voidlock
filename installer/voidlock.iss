@@ -1,4 +1,4 @@
-; VOIDLOCK installer (Inno Setup 6). Built by the release workflow:  ISCC /DAppVersion=1.11.3 installer\voidlock.iss
+; VOIDLOCK installer (Inno Setup 6). Built by the release workflow:  ISCC /DAppVersion=1.5.0 installer\voidlock.iss
 ; Installs for the current user only (no administrator rights needed), so the in-app updater can replace VoidLock.exe.
 ; Your data lives in %APPDATA%\VoidLock and is never touched by installing or updating.
 #ifndef AppVersion
@@ -38,7 +38,7 @@ Source: "..\dist\VoidLock.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\VOIDLOCK"; Filename: "{app}\VoidLock.exe"
-Name: "{autodesktop}\Voidlock"; Filename: "{app}\VoidLock.exe"; Tasks: desktopicon
+Name: "{autodesktop}\VOIDLOCK"; Filename: "{app}\VoidLock.exe"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\VoidLock.exe"; Description: "Launch VOIDLOCK"; Flags: nowait postinstall skipifsilent

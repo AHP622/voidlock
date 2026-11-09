@@ -125,3 +125,10 @@ svg.chart text{font-family:inherit}
 
 .group+.group{margin-top:22px;padding-top:6px;border-top:2px dashed var(--border-hi)}
 .group-title{font-size:12px;font-weight:700;color:var(--accent);margin:4px 2px 0;letter-spacing:.04em}
+
+/* intro: welcome, tour, tips, what's new */
+.intro-p{margin:6px 0;line-height:1.8}.intro-wish{margin:10px 0 4px;font-weight:600;line-height:1.8}
+.intro-sign{margin-top:6px;font-weight:800;letter-spacing:.16em;color:var(--accent);text-align:end}
+.intro-list{margin:8px 0;padding-inline-start:20px;line-height:1.85}.intro-list li{margin:2px 0}
+.card.tip{border-color:var(--accent);background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 10%,var(--panel)),var(--panel))}
+.intro-foot{text-align:center;margin:0 0 76px;font-size:11px;letter-spacing:.14em;color:var(--text3);opacity:.8}

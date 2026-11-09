@@ -93,7 +93,8 @@
     });
     o.labels.forEach(function (lb, i) {
       var skip = n > 7 ? Math.ceil(n / 7) : 1; if (i % skip && i !== n - 1) return;
-      s += '<text x="' + x(i) + '" y="' + (H - 12) + '" font-size="10" text-anchor="middle" style="fill:var(--text3)">' + esc(lb.length > (n <= 3 ? 16 : 10) ? lb.slice(0, n <= 3 ? 15 : 9) + '…' : lb) + '</text>';
+      var lim = n <= 3 ? 16 : n <= 4 ? 13 : n <= 6 ? 10 : 8, anc = n > 1 && i === 0 ? 'start' : (n > 1 && i === n - 1 ? 'end' : 'middle');      // the first and last labels stay inside the picture
+      s += '<text x="' + x(i) + '" y="' + (H - 12) + '" font-size="10" text-anchor="' + anc + '" style="fill:var(--text3)">' + esc(lb.length > lim ? lb.slice(0, lim - 1) + '…' : lb) + '</text>';
     });
     o.series.forEach(function (se) {
       var pts = [], seg = [];
@@ -103,7 +104,8 @@
         if (sg.length > 1) s += '<polyline points="' + sg.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ') + '" fill="none" stroke="' + se.color + '" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>';
         sg.forEach(function (p) {
           s += '<circle cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="4" fill="' + se.color + '" style="stroke:var(--panel)" stroke-width="1.5"/>';
-          if (o.series.length === 1 && n <= 8) s += '<text x="' + p[0].toFixed(1) + '" y="' + (p[1] - 9).toFixed(1) + '" font-size="10" text-anchor="middle" style="fill:var(--text2)">' + I18n.num(p[2], o.dec || 0) + '</text>';
+          if (o.series.length === 1 && n <= 8) { var right = o.width && p[0] > o.width - 44;        // a value at the right edge must not be cut off
+            s += '<text x="' + (p[0] + (right ? 6 : 0)).toFixed(1) + '" y="' + (p[1] - 9).toFixed(1) + '" font-size="10" text-anchor="' + (right ? 'end' : 'middle') + '" style="fill:var(--text2)">' + I18n.num(p[2], o.dec || 0) + '</text>'; }
         });
       });
     });

@@ -14,7 +14,7 @@ from . import __version__
 from . import classes as classtools
 from . import messages, rules, sounds, updater
 from .core import Scanner, SessionController, UpdateWorker
-from . import i18n
+from . import i18n, intro
 from .lan_ui import LanService
 from .guard import GuardClient, admin_task_outdated, child_env, emergency_recover, is_protected, persist_protection_async
 from .i18n import tr
@@ -245,7 +245,6 @@ class Sidebar(QWidget):
         bc.setSpacing(0)
         bc.addWidget(label("VOIDLOCK", 17, QFont.Weight.Bold, T.text, spacing=3.2))
         bc.addWidget(label("FOCUS GUARD", 9, QFont.Weight.DemiBold, T.cyan, spacing=2.6))
-        bc.addWidget(label("by Novum", 8, color=T.text3))
         brand.addLayout(bc)
         brand.addStretch(1)
         lay.addLayout(brand)
@@ -268,7 +267,7 @@ class Sidebar(QWidget):
         cl.addWidget(self.m_state)
         cl.addWidget(self.m_time)
         lay.addWidget(self.card)
-        lay.addWidget(label(f"v{__version__}", 10, color=T.text3), 0, Qt.AlignmentFlag.AlignHCenter)
+        lay.addWidget(label(f"v{__version__}  ·  {intro.SIGNATURE}", 10, color=T.text3), 0, Qt.AlignmentFlag.AlignHCenter)
 
     def set_active(self, key):
         for k, b in self.buttons.items():
@@ -316,11 +315,6 @@ class MainWindow(QMainWindow):
         self.resize(1280, 800)
         self.setMinimumSize(1040, 680)
         self.store, self.guard = store, guard
-        if store.is_first_install:
-            store.settings["show_section_guides"] = True
-            store.settings["section_guides_version"] = __version__
-            store.settings["whats_new_seen"] = __version__
-            store.save_settings()
         self.session = SessionController(store, guard)
         self.study = StudyLog(store)
         self.study.restore()
@@ -337,6 +331,7 @@ class MainWindow(QMainWindow):
         self.plan = {"minutes": s["default_minutes"], "subject": s.get("last_subject", ""), "strict": s["strict_default"]}
         self.apply_motion()
         self._sched_busy = False
+        self._touring = self._intro_busy = self._tip_open = False
         self._first = True
         self.update_info, self._upd_worker, self.update_status = None, None, ""
 
@@ -406,7 +401,7 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(1500, self._repair_subjects)
         QTimer.singleShot(20000, self.guard.ensure)      # swaps a guard that still runs older code after an update
         QTimer.singleShot(3500, self.process_points)
-        QTimer.singleShot(1800, self.show_whats_new)
+        QTimer.singleShot(1800, self._intro_start)        # welcome + tour (new install) or What's new (after an update)
 
     # ------------------------------------------------------------ window chrome
     def toggle_max(self):
@@ -558,62 +553,108 @@ class MainWindow(QMainWindow):
         self.sidebar.set_active(key)
         pg.on_show()
         self.stack.show_index(i)
-        QTimer.singleShot(500, lambda k=key: self.show_page_intro(k))
         self._first = False
+        if not self._touring:
+            QTimer.singleShot(500, lambda k=key: self._maybe_tip(k))
 
     def current_key(self):
         return self.keys[self.stack.currentIndex()]
 
-    def show_whats_new(self):
-        if self.root.findChildren(Modal):
-            QTimer.singleShot(700, self.show_whats_new)
-            return
-        if self.store.settings.get("whats_new_seen") == __version__:
-            return
-        fa = self.store.settings.get("language") == "fa"
-        title = "تغییرات نسخه‌ی جدید" if fa else "What’s new in VOIDLOCK"
-        pending = self.store.settings.get("whats_new_pending")
-        message = (pending.get("notes") or "") if isinstance(pending, dict) and pending.get("version") == __version__ else ""
-        if not message:
-            message = ("گزارش اندروید کامل‌تر شده است. هماهنگی گوشی و کامپیوتر در برابر خطاهای موقت شبکه مقاوم‌تر شده و برای هر بخش برنامه راهنمای کوتاه اضافه شده است."
-                       if fa else
-                       "The Android report now includes more detail. Phone-to-computer sync handles temporary network errors better, and quick guides introduce the app’s sections.")
-        self.store.settings.pop("whats_new_pending", None)
-        self.store.settings["whats_new_seen"] = __version__
-        self.store.save_settings()
-        m = self.new_modal().build(title, message, None, "شروع کنیم" if fa else "Let’s go", "", icon="info", width=520)
-        m.exec_modal()
+    # ------------------------------------------------------------ first-run help (texts: intro.py)
+    def _bullets(self, points, signature=False, wish=None):
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(0, 4, 0, 0)
+        lay.setSpacing(8)
+        for p in points:
+            lay.addWidget(label("•  " + p, 13, color=T.text2, wrap=True))
+        if wish:
+            lay.addWidget(label(wish, 13, QFont.Weight.DemiBold, T.text, wrap=True))
+        if signature:
+            sg = label(intro.SIGNATURE, 13, QFont.Weight.Bold, T.cyan, spacing=3.0)
+            sg.setAlignment(Qt.AlignmentFlag.AlignRight)
+            lay.addWidget(sg)
+        return w
 
-    def show_page_intro(self, key):
-        if (not self.store.settings.get("show_section_guides", False)
-                or self.store.settings.get("section_guides_version") != __version__):
-            return
-        seen = self.store.settings.get("tab_tours")
-        if not isinstance(seen, dict):
-            seen = {}
-            self.store.settings["tab_tours"] = seen
-        if seen.get(key):
-            return
-        if self.root.findChildren(Modal):
-            QTimer.singleShot(700, lambda k=key: self.show_page_intro(k))
-            return
-        fa = self.store.settings.get("language") == "fa"
-        text = {
-            "overview": ("نمای کلی", "هدف روزانه، زمان مطالعه و وضعیت تمرکزت را یک‌جا ببین.", "Overview", "See your daily goal, study time and focus status in one place."),
-            "study": ("زمان‌سنج مطالعه", "درس را انتخاب کن و زمان‌سنج را شروع کن؛ زمان دستی و شمارش تست و لغت را هم ثبت کن.", "Study Timer", "Choose a subject and start the timer. You can also add time manually and track tests or words."),
-            "apps": ("مدیریت برنامه‌ها", "برنامه‌های حواس‌پرت‌کن را انتخاب کن و برای جلسه یا ساعت‌های مشخص مسدودشان کن.", "Application Control", "Choose distracting apps and block them during a session or scheduled lock hours."),
-            "sessions": ("جلسه‌های مطالعه", "جلسه‌های تمرکز را شروع کن و زمان برنامه‌ریزی‌شده، تمرکز واقعی و نتیجه را مرور کن.", "Study Sessions", "Start focus sessions and review planned time, focused time and outcomes."),
-            "schedule": ("برنامه‌ی هفتگی", "کلاس‌ها و جلسه‌های مطالعه را زمان‌بندی کن تا یادآوری‌ها و شروع خودکار را مدیریت کنی.", "Schedule", "Plan classes and study sessions, with reminders and optional automatic starts."),
-            "exams": ("آزمون‌ها", "تاریخ آزمون‌ها و نتیجه‌ی هر درس را ثبت کن و روند تراز و رتبه را دنبال کن.", "Exams", "Add exam dates and subject results, then follow taraz and rank trends."),
-            "rewards": ("امتیازها", "با روزهای پیوسته‌ی تمرکز امتیاز بگیر و برای استراحت برنامه‌ریزی‌شده از آن استفاده کن.", "Rewards", "Earn points for consistent focus days and use them for planned breaks."),
-            "analytics": ("گزارش و آمار", "روند مطالعه و آزمون‌ها را بررسی کن و گزارش PDF، صفحه‌ی وب یا CSV بگیر.", "Analytics", "Review study and exam trends, and export a PDF, web page or CSV report."),
-            "settings": ("تنظیمات", "هدف روزانه، زبان، تم، پشتیبان‌گیری، هماهنگی گوشی و به‌روزرسانی‌ها را مدیریت کن.", "Settings", "Manage your daily goal, language, theme, backups, phone sync and updates."),
-            "help": ("راهنما", "راهنمای کامل قابلیت‌ها و پاسخ پرسش‌های رایج را اینجا پیدا کن.", "Help", "Find a full guide to the app’s features and answers to common questions."),
-        }[key]
-        seen[key] = True
+    def _modal_open(self):
+        return any(isinstance(c, Modal) and c.isVisible() for c in self.root.children())
+
+    def _intro_start(self):
+        s = self.store.settings
+        try:
+            if intro.is_new_user(self.store, self.study):
+                s["intro_done"], s["tips_enabled"], s["intro_version"] = True, True, __version__
+                s["tips_seen"] = []
+                self.store.save_settings()
+                self.show_welcome()
+                return
+            if not s.get("intro_done"):                 # someone who already used the program: the news, no tips
+                s["intro_done"], s["tips_enabled"] = True, False
+            if s.get("intro_version") != __version__:
+                s["intro_version"] = __version__
+                self.store.save_settings()
+                self.show_whats_new()
+            else:
+                self.store.save_settings()
+        except Exception as e:                           # help must never get in the way
+            print("intro:", e, file=sys.stderr)
+
+    def show_welcome(self):
+        self._intro_busy = True
+        try:
+            text, wish = intro.welcome_text()
+            m = self.new_modal().build(intro.t("welcome"), text, self._bullets([], True, wish), intro.t("tour"), intro.t("skip"),
+                                       icon="star", width=520)
+            go = m.exec_modal()
+        finally:
+            self._intro_busy = False
+        if go:
+            self.run_tour()
+
+    def run_tour(self, *_):
+        s = self.store.settings
+        icons = {k: ic for k, _t, ic in NAV}
+        self._touring = True
+        n = len(intro.ORDER)
+        try:
+            for i, key in enumerate(intro.ORDER):
+                self.goto(key, animate=False)
+                title, pts = intro.tab(key)
+                last = i == n - 1
+                m = self.new_modal().build(title, intro.t("step", i=i + 1, n=n), self._bullets(pts), intro.t("done" if last else "next"),
+                                           "" if last else intro.t("skip_tour"), icon=icons.get(key, "info"), width=540)
+                if not m.exec_modal() or last:
+                    break
+        finally:
+            self._touring = False
+        s["tips_enabled"], s["tips_seen"] = True, list(intro.ORDER)       # the tour covered every tab
         self.store.save_settings()
-        m = self.new_modal().build(("خوش آمدی · " + text[0]) if fa else ("Welcome · " + text[2]),
-                                  text[1] if fa else text[3], None, "متوجه شدم" if fa else "Got it", "", icon="info", width=520)
+        self.goto("overview")
+
+    def _maybe_tip(self, key):
+        s = self.store.settings
+        if (self._touring or self._intro_busy or self._tip_open or not s.get("tips_enabled", False)
+                or key in s.get("tips_seen", []) or self.current_key() != key or self._modal_open()):
+            return
+        data = intro.tab(key)
+        if not data:
+            return
+        self._tip_open = True
+        try:
+            s.setdefault("tips_seen", []).append(key)
+            self.store.save_settings()
+            icons = {k: ic for k, _t, ic in NAV}
+            m = self.new_modal().build(data[0], None, self._bullets(data[1]), intro.t("got_it"), intro.t("tips_off"),
+                                       icon=icons.get(key, "info"), width=500)
+            if not m.exec_modal():
+                s["tips_enabled"] = False
+                self.store.save_settings()
+        finally:
+            self._tip_open = False
+
+    def show_whats_new(self, *_):
+        m = self.new_modal().build(intro.t("news", v=__version__), None, self._bullets(intro.news_for(__version__), True),
+                                   intro.t("ok"), "", icon="star", width=540)
         m.exec_modal()
 
     def _find(self):
@@ -1136,7 +1177,6 @@ class MainWindow(QMainWindow):
         except updater.UpdateError as e:
             return self._on_update_failed(str(e), True)
         self.store.settings["update_last_tag"] = self.update_info["tag"]
-        self.store.settings["whats_new_pending"] = {"version": self.update_info["version"], "notes": self.update_info.get("notes", "")}
         self.store.save_settings()
         if not (self.session.active or self.store.active_locks()):
             self.guard.stop()          # nothing enforced right now: let the new guard code take over

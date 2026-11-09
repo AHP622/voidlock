@@ -1,5 +1,5 @@
 name: release
-# Push a tag like v1.11.3 (it must equal __version__ in voidlock/__init__.py). One release carries BOTH apps:
+# Push a tag like v1.10.0 (it must equal __version__ in voidlock/__init__.py). One release carries BOTH apps:
 #   VoidLock.exe (+ installer)  built on Windows          -> the computer app updates itself from it
 #   VoidLock.apk                built on Linux (Android)  -> the phone app updates itself from it
 # If the Android build fails, the Windows release is still published (see the "android" job in the Actions tab).
