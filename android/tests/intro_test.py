@@ -6,6 +6,9 @@ from playwright.sync_api import sync_playwright
 www = Path(__file__).resolve().parents[1] / "app/src/main/assets/www"
 out = Path(sys.argv[1]) if len(sys.argv) > 1 else None
 if out: out.mkdir(parents=True, exist_ok=True)
+import re
+VERSION = re.search(r'version: "([^"]+)"', (www / "config.js").read_text(encoding="utf-8")).group(1)
+VERSION_FA = ''.join('۰۱۲۳۴۵۶۷۸۹'[int(c)] if c.isdigit() else c for c in VERSION)
 FAILS = []
 
 
@@ -50,13 +53,13 @@ try:
         pg.get_by_text("تمام").click(); pg.wait_for_timeout(700)
         ok(pg.locator(".card.tip").count() == 0, "after the tour no tip cards are shown")
         db = pg.evaluate("JSON.parse(localStorage.getItem('voidlock.db'))")
-        ok(db["settings"].get("welcomed") and db["settings"].get("seen_version") == "1.12.0", "the welcome is remembered together with the version")
+        ok(db["settings"].get("welcomed") and db["settings"].get("seen_version") == VERSION, "the welcome is remembered together with the version")
         ctx.close()
 
         # ---- an existing user: tips on first visit of every tab, once
         demo = json.load(open("/tmp/demo_fa.json", encoding="utf-8")) if Path("/tmp/demo_fa.json").exists() else None
         if demo:
-            demo["settings"].pop("tips_seen", None); demo["settings"]["seen_version"] = "1.12.0"
+            demo["settings"].pop("tips_seen", None); demo["settings"]["seen_version"] = VERSION
             ctx, pg = new(demo)
             ok(pg.locator(".card.tip").count() == 1, "the first tab shows one tip card")
             shot(pg, "tip_today")
@@ -75,11 +78,11 @@ try:
             old = json.loads(json.dumps(demo)); old["settings"]["seen_version"] = "1.11.0"; old["settings"]["tips_seen"] = {"today": 1, "stats": 1, "exams": 1, "tasks": 1, "more": 1}
             ctx, pg = new(old)
             lt = pg.locator("#layer").inner_text()
-            ok("تازه‌های نسخه‌ی" in lt and "۱.۱۲.۰" in lt, "after an update the What's new sheet opens")
+            ok("تازه‌های نسخه‌ی" in lt and VERSION_FA in lt, "after an update the What's new sheet opens")
             shot(pg, "whatsnew")
             pg.get_by_text("باشه").click(); pg.wait_for_timeout(500)
             pg.wait_for_timeout(300)
-            ok(pg.evaluate("JSON.parse(localStorage.getItem('voidlock.db')).settings.seen_version") == "1.12.0" and pg.locator("#layer .sheet").count() == 0,
+            ok(pg.evaluate("JSON.parse(localStorage.getItem('voidlock.db')).settings.seen_version") == VERSION and pg.locator("#layer .sheet").count() == 0,
                "it is remembered, so it does not open again at the next start")
             ctx.close()
         b.close()

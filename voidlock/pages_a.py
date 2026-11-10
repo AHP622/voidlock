@@ -6,10 +6,10 @@ from datetime import date, datetime
 
 from PySide6.QtCore import QFileInfo, QPoint, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QFont, QPainter, QPen
-from PySide6.QtWidgets import (QFileDialog, QFileIconProvider, QFrame, QHBoxLayout, QLineEdit, QScrollArea,
+from PySide6.QtWidgets import (QFileDialog, QFileIconProvider, QFrame, QGridLayout, QHBoxLayout, QLineEdit, QMenu, QScrollArea,
                                QVBoxLayout, QWidget)
 
-from . import i18n, rules, study as studymod
+from . import dashboard as DB, i18n, report as report_mod, rules, study as studymod
 from .guard import is_protected
 from .overlays import Modal
 from .store import CATEGORIES, fmt_hm, streak_days, today_focus_sec, uid
@@ -160,7 +160,9 @@ class QuickTile(Card):
 
 
 # ============================================================ OVERVIEW
-class OverviewPage(Page):
+class ClassicOverviewPage(Page):
+    """The previous Overview (big timer card). Kept as a fallback: the app uses it if the new dashboard cannot be built."""
+
     def __init__(self, ctx):
         super().__init__(ctx, "Overview", "Your focus command center")
         row = QHBoxLayout()
@@ -412,6 +414,376 @@ class OverviewPage(Page):
             self.rules_box.addWidget(w)
         if len(apps) > 6:
             self.rules_box.addWidget(label(f"+ {len(apps) - 6} more", 12, color=T.text3))
+
+
+class OverviewPage(Page):
+    """The dashboard: a small start-session square in the corner, four headline cards, the daily chart, the subject share and the
+    lists (recent sessions, what is coming, protection). Numbers come from dashboard.py; the heavy part is recomputed at most every
+    20 seconds, the live bits (today, the running timer, protection) on every tick."""
+    HEAVY_EVERY = 20.0
+    RANGES = (7, 30, 90)
+
+    def __init__(self, ctx):
+        super().__init__(ctx, "Overview", "Your focus command center")
+        from .dashkit import DailyChart, ShareChart, StartSquare, StatCard
+        tx = DB.tx
+        st = ctx.store
+        d = st.settings.get("overview_days", 30)
+        self._days = d if d in self.RANGES else 30
+        self._secs, self._heavy_t, self._share, self._up = None, 0.0, ([], 0), []
+        self._sig_lists = None
+        self._sig_rules = None
+        b = self.body
+        b.setSpacing(14)
+
+        # ---- header: mascot + greeting + range, the start square in the corner
+        head = QHBoxLayout()
+        head.setSpacing(16)
+        self.mascot = Mascot(84)
+        head.addWidget(self.mascot, 0, Qt.AlignmentFlag.AlignVCenter)
+        ttl = QVBoxLayout()
+        ttl.setSpacing(4)
+        ttl.addStretch(1)
+        self.greet = label("", 26, QFont.Weight.DemiBold)
+        self.greet_sub = label("", 13, color=T.text2, wrap=True)
+        ttl.addWidget(self.greet)
+        ttl.addWidget(self.greet_sub)
+        rr = QHBoxLayout()
+        self.b_range = Button("", "ghost", height=32)
+        rr.addWidget(self.b_range)
+        rr.addStretch(1)
+        ttl.addLayout(rr)
+        ttl.addStretch(1)
+        head.addLayout(ttl, 1)
+        self.sq = StartSquare()
+        head.addWidget(self.sq, 0, Qt.AlignmentFlag.AlignTop)
+        b.addLayout(head)
+
+        # ---- headline cards
+        kr = QHBoxLayout()
+        kr.setSpacing(14)
+        self.k_today = StatCard(tx("STUDY TODAY", "مطالعه‌ی امروز"), T.cyan)
+        self.k_streak = StatCard(tx("STREAK", "روزهای پیاپی"), T.amber)
+        self.k_focus = StatCard(tx("FOCUS SESSIONS", "جلسه‌های تمرکز"), T.violet)
+        self.k_points = StatCard(tx("FOCUS POINTS", "امتیاز تمرکز"), T.green)
+        for k in (self.k_today, self.k_streak, self.k_focus, self.k_points):
+            kr.addWidget(k, 1)
+        b.addLayout(kr)
+
+        # ---- chart + subject share
+        mid = QHBoxLayout()
+        mid.setSpacing(14)
+        self.chart_card = Card(pad=16)
+        hh = QHBoxLayout()
+        hh.setSpacing(14)
+        hh.addWidget(label(tx("STUDY PER DAY", "مطالعه‌ی روزانه"), 11, QFont.Weight.Bold, T.text3, spacing=2.0))
+        hh.addStretch(1)
+        for txt, col in ((tx("●  Hours", "●  ساعت"), T.cyan), (tx("━  7-day average", "━  میانگین ۷ روزه"), T.violet),
+                         (tx("- -  Goal", "- -  هدف"), T.violet), (tx("▼  Exam", "▼  آزمون"), T.amber)):
+            hh.addWidget(label(txt, 11, color=col))
+        self.chart_card.lay.addLayout(hh)
+        self.chart = DailyChart()
+        self.chart_card.lay.addWidget(self.chart)
+        mid.addWidget(self.chart_card, 5)
+        self.share_card = Card(pad=16)
+        self.share_card.lay.addWidget(label(tx("SUBJECT SHARE", "سهم درس‌ها"), 11, QFont.Weight.Bold, T.text3, spacing=2.0))
+        self.sharec = ShareChart()
+        self.share_card.lay.addWidget(self.sharec, 1)
+        mid.addWidget(self.share_card, 3)
+        b.addLayout(mid)
+
+        # ---- lists
+        low = QHBoxLayout()
+        low.setSpacing(14)
+        self.recent_card = Card(pad=16)
+        self.recent_card.lay.addWidget(label(tx("RECENT SESSIONS", "جلسه‌های اخیر"), 11, QFont.Weight.Bold, T.text3, spacing=2.0))
+        self.recent_box = QVBoxLayout()
+        self.recent_box.setSpacing(6)
+        self.recent_card.lay.addLayout(self.recent_box)
+        self.recent_card.lay.addStretch(1)
+        low.addWidget(self.recent_card, 5)
+        self.up_card = Card(pad=16)
+        self.up_card.lay.addWidget(label(tx("COMING UP", "پیش رو"), 11, QFont.Weight.Bold, T.text3, spacing=2.0))
+        self.up_box = QVBoxLayout()
+        self.up_box.setSpacing(6)
+        self.up_card.lay.addLayout(self.up_box)
+        self.up_card.lay.addStretch(1)
+        low.addWidget(self.up_card, 4)
+        self.prot_card = Card(pad=16)
+        top = QHBoxLayout()
+        top.setSpacing(12)
+        self.lock = LockIcon(52)
+        top.addWidget(self.lock)
+        tcol = QVBoxLayout()
+        tcol.setSpacing(2)
+        tcol.addWidget(label("PROTECTION", 11, QFont.Weight.Bold, T.text3, spacing=2.4))
+        self.prot_title = label("STANDBY", 20, QFont.Weight.DemiBold)
+        tcol.addWidget(self.prot_title)
+        top.addLayout(tcol, 1)
+        self.prot_card.lay.addLayout(top)
+        self.prot_detail = label("", 12, color=T.text2, wrap=True)
+        self.prot_card.lay.addWidget(self.prot_detail)
+        self.prot_card.lay.addWidget(Divider())
+        self.kv_guard = self._kv("Guard process")
+        self.kv_killed = self._kv("Blocked this session")
+        self.kv_rules = self._kv("Rules armed")
+        self.kv_locks = self._kv("Day locks")
+        for kv in (self.kv_guard, self.kv_killed, self.kv_rules, self.kv_locks):
+            self.prot_card.lay.addLayout(kv[0])
+        self.b_retry = Button("Restart guard", "soft", "refresh", height=34)
+        self.b_admin = Button("Run guard as administrator", "violet", "shield-check", height=34)
+        self.prot_card.lay.addWidget(self.b_retry)
+        self.prot_card.lay.addWidget(self.b_admin)
+        self.prot_card.lay.addStretch(1)
+        low.addWidget(self.prot_card, 4)
+        b.addLayout(low)
+
+        # ---- block rules (compact grid)
+        self.rules_card = Card(pad=16)
+        h = QHBoxLayout()
+        h.addWidget(label("BLOCK RULES", 11, QFont.Weight.Bold, T.text3, spacing=2.0))
+        h.addStretch(1)
+        self.b_manage = Button("Manage", "ghost", height=30)
+        h.addWidget(self.b_manage)
+        self.rules_card.lay.addLayout(h)
+        self.rules_grid = QGridLayout()
+        self.rules_grid.setHorizontalSpacing(18)
+        self.rules_grid.setVerticalSpacing(8)
+        self.rules_card.lay.addLayout(self.rules_grid)
+        b.addWidget(self.rules_card)
+        b.addStretch(1)
+
+        sq = self.sq
+        sq.ring.clicked.connect(self._start_or_new)
+        sq.b_pause.clicked.connect(ctx.session.pause)
+        sq.b_resume.clicked.connect(ctx.session.resume)
+        sq.b_end.clicked.connect(ctx.end_flow)
+        sq.b_emerg.clicked.connect(ctx.emergency_flow)
+        sq.b_new.clicked.connect(lambda: (ctx.session.dismiss(), ctx.quick_start_default()))
+        sq.b_dismiss.clicked.connect(ctx.session.dismiss)
+        sq.b_menu.clicked.connect(self._presets_menu)
+        self.b_range.clicked.connect(self._range_menu)
+        self.b_retry.clicked.connect(ctx.restart_guard)
+        self.b_admin.clicked.connect(ctx.elevate_guard)
+        self.b_manage.clicked.connect(lambda: ctx.goto("apps"))
+        ctx.session.changed.connect(self._maybe_refresh)
+        self._reveal = [sq, self.k_today, self.k_streak, self.k_focus, self.k_points, self.chart_card, self.share_card,
+                        self.recent_card, self.up_card, self.prot_card, self.rules_card]
+        self._set_range_text()
+
+    # ---------------------------------------------------------------- small helpers
+    def _kv(self, k):
+        r = QHBoxLayout()
+        r.addWidget(label(k, 12, color=T.text3))
+        r.addStretch(1)
+        v = label("-", 12, QFont.Weight.DemiBold, mono=True)
+        r.addWidget(v)
+        return r, v
+
+    def build_tiles(self):                       # (the presets live in the corner menu now; kept because the app calls it)
+        pass
+
+    def _start_or_new(self):
+        s = self.ctx.session
+        if s.state == "completed":
+            s.dismiss()
+        if s.state == "idle":
+            self.ctx.quick_start_default()
+
+    def _presets_menu(self):
+        from .dashkit import popup
+        c = self.ctx
+        m = QMenu(self)
+        for pr in c.store.presets[:6]:
+            lab = f"{pr['name']}   ·   " + DB.tx(f"{pr['minutes']} min", f"{pr['minutes']} دقیقه") + ("   🔒" if pr.get("strict") else "")
+            m.addAction(lab).triggered.connect(lambda _=False, pr=pr: c.quick_start_preset(pr))
+        if c.store.presets:
+            m.addSeparator()
+        m.addAction(DB.tx("Custom…", "سفارشی…")).triggered.connect(lambda _=False: c.custom_start_flow())
+        popup(m, self.sq.b_menu)
+
+    def _range_menu(self):
+        from .dashkit import popup
+        m = QMenu(self)
+        for d in self.RANGES:
+            m.addAction(self._range_label(d)).triggered.connect(lambda _=False, d=d: self._set_range(d))
+        popup(m, self.b_range)
+
+    @staticmethod
+    def _range_label(d):
+        return DB.tx(f"Last {d} days", f"{d} روز اخیر")
+
+    def _set_range_text(self):
+        self.b_range.setText(self._range_label(self._days) + "  ▾")
+        self.b_range.updateGeometry()
+
+    def _set_range(self, d):
+        self._days = d
+        self.ctx.store.settings["overview_days"] = d
+        self.ctx.store.save_settings()
+        self._set_range_text()
+        self.refresh(force=True)
+
+    def _maybe_refresh(self):
+        if self.isVisible():
+            self.refresh()
+
+    def on_show(self):
+        self.refresh(force=True)
+        self.stagger()
+
+    # ---------------------------------------------------------------- refresh
+    def refresh(self, force=False):
+        c, s, st = self.ctx, self.ctx.session, self.ctx.store
+        today = date.today()
+        now = datetime.now()
+        prot = s.protection()
+        extra = int(s.planned - s.remaining) if s.active else 0
+        self._apply_square(s, c, st)
+        self._apply_protection(s, c, st, prot)
+        # heavy part: once in a while
+        t = time.time()
+        heavy = force or self._secs is None or t - self._heavy_t >= self.HEAVY_EVERY
+        if heavy:
+            self._heavy_t = t
+            self._secs = DB.daily(c.study, today, self._days, 0)
+            self._share = DB.share(c.study, today, self._days)
+            self._up = DB.upcoming(c.study, st.classes, now, c.hours_state())
+        # live part: today's number (+ the running timer) and everything derived from it
+        self._secs[today] = c.study.day_sec(today, True) + extra
+        goal = st.settings["daily_goal_min"]
+        goal_sec = goal * 60
+        exams = [e["date"] for e in c.study.exams()]
+        self._apply_kpis(DB.kpis(self._secs, st.history, c.points, today))
+        self.chart.set_chart(DB.chart(self._secs, today, self._days, goal_sec, exams))
+        self.sharec.set_data(*self._share)
+        self.greet.setText(DB.greeting(now.hour))
+        self.greet_sub.setText(DB.tx(f"{DB.fmt_dur(self._secs[today])} studied today · goal {DB.fmt_dur(goal_sec)}",
+                                     f"امروز {DB.fmt_dur(self._secs[today])} مطالعه کرده‌اید · هدف {DB.fmt_dur(goal_sec)}"))
+        run = s.state == "running" or bool(c.study.active())
+        self.mascot.set_state("happy" if self._secs[today] >= goal_sec else ("study" if run else "idle"))
+        hsig = (len(st.history), st.history[-1].get("start") if st.history else 0)
+        if heavy or self._sig_lists is None or hsig != getattr(self, "_hsig", None):
+            self._hsig = hsig
+            self._fill_lists(st)
+        self._refresh_rules()
+
+    def _apply_square(self, s, c, st):
+        state = s.state
+        plan = c.plan
+        subj = (s.subject or "")[:16]
+        if state == "idle":
+            l1 = f"Start {plan['minutes']} min"
+            l2 = (str(plan.get("subject") or "")[:14] or "Focus session") + (DB.tx(" · strict", " · سخت") if plan.get("strict") else "")
+            total, rem = 1.0, 1.0
+        elif state in ("running", "paused"):
+            l1 = (subj or "Focus session")
+            l2 = f"{round(s.planned / 60)} min"
+            total, rem = s.planned, s.remaining
+        else:
+            l1 = f"Saved · +{round(s.planned / 60)} min focus"
+            l2 = ""
+            total, rem = 1.0, 0.0
+        self.sq.apply(state, total, rem, s.clock_text(), i18n.tr(l1), i18n.tr(l2), bool(s.strict), s.active)
+
+    def _apply_protection(self, s, c, st, prot):
+        self.lock.set_locked(prot["locked"], prot["color"])
+        self.prot_title.setText(prot["title"])
+        set_label_color(self.prot_title, prot["color"])
+        self.prot_detail.setText(prot["detail"])
+        g = s.gstat
+        self.kv_guard[1].setText(f"running · {g.get('pid')}" if g.get("alive") else "not running")
+        set_label_color(self.kv_guard[1], T.green if g.get("alive") else T.text3)
+        killed = g.get("killed", 0) if g.get("session_id") == s.session_id and s.active else 0
+        self.kv_killed[1].setText(str(killed))
+        self.kv_rules[1].setText(str(len(st.enabled_apps())))
+        nl = len(st.active_locks())
+        self.kv_locks[1].setText(str(nl))
+        set_label_color(self.kv_locks[1], T.cyan if nl else T.text)
+        self.b_retry.setVisible(prot["level"] == "failed")
+        self.b_admin.setVisible(prot["level"] == "partial")
+
+    def _apply_kpis(self, k):
+        tones = {"up": T.green, "down": T.red, "flat": T.text3, "none": T.text3}
+        for card, key, val in ((self.k_today, "today", DB.fmt_dur(k["today"]["value"])),
+                               (self.k_streak, "streak", DB.tx(f"{k['streak']['value']} days" if k["streak"]["value"] != 1 else "1 day",
+                                                               f"{k['streak']['value']} روز")),
+                               (self.k_focus, "focus", DB.fmt_dur(k["focus"]["value"])),
+                               (self.k_points, "points", DB.tx(str(k["points"]["value"]), str(k["points"]["value"])))):
+            txt, tone = DB.change_text(key, k[key]["change"])
+            card.set(val, txt, tones[tone], k[key]["spark"])
+
+    def _row(self, icon_text, color, title, sub, pill_text=None, pill_color=None, icon=None):
+        r = QHBoxLayout()
+        r.setSpacing(10)
+        r.addWidget(IconTile(icon_text, color, 32, icon=icon))
+        col = QVBoxLayout()
+        col.setSpacing(0)
+        col.addWidget(label(title, 13, QFont.Weight.DemiBold))
+        if sub:
+            col.addWidget(label(sub, 11, color=T.text3))
+        r.addLayout(col, 1)
+        if pill_text:
+            r.addWidget(Pill(pill_text, pill_color or T.cyan, px=10))
+        w = QWidget()
+        w.setLayout(r)
+        return w
+
+    def _fill_lists(self, st):
+        tx = DB.tx
+        lang = "fa" if i18n.is_fa() else "en"
+        clear_layout(self.recent_box)
+        recent = DB.recent_sessions(st.history, 3)
+        self._sig_lists = (tuple((r["start"], r["focus_sec"]) for r in recent), tuple((u["kind"], u.get("days"), u.get("minutes")) for u in self._up))
+        if not recent:
+            self.recent_box.addWidget(label(tx("No sessions yet. Press the play button to start one.", "هنوز جلسه‌ای ثبت نشده. با دکمه‌ی پخش یکی شروع کنید."), 12, color=T.text3, wrap=True))
+        for r in recent:
+            ok = r["status"] == "completed"
+            stt = report_mod.STR[lang].get("st_" + r["status"], r["status"] or "")
+            self.recent_box.addWidget(self._row((r["subject"] or "?")[:1], T.green if ok else T.amber, r["subject"] or tx("Focus session", "جلسه‌ی تمرکز"),
+                                                i18n.fmt_when(r["start"]) + "  ·  " + DB.fmt_dur(r["focus_sec"]), stt, T.green if ok else T.amber))
+        clear_layout(self.up_box)
+        if not self._up:
+            self.up_box.addWidget(label(tx("Nothing scheduled. Add classes in Schedule and exams in Exams.", "چیزی برنامه‌ریزی نشده. کلاس‌ها را در برنامه‌ریزی و آزمون‌ها را در آزمون‌ها بنویسید."), 12, color=T.text3, wrap=True))
+        for u in self._up:
+            if u["kind"] == "exam":
+                d = u["days"]
+                when = tx("Today", "امروز") if d == 0 else (tx("Tomorrow", "فردا") if d == 1 else tx(f"in {d} days", f"{d} روز دیگر"))
+                self.up_box.addWidget(self._row("★", T.amber, u["title"], u["date"] if not i18n.is_fa() else i18n.fmt_when(datetime.fromisoformat(u["date"]), False), when, T.amber))
+            elif u["kind"] in ("class", "class_now"):
+                now_ = u["kind"] == "class_now"
+                m = u["minutes"]
+                dur = DB.fmt_dur(m * 60)
+                pill = tx("NOW", "در حال برگزاری") if now_ else tx(f"in {dur}", f"{dur} دیگر")
+                sub = i18n.fmt_when(u["start"]) + (f"  ·  {u['place']}" if u["place"] else "")
+                self.up_box.addWidget(self._row("", T.cyan, u["title"], sub, pill, T.green if now_ else T.cyan, icon="clock"))
+            elif u["kind"] == "hours":
+                self.up_box.addWidget(self._row("", T.violet, u["title"], "", None, None, icon="lock"))
+
+    def _refresh_rules(self):
+        apps = self.ctx.store.enabled_apps()
+        sig = tuple((a["id"], app_status(self.ctx, a)[0]) for a in apps[:6]) + (len(apps),)
+        if sig == self._sig_rules:
+            return
+        self._sig_rules = sig
+        clear_layout(self.rules_grid)
+        if not apps:
+            self.rules_grid.addWidget(label("No apps are blocked. Open Application Control to add rules.", 12, color=T.text3, wrap=True), 0, 0)
+            return
+        for i, a in enumerate(apps[:6]):
+            r = QHBoxLayout()
+            r.setSpacing(8)
+            r.addWidget(IconTile(a["name"], T.CATEGORY.get(a["category"], T.cyan), 26))
+            r.addWidget(label(a["name"], 13), 1)
+            text, color, tip = app_status(self.ctx, a)
+            pill = Pill(text, color, px=10)
+            pill.setToolTip(tip)
+            r.addWidget(pill)
+            w = QWidget()
+            w.setLayout(r)
+            self.rules_grid.addWidget(w, i // 3, i % 3)
+        if len(apps) > 6:
+            self.rules_grid.addWidget(label(f"+ {len(apps) - 6} more", 12, color=T.text3), 2, 0)
 
 
 # ============================================================ APPLICATION CONTROL

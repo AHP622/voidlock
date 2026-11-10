@@ -17,8 +17,9 @@ TOPICS_FA = [
     ("شروع", "پنجره، سینی و شروع با ویندوز", "دکمه‌ی بستن پنجره، برنامه رو کنار ساعت ویندوز (سینی) پنهان می‌کنه تا یادآوری کلاس‌ها و بررسی آپدیت ادامه داشته "
      "باشه. برای خروج کامل از آیکن سینی «Quit» رو بزن. با گزینه‌ی «شروع در سینی همراه ویندوز» (پیش‌فرض خاموش) فقط آیکن سینی بالا میاد و پنجره خودش باز نمی‌شه."),
     # ---- نمای کلی
-    ("نمای کلی", "شروع سریع جلسه", "دکمه‌ی Start یه جلسه‌ی تمرکز با مدت و موضوع انتخاب‌شده شروع می‌کنه؛ برنامه‌های فعال‌شده بسته می‌شن. پریست‌ها "
-     "(مثلاً «۵۰ دقیقه») یه کلیک برای جلسه‌های تکراری‌ان."),
+    ("نمای کلی", "شروع سریع جلسه", "مربع کوچک گوشه جلسه‌ی تمرکز رو شروع می‌کنه: دکمه‌ی گرد پخش رو بزن تا با مدت و موضوع نشون‌داده‌شده شروع بشه و برنامه‌های فعال‌شده "
+     "بسته بشن. فلش توی مربع پریست‌ها (جلسه‌های تکراری یک‌کلیکی) و «سفارشی» رو نشون می‌ده. کارت‌ها و نمودارها امروز، استریک، زمان تمرکز و امتیاز رو "
+     "نشون می‌دن و دکمه‌ی بازه اونها رو بین ۷، ۳۰ و ۹۰ روز عوض می‌کنه."),
     ("نمای کلی", "حالت سخت و خروج اضطراری", "Pause و End فقط وقتی کار می‌کنن که حالت سخت خاموش باشه. در حالت سخت فقط «قفل اضطراری» می‌مونه: باید عبارت "
      "تایپی رو بنویسی و چند ثانیه صبر کنی (زمان صبر توی تنظیمات). اگه برنامه گیر کرد: «VoidLock.exe --recover»."),
     ("نمای کلی", "قوانین جلسه فقط زیاد می‌شن", "وقتی جلسه در جریانه، چیزی که مسدوده رو نمی‌شه از «کنترل برنامه‌ها» خاموش کرد؛ فقط می‌شه برنامه‌ی جدید اضافه کرد. "
@@ -97,7 +98,7 @@ TOPICS_EN = [
      "backups) is in %APPDATA%\\VoidLock and is not touched by updating, installing or moving the program."),
     ("Start", "Window, tray and start with Windows", "The window's close button hides VOIDLOCK in the tray (next to the clock) so class reminders and update checks keep working. "
      "Quit from the tray icon. 'Start in the tray with Windows' (off by default) only starts the tray icon - the window never opens by itself."),
-    ("Overview", "Quick start", "Start begins a focus session with the chosen length and subject and closes the enabled programs. Presets are one-click recurring sessions."),
+    ("Overview", "Quick start", "The small square in the corner starts a focus session: press the round play button to begin with the shown length and subject and close the enabled programs. The arrow in the square lists your presets (one-click recurring sessions) and Custom. The cards and charts show today, your streak, focus time and points; the range button switches them between 7, 30 and 90 days."),
     ("Overview", "Strict mode and emergency exit", "Pause and End work only when strict mode is off. In strict mode only the emergency unlock remains: type the phrase and wait "
      "(wait time in Settings). If the program is stuck: 'VoidLock.exe --recover'."),
     ("Overview", "Session rules only grow", "While a session runs you cannot switch a blocked program off in Application Control, only add new ones. The guard also keeps each session's "

@@ -111,6 +111,15 @@ TABS = {
 }
 
 NEWS = {
+    "1.13.0": (
+        ["A new Overview: a small start-session square in the corner, headline cards, a clean daily chart, the share of each subject, "
+         "recent sessions, what is coming up and the protection status.",
+         "Every tab got the same glass look: softer cards and a gentle glow behind the window.",
+         "Pick 7, 30 or 90 days for the charts; the quick-start presets are in the arrow of the start square."],
+        ["نمای کلی جدید: یک مربع کوچک شروع جلسه در گوشه، کارت‌های خلاصه، نمودار روزانه‌ی تمیز، سهم هر درس، جلسه‌های اخیر، "
+         "پیش رو و وضعیت محافظت.",
+         "همه‌ی تب‌ها ظاهر شیشه‌ای یکدست گرفتند: کارت‌های نرم‌تر و درخششی ملایم پشت پنجره.",
+         "بازه‌ی نمودارها را ۷، ۳۰ یا ۹۰ روز انتخاب کنید؛ پریست‌های شروع سریع توی فلش مربع شروع هستند."]),
     "1.12.0": (
         ["The phone's report is now exactly this computer's report: the same sections, charts and tables.",
          "The phone finds this computer again by itself when its address changes, so there is no more \"forget and pair again\".",

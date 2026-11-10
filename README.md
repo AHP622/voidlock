@@ -36,6 +36,11 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
+## What changed in 1.13.0
+* **New Overview dashboard** (`voidlock/dashboard.py` for the numbers, `voidlock/dashkit.py` for the painted widgets): the start-session card is a small square in the corner (round play button, countdown ring while a session runs, presets in its arrow); four headline cards with sparklines (study today, streak, focus time, points); a clean daily bar chart with the goal line, 7-day average and exam days; the share of each subject as a donut; recent sessions, what is coming up (exam, class, lock hours) and the protection status; block rules in a compact grid. 7 / 30 / 90 day range. The previous page stays in the code as `ClassicOverviewPage`, used automatically if the dashboard cannot be built.
+* **One look for every tab:** the cards are a little glassy (the window's soft glow shows through, the top edge catches light) and the window background has two gentle glows. Light themes keep their solid cards.
+* Tests: `tests/dashboard_test.py` (the numbers), `tests/qt_stub_smoke.py` (the dashboard's Python runs against stubbed Qt when PySide6 is missing).
+
 ## What changed in 1.12.0
 * **Phone report = computer report.** The Android report is now a port of the computer's report (`android/.../js/report.js`, `wincharts.js`, texts generated from `report.py`): same sections, numbers, charts, tables and CSV, plus your name on it. `android/tests/report_parity_test.py` builds both from the same data and compares them (HTML text, every chart coordinate, CSV).
 * **The phone reconnects by itself.** Previously the phone kept calling the computer's old address; after a DHCP renewal, a restart on another port or a Wi-Fi change, sync failed with "could not connect" until the pairing was deleted and made again. Now the phone looks for the computer by its id (same address on every port, then a scan of its own network) and carries on. A computer that is simply off gives a clear message and keeps the pairing.

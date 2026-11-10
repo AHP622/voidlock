@@ -572,10 +572,16 @@ class Card(QFrame):
         p.setRenderHint(AA)
         r = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
         g = QLinearGradient(r.topLeft(), r.bottomLeft())
-        g.setColorAt(0, QColor(T.panel2))
-        g.setColorAt(1, QColor(T.panel))
+        if T.light:
+            g.setColorAt(0, QColor(T.panel2))
+            g.setColorAt(1, QColor(T.panel))
+        else:                                  # a little glass: the soft glow of the window shows through, the top edge catches light
+            g.setColorAt(0, qc(T.panel2, 0.88))
+            g.setColorAt(1, qc(T.panel, 0.94))
         p.setBrush(g)
         edge = QColor(T.border_hi if self._h > 0.01 else T.border)
+        if not T.light and self._h <= 0.01:
+            edge = qc(T.border_hi, 0.55)
         if self.accent:
             edge = qc(self.accent, 0.25 + 0.4 * self._h)
         p.setPen(QPen(edge, 1))
@@ -583,7 +589,7 @@ class Card(QFrame):
         # hairline highlight along the top edge
         hl = QLinearGradient(r.topLeft(), r.topRight())
         hl.setColorAt(0, qc("#FFFFFF", 0))
-        hl.setColorAt(0.5, qc("#FFFFFF", 0.07 + 0.06 * self._h))
+        hl.setColorAt(0.5, qc("#FFFFFF", (0.07 if T.light else 0.10) + 0.06 * self._h))
         hl.setColorAt(1, qc("#FFFFFF", 0))
         p.setPen(QPen(hl, 1))
         p.drawLine(QPointF(r.left() + T.r_lg, r.top() + 0.5), QPointF(r.right() - T.r_lg, r.top() + 0.5))

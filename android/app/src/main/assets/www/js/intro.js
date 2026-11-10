@@ -30,6 +30,10 @@
     },
     order: ['today', 'stats', 'exams', 'tasks', 'more'],
     news: {
+      '1.13.0': {
+        fa: ['برنامه‌ی کامپیوتر «نمای کلی» تازه‌ای با داشبورد و نمودارها دارد. این نسخه‌ی گوشی هم‌شماره‌ی آن است و تغییر دیگری ندارد.'],
+        en: ['The computer app has a new Overview dashboard with charts. This phone version carries the same number and has no other changes.']
+      },
       '1.12.0': {
         fa: ['گزارش گوشی حالا دقیقاً مثل گزارش کامپیوتر است: همان بخش‌ها، نمودارها و جدول‌ها؛ نام شما هم روی آن نوشته می‌شود.', 'اگر آدرس کامپیوتر عوض شود (مثلاً بعد از چند ساعت)، گوشی خودش دوباره آن را پیدا می‌کند؛ دیگر لازم نیست جفت‌شدن را پاک کنید و از اول وصل کنید.',
              'معرفی کوتاه هر بخش هنگام اولین ورود، و یک تور خوش‌آمد.', 'همین صفحه: بعد از هر به‌روزرسانی، تغییرات را کوتاه می‌بینید.'],
@@ -105,7 +109,7 @@
     var hasData = App.db.subjects.length || App.db.entries.length || App.db.sync.laptop;
     st.seen_version = v; App.save();
     if (!st.welcomed && !hasData) return;                      // a brand-new install: the welcome is shown instead
-    if (!newsFor(v)) return;
+    if (!COPY.news[v]) return;                                 // no notes for this exact version: stay quiet
     whatsNew(App);
   }
   function settingsRows(App) {

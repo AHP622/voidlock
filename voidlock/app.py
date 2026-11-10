@@ -5,8 +5,8 @@ import sys
 import time
 from datetime import date, datetime, timedelta
 
-from PySide6.QtCore import QPoint, QRectF, QSize, Qt, QTimer
-from PySide6.QtGui import QFont, QKeySequence, QLinearGradient, QPainter, QPen, QShortcut
+from PySide6.QtCore import QPoint, QPointF, QRectF, QSize, Qt, QTimer
+from PySide6.QtGui import QFont, QKeySequence, QLinearGradient, QPainter, QPen, QRadialGradient, QShortcut
 from PySide6.QtWidgets import (QAbstractButton, QApplication, QFrame, QHBoxLayout, QLineEdit, QMainWindow, QStackedWidget,
                                QVBoxLayout, QWidget)
 
@@ -21,7 +21,7 @@ from .i18n import tr
 from .icons import paint_icon
 from .overlays import Modal, ToastHost, typed_body
 from .mascot import BlockPopup, Confetti
-from .pages_a import AppsPage, OverviewPage
+from .pages_a import AppsPage, ClassicOverviewPage, OverviewPage
 from .pages_b import AnalyticsPage, SchedulePage, SessionsPage, SettingsPage
 from .pages_c import RewardsPage, StudyPage
 from .pages_exam import ExamsPage
@@ -299,6 +299,16 @@ class Root(QWidget):
         g.setColorAt(0.5, qc(T.bg, 0))
         g.setColorAt(1, qc(T.violet, 0.06))
         p.fillRect(self.rect(), g)
+        if not T.light:                               # two soft glows (top-left accent, top-right violet) behind every page
+            w, h = self.width(), self.height()
+            g1 = QRadialGradient(QPointF(w * 0.16, -h * 0.08), w * 0.55)
+            g1.setColorAt(0, qc(T.cyan, 0.11))
+            g1.setColorAt(1, qc(T.cyan, 0.0))
+            p.fillRect(self.rect(), g1)
+            g2 = QRadialGradient(QPointF(w * 1.02, h * 0.04), w * 0.42)
+            g2.setColorAt(0, qc(T.violet, 0.085))
+            g2.setColorAt(1, qc(T.violet, 0.0))
+            p.fillRect(self.rect(), g2)
         if not self.window().isMaximized():
             p.setPen(QPen(qc(T.border_hi), 1))
             p.setBrush(Qt.BrushStyle.NoBrush)
@@ -359,7 +369,13 @@ class MainWindow(QMainWindow):
                          ("sessions", SessionsPage), ("schedule", SchedulePage), ("exams", ExamsPage), ("rewards", RewardsPage),
                          ("analytics", AnalyticsPage), ("settings", SettingsPage),
                          ("help", HelpPage)):
-            pg = cls(self)
+            try:
+                pg = cls(self)
+            except Exception as e:                 # the new dashboard must never keep the program from starting
+                if key != "overview":
+                    raise
+                print("Overview dashboard failed, using the classic page:", e, file=sys.stderr)
+                pg = ClassicOverviewPage(self)
             self.pages[key] = pg
             self.stack.addWidget(pg)
         self.keys = list(self.pages)

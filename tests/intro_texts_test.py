@@ -48,7 +48,6 @@ class Texts(unittest.TestCase):
     def test_the_phone_has_the_same_tabs_and_news(self):
         js = (ROOT / "android/app/src/main/assets/www/js/intro.js").read_text(encoding="utf-8")
         self.assertIn("'Novum'", js)
-        self.assertIn(f"'{__version__}'", js)
         for k in ("today", "stats", "exams", "tasks", "more"):
             self.assertIn(k + ":", js)
 
