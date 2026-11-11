@@ -425,7 +425,7 @@ class OverviewPage(Page):
 
     def __init__(self, ctx):
         super().__init__(ctx, "Overview", "Your focus command center")
-        from .dashkit import DailyChart, ShareChart, StartSquare, StatCard
+        from .dashkit import DailyChart, ShareChart, StartSquare, StatCard, shrinkable
         tx = DB.tx
         st = ctx.store
         d = st.settings.get("overview_days", 30)
@@ -436,79 +436,91 @@ class OverviewPage(Page):
         b = self.body
         b.setSpacing(14)
 
-        # ---- header: mascot + greeting + range, the start square in the corner
+        # ---- header: a greeting card (mascot), the day's goal, and the start square in the corner. All three have the same height.
+        HEAD_H = 184
         head = QHBoxLayout()
-        head.setSpacing(16)
-        self.mascot = Mascot(84)
-        head.addWidget(self.mascot, 0, Qt.AlignmentFlag.AlignVCenter)
+        head.setSpacing(14)
+        self.hero = Card(pad=18)
+        self.hero.setFixedHeight(HEAD_H)
+        self.hero.setMinimumWidth(0)
+        hl = QHBoxLayout()
+        hl.setSpacing(18)
+        self.mascot = Mascot(124)
+        hl.addWidget(self.mascot, 0, Qt.AlignmentFlag.AlignVCenter)
         ttl = QVBoxLayout()
         ttl.setSpacing(4)
         ttl.addStretch(1)
-        self.greet = label("", 26, QFont.Weight.DemiBold)
-        self.greet_sub = label("", 13, color=T.text2, wrap=True)
+        self.greet = shrinkable(label("", 28, QFont.Weight.DemiBold))
+        self.greet_sub = shrinkable(label("", 13, color=T.text2))
         ttl.addWidget(self.greet)
         ttl.addWidget(self.greet_sub)
         rr = QHBoxLayout()
         self.b_range = Button("", "ghost", height=32)
         rr.addWidget(self.b_range)
         rr.addStretch(1)
+        ttl.addSpacing(4)
         ttl.addLayout(rr)
         ttl.addStretch(1)
-        head.addLayout(ttl, 1)
+        hl.addLayout(ttl, 1)
+        self.hero.lay.addLayout(hl)
+        head.addWidget(self.hero, 5)
+        self.goal_card = Card(pad=18)
+        self.goal_card.setFixedHeight(HEAD_H)
+        self.goal_card.setMinimumWidth(0)
+        self.goal_card.lay.addWidget(shrinkable(label(tx("TODAY'S GOAL", "هدف امروز"), 11, QFont.Weight.Bold, T.text3, spacing=2.0)))
+        self.goal_pct = label("0", 40, QFont.Weight.Bold)
+        self.goal_pct.setMinimumWidth(0)
+        self.goal_card.lay.addWidget(self.goal_pct)
+        self.goal_bar = ProgressBar(height=10)
+        self.goal_card.lay.addWidget(self.goal_bar)
+        self.goal_txt = shrinkable(label("", 12, color=T.text2))
+        self.goal_card.lay.addWidget(self.goal_txt)
+        self.goal_card.lay.addStretch(1)
+        head.addWidget(self.goal_card, 3)
         self.sq = StartSquare()
         head.addWidget(self.sq, 0, Qt.AlignmentFlag.AlignTop)
         b.addLayout(head)
 
         # ---- headline cards
-        kr = QHBoxLayout()
-        kr.setSpacing(14)
+        self.kpi_grid = QGridLayout()
+        self.kpi_grid.setSpacing(14)
         self.k_today = StatCard(tx("STUDY TODAY", "مطالعه‌ی امروز"), T.cyan)
         self.k_streak = StatCard(tx("STREAK", "روزهای پیاپی"), T.amber)
         self.k_focus = StatCard(tx("FOCUS SESSIONS", "جلسه‌های تمرکز"), T.violet)
         self.k_points = StatCard(tx("FOCUS POINTS", "امتیاز تمرکز"), T.green)
-        for k in (self.k_today, self.k_streak, self.k_focus, self.k_points):
-            kr.addWidget(k, 1)
-        b.addLayout(kr)
+        self._kpis = [self.k_today, self.k_streak, self.k_focus, self.k_points]
+        b.addLayout(self.kpi_grid)
 
         # ---- chart + subject share
-        mid = QHBoxLayout()
-        mid.setSpacing(14)
+        self.mid_grid = QGridLayout()
+        self.mid_grid.setSpacing(14)
         self.chart_card = Card(pad=16)
-        hh = QHBoxLayout()
-        hh.setSpacing(14)
-        hh.addWidget(label(tx("STUDY PER DAY", "مطالعه‌ی روزانه"), 11, QFont.Weight.Bold, T.text3, spacing=2.0))
-        hh.addStretch(1)
-        for txt, col in ((tx("●  Hours", "●  ساعت"), T.cyan), (tx("━  7-day average", "━  میانگین ۷ روزه"), T.violet),
-                         (tx("- -  Goal", "- -  هدف"), T.violet), (tx("▼  Exam", "▼  آزمون"), T.amber)):
-            hh.addWidget(label(txt, 11, color=col))
-        self.chart_card.lay.addLayout(hh)
+        self.chart_card.setMinimumWidth(0)
+        self.chart_card.lay.addWidget(shrinkable(label(tx("STUDY PER DAY", "مطالعه‌ی روزانه"), 11, QFont.Weight.Bold, T.text3, spacing=2.0)))
         self.chart = DailyChart()
         self.chart_card.lay.addWidget(self.chart)
-        mid.addWidget(self.chart_card, 5)
         self.share_card = Card(pad=16)
         self.share_card.lay.addWidget(label(tx("SUBJECT SHARE", "سهم درس‌ها"), 11, QFont.Weight.Bold, T.text3, spacing=2.0))
         self.sharec = ShareChart()
         self.share_card.lay.addWidget(self.sharec, 1)
-        mid.addWidget(self.share_card, 3)
-        b.addLayout(mid)
+        self.share_card.setMinimumWidth(0)
+        b.addLayout(self.mid_grid)
 
         # ---- lists
-        low = QHBoxLayout()
-        low.setSpacing(14)
+        self.low_grid = QGridLayout()
+        self.low_grid.setSpacing(14)
         self.recent_card = Card(pad=16)
         self.recent_card.lay.addWidget(label(tx("RECENT SESSIONS", "جلسه‌های اخیر"), 11, QFont.Weight.Bold, T.text3, spacing=2.0))
         self.recent_box = QVBoxLayout()
         self.recent_box.setSpacing(6)
         self.recent_card.lay.addLayout(self.recent_box)
         self.recent_card.lay.addStretch(1)
-        low.addWidget(self.recent_card, 5)
         self.up_card = Card(pad=16)
         self.up_card.lay.addWidget(label(tx("COMING UP", "پیش رو"), 11, QFont.Weight.Bold, T.text3, spacing=2.0))
         self.up_box = QVBoxLayout()
         self.up_box.setSpacing(6)
         self.up_card.lay.addLayout(self.up_box)
         self.up_card.lay.addStretch(1)
-        low.addWidget(self.up_card, 4)
         self.prot_card = Card(pad=16)
         top = QHBoxLayout()
         top.setSpacing(12)
@@ -535,8 +547,9 @@ class OverviewPage(Page):
         self.prot_card.lay.addWidget(self.b_retry)
         self.prot_card.lay.addWidget(self.b_admin)
         self.prot_card.lay.addStretch(1)
-        low.addWidget(self.prot_card, 4)
-        b.addLayout(low)
+        for c_ in (self.recent_card, self.up_card, self.prot_card):
+            c_.setMinimumWidth(0)
+        b.addLayout(self.low_grid)
 
         # ---- block rules (compact grid)
         self.rules_card = Card(pad=16)
@@ -567,9 +580,44 @@ class OverviewPage(Page):
         self.b_admin.clicked.connect(ctx.elevate_guard)
         self.b_manage.clicked.connect(lambda: ctx.goto("apps"))
         ctx.session.changed.connect(self._maybe_refresh)
-        self._reveal = [sq, self.k_today, self.k_streak, self.k_focus, self.k_points, self.chart_card, self.share_card,
+        self._reveal = [self.hero, self.goal_card, sq, self.k_today, self.k_streak, self.k_focus, self.k_points, self.chart_card, self.share_card,
                         self.recent_card, self.up_card, self.prot_card, self.rules_card]
         self._set_range_text()
+        self._mode = None
+        self._responsive()
+
+    # ---------------------------------------------------------------- layout that follows the window width
+    @staticmethod
+    def _place(grid, widgets, cols, stretch=None):
+        for w in widgets:
+            grid.removeWidget(w)
+        for c in range(8):
+            grid.setColumnStretch(c, 0)
+        for i, w in enumerate(widgets):
+            grid.addWidget(w, i // cols, i % cols)
+        for c in range(cols):
+            grid.setColumnStretch(c, stretch[c] if stretch else 1)
+
+    def _responsive(self):
+        w = self.width()
+        mode = 3 if w >= 1020 else (2 if w >= 800 else 1)       # wide / medium / narrow window
+        if w <= 1 or mode == self._mode:
+            if self._mode is None:
+                mode = 3
+            else:
+                return
+        self._mode = mode
+        self._place(self.kpi_grid, self._kpis, 4 if mode == 3 else 2)
+        self._place(self.mid_grid, [self.chart_card, self.share_card], 2 if mode >= 2 else 1, [5, 3] if mode >= 2 else None)
+        self._place(self.low_grid, [self.recent_card, self.up_card, self.prot_card], 3 if mode == 3 else (2 if mode == 2 else 1),
+                    [5, 4, 4] if mode == 3 else None)
+        self.goal_card.setVisible(mode >= 2)
+        self._rules_cols = 3 if mode == 3 else (2 if mode == 2 else 1)
+        self._sig_rules = None                                  # rebuild the rules grid with the new column count
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self._responsive()
 
     # ---------------------------------------------------------------- small helpers
     def _kv(self, k):
@@ -658,8 +706,14 @@ class OverviewPage(Page):
         self.chart.set_chart(DB.chart(self._secs, today, self._days, goal_sec, exams))
         self.sharec.set_data(*self._share)
         self.greet.setText(DB.greeting(now.hour))
-        self.greet_sub.setText(DB.tx(f"{DB.fmt_dur(self._secs[today])} studied today · goal {DB.fmt_dur(goal_sec)}",
-                                     f"امروز {DB.fmt_dur(self._secs[today])} مطالعه کرده‌اید · هدف {DB.fmt_dur(goal_sec)}"))
+        self.greet_sub.setText(DB.tx(f"{DB.fmt_dur(self._secs[today])} studied today", f"امروز {DB.fmt_dur(self._secs[today])} مطالعه کرده‌اید"))
+        frac = (self._secs[today] / goal_sec) if goal_sec > 0 else 0.0
+        self.goal_pct.setText(DB.tx(f"{round(min(frac, 9.99) * 100)}%", f"{round(min(frac, 9.99) * 100)}٪"))
+        set_label_color(self.goal_pct, T.green if frac >= 1 else T.text)
+        self.goal_bar.set_value(frac)
+        left = max(0, goal_sec - self._secs[today])
+        self.goal_txt.setText(DB.tx("Goal reached - well done!", "به هدف رسیدید، آفرین!") if frac >= 1
+                              else DB.tx(f"{DB.fmt_dur(left)} left of {DB.fmt_dur(goal_sec)}", f"{DB.fmt_dur(left)} مانده از {DB.fmt_dur(goal_sec)}"))
         run = s.state == "running" or bool(c.study.active())
         self.mascot.set_state("happy" if self._secs[today] >= goal_sec else ("study" if run else "idle"))
         hsig = (len(st.history), st.history[-1].get("start") if st.history else 0)
@@ -719,9 +773,10 @@ class OverviewPage(Page):
         r.addWidget(IconTile(icon_text, color, 32, icon=icon))
         col = QVBoxLayout()
         col.setSpacing(0)
-        col.addWidget(label(title, 13, QFont.Weight.DemiBold))
+        from .dashkit import shrinkable
+        col.addWidget(shrinkable(label(title, 13, QFont.Weight.DemiBold)))
         if sub:
-            col.addWidget(label(sub, 11, color=T.text3))
+            col.addWidget(shrinkable(label(sub, 11, color=T.text3)))
         r.addLayout(col, 1)
         if pill_text:
             r.addWidget(Pill(pill_text, pill_color or T.cyan, px=10))
@@ -762,7 +817,8 @@ class OverviewPage(Page):
 
     def _refresh_rules(self):
         apps = self.ctx.store.enabled_apps()
-        sig = tuple((a["id"], app_status(self.ctx, a)[0]) for a in apps[:6]) + (len(apps),)
+        cols = getattr(self, "_rules_cols", 3)
+        sig = tuple((a["id"], app_status(self.ctx, a)[0]) for a in apps[:6]) + (len(apps), cols)
         if sig == self._sig_rules:
             return
         self._sig_rules = sig
@@ -781,7 +837,7 @@ class OverviewPage(Page):
             r.addWidget(pill)
             w = QWidget()
             w.setLayout(r)
-            self.rules_grid.addWidget(w, i // 3, i % 3)
+            self.rules_grid.addWidget(w, i // cols, i % cols)
         if len(apps) > 6:
             self.rules_grid.addWidget(label(f"+ {len(apps) - 6} more", 12, color=T.text3), 2, 0)
 

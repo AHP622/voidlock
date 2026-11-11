@@ -30,6 +30,10 @@
     },
     order: ['today', 'stats', 'exams', 'tasks', 'more'],
     news: {
+      '1.13.1': {
+        fa: ['شماره‌ی نسخه با برنامه‌ی کامپیوتر یکی شد (اصلاحات «نمای کلی» کامپیوتر). در گوشی تغییر دیگری نیست.'],
+        en: ['The version number now matches the computer app (Overview fixes there). No other changes on the phone.']
+      },
       '1.13.0': {
         fa: ['برنامه‌ی کامپیوتر «نمای کلی» تازه‌ای با داشبورد و نمودارها دارد. این نسخه‌ی گوشی هم‌شماره‌ی آن است و تغییر دیگری ندارد.'],
         en: ['The computer app has a new Overview dashboard with charts. This phone version carries the same number and has no other changes.']

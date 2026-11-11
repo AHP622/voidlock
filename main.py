@@ -24,6 +24,50 @@ def _startup_failure(err):
         print(text, file=sys.stderr)
 
 
+def _run_screenshots(app, win, args):
+    """Shows every tab in turn and saves the window as a PNG (01_overview.png ...), then quits."""
+    from pathlib import Path
+    from PySide6.QtCore import QTimer
+    from voidlock import demo
+    out = Path(args.screenshots)
+    out.mkdir(parents=True, exist_ok=True)
+    try:
+        w, h = (int(x) for x in args.shot_size.lower().split("x"))
+    except ValueError:
+        w, h = 1500, 1000
+    win.showNormal()
+    win.resize(w, h)
+    keys = demo.order_of_tabs()
+    state = {"i": 0}
+
+    def save(i, key):
+        from PySide6.QtGui import QImage, QPainter
+        path = out / f"{i + 1:02d}_{key}.png"
+        scale = max(1.0, min(4.0, float(args.shot_scale)))
+        img = QImage(int(win.width() * scale), int(win.height() * scale), QImage.Format.Format_ARGB32_Premultiplied)
+        img.setDevicePixelRatio(scale)                              # the layout stays the same, every pixel count is multiplied
+        img.fill(0)
+        painter = QPainter(img)
+        win.render(painter)
+        painter.end()
+        img.save(str(path))
+        print("saved", path)
+        state["i"] += 1
+        QTimer.singleShot(200, step)
+
+    def step():
+        i = state["i"]
+        if i >= len(keys):
+            print("Done:", out)
+            app.quit()
+            return
+        key = keys[i]
+        win.goto(key, animate=False)
+        QTimer.singleShot(2400, lambda: save(i, key))               # let the animations settle
+
+    QTimer.singleShot(1800, step)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--guard", action="store_true")
@@ -36,6 +80,12 @@ def main():
     ap.add_argument("--remove-admin-guard", action="store_true")
     ap.add_argument("--clean-hosts", action="store_true")
     ap.add_argument("--tray", action="store_true")           # start hidden in the tray (login autostart option)
+    # screenshots for presentations: demo data in an EMPTY --home folder, one PNG per tab, then the program quits
+    ap.add_argument("--screenshots", default=None, metavar="DIR")
+    ap.add_argument("--shot-lang", default="fa", choices=("fa", "en"))
+    ap.add_argument("--shot-theme", default=None)
+    ap.add_argument("--shot-size", default="1500x1000")
+    ap.add_argument("--shot-scale", type=float, default=2.0)       # 2 = pictures with twice the pixels (sharp text), same layout
     args, _ = ap.parse_known_args()
 
     if args.version:
@@ -105,7 +155,22 @@ def main():
     from voidlock import i18n
     from voidlock.guard import GuardClient
     from voidlock.store import Store
+    if args.screenshots and not args.home:
+        print("--screenshots needs --home <an empty folder>, so that your own data is never used or changed.")
+        return 2
     store = Store(args.home)                     # language must be known before any widget is built
+    if args.screenshots:
+        from voidlock import __version__, demo, study as studymod
+        sl, pts = studymod.StudyLog(store), studymod.Points(store)
+        if demo.has_data(store, sl):
+            print("That --home folder already has data. Use a new, empty folder for screenshots.")
+            return 2
+        demo.fill(store, sl, pts, args.shot_lang)
+        demo.quiet_first_run(store, __version__)
+        store.settings["language"] = args.shot_lang
+        if args.shot_theme:
+            store.settings["theme"] = args.shot_theme
+        store.save_settings()
     i18n.set_language(store.settings.get("language", "en"))
     from voidlock.app import MainWindow
     from voidlock.theme import T, apply_theme, font, stylesheet
@@ -167,8 +232,10 @@ def main():
         pass                                      # start quietly: only the tray icon
     else:
         win.show()
-    if store.notices:
+    if store.notices and not args.screenshots:
         QTimer.singleShot(900, lambda: [win.toast(n, "info") for n in store.notices])
+    if args.screenshots:
+        _run_screenshots(app, win, args)
     code = app.exec()
     server.close()
     lock.unlock()

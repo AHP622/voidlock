@@ -300,15 +300,22 @@ class Root(QWidget):
         g.setColorAt(1, qc(T.violet, 0.06))
         p.fillRect(self.rect(), g)
         if not T.light:                               # two soft glows (top-left accent, top-right violet) behind every page
+            from .dashkit import mix
             w, h = self.width(), self.height()
-            g1 = QRadialGradient(QPointF(w * 0.16, -h * 0.08), w * 0.55)
-            g1.setColorAt(0, qc(T.cyan, 0.11))
-            g1.setColorAt(1, qc(T.cyan, 0.0))
+            blue = mix(T.cyan, "#2563EB", 0.55)
+            g1 = QRadialGradient(QPointF(w * 0.22, -h * 0.05), w * 0.62)
+            g1.setColorAt(0, qc(blue, 0.27))
+            g1.setColorAt(0.5, qc(blue, 0.09))
+            g1.setColorAt(1, qc(blue, 0.0))
             p.fillRect(self.rect(), g1)
-            g2 = QRadialGradient(QPointF(w * 1.02, h * 0.04), w * 0.42)
-            g2.setColorAt(0, qc(T.violet, 0.085))
+            g2 = QRadialGradient(QPointF(w * 1.0, h * 0.10), w * 0.5)
+            g2.setColorAt(0, qc(T.violet, 0.17))
             g2.setColorAt(1, qc(T.violet, 0.0))
             p.fillRect(self.rect(), g2)
+            g3 = QRadialGradient(QPointF(w * 0.05, h * 1.05), w * 0.45)       # a faint third glow low on the opposite side
+            g3.setColorAt(0, qc(T.cyan, 0.07))
+            g3.setColorAt(1, qc(T.cyan, 0.0))
+            p.fillRect(self.rect(), g3)
         if not self.window().isMaximized():
             p.setPen(QPen(qc(T.border_hi), 1))
             p.setBrush(Qt.BrushStyle.NoBrush)

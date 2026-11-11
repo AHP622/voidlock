@@ -111,6 +111,13 @@ TABS = {
 }
 
 NEWS = {
+    "1.13.1": (
+        ["The Overview now fits any window width: cards re-flow into fewer columns and nothing is cut off at the edge.",
+         "A cleaner subject donut, brighter chart columns, a stronger glow, and a header with a greeting card, today's goal and the start square.",
+         "For presentations: `VoidLock.exe --home <empty folder> --screenshots <folder>` saves a picture of every tab with demo data."],
+        ["نمای کلی با هر عرض پنجره‌ای جور می‌شود: کارت‌ها در ستون‌های کمتر جابه‌جا می‌شوند و چیزی از لبه بیرون نمی‌زند.",
+         "دونات سهم درس‌ها تمیزتر، ستون‌های نمودار روشن‌تر، درخشش قوی‌تر، و بالای صفحه با کارت خوش‌آمد، هدف امروز و مربع شروع جلسه.",
+         "برای معرفی برنامه: دستور `VoidLock.exe --home <پوشه‌ی خالی> --screenshots <پوشه>` از هر تب با داده‌ی نمایشی عکس می‌گیرد."]),
     "1.13.0": (
         ["A new Overview: a small start-session square in the corner, headline cards, a clean daily chart, the share of each subject, "
          "recent sessions, what is coming up and the protection status.",

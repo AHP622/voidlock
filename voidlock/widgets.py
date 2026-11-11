@@ -576,8 +576,8 @@ class Card(QFrame):
             g.setColorAt(0, QColor(T.panel2))
             g.setColorAt(1, QColor(T.panel))
         else:                                  # a little glass: the soft glow of the window shows through, the top edge catches light
-            g.setColorAt(0, qc(T.panel2, 0.88))
-            g.setColorAt(1, qc(T.panel, 0.94))
+            g.setColorAt(0, qc(T.panel2, 0.78))
+            g.setColorAt(1, qc(T.panel, 0.88))
         p.setBrush(g)
         edge = QColor(T.border_hi if self._h > 0.01 else T.border)
         if not T.light and self._h <= 0.01:

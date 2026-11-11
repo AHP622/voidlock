@@ -3,14 +3,26 @@ Data comes from dashboard.py; colours come from the theme, so every theme gets t
 import math
 from datetime import datetime
 
-from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, Signal
+from PySide6.QtCore import QPoint, QPointF, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen
-from PySide6.QtWidgets import QHBoxLayout, QMenu, QToolTip, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QMenu, QSizePolicy, QToolTip, QVBoxLayout, QWidget
 
 from . import i18n
 from .icons import paint_icon
 from .theme import T, font, qc
 from .widgets import AA, AC, AnimWidget, Button, Card, Pill, label, tween
+
+
+ABS_L = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignAbsolute | Qt.AlignmentFlag.AlignVCenter
+ABS_R = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignAbsolute | Qt.AlignmentFlag.AlignVCenter
+
+
+def shrinkable(lbl):
+    """A label that wraps and never forces its card (and so the page) wider than the window."""
+    lbl.setWordWrap(True)
+    lbl.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+    lbl.setMinimumWidth(0)
+    return lbl
 
 
 def mix(c1, c2, t):
@@ -48,8 +60,15 @@ def popup(menu, anchor):
 class Sparkline(QWidget):
     def __init__(self, color=None, parent=None):
         super().__init__(parent)
-        self.setFixedSize(96, 40)
+        self.setFixedHeight(40)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self._v, self._c = [], color or T.cyan
+
+    def sizeHint(self):
+        return QSize(96, 40)
+
+    def minimumSizeHint(self):
+        return QSize(34, 40)
 
     def set_data(self, values, color=None):
         self._v = [float(x) for x in values]
@@ -91,21 +110,22 @@ class StatCard(Card):
 
     def __init__(self, title, color, parent=None):
         super().__init__(parent, pad=16)
-        self.lay.setSpacing(2)
+        self.lay.setSpacing(3)
+        self.setMinimumWidth(0)
         self._color = color
-        self.lay.addWidget(label(title, 11, QFont.Weight.Bold, T.text3, spacing=2.0))
+        cap = label(title, 11, QFont.Weight.Bold, T.text3, spacing=2.0)
+        shrinkable(cap)
+        self.lay.addWidget(cap)
         row = QHBoxLayout()
         row.setSpacing(8)
-        col = QVBoxLayout()
-        col.setSpacing(1)
-        self.val = label("-", 24, QFont.Weight.DemiBold)
-        self.chg = label("", 12, color=T.text3)
-        col.addWidget(self.val)
-        col.addWidget(self.chg)
-        row.addLayout(col, 1)
+        self.val = label("-", 25, QFont.Weight.DemiBold)
+        self.val.setMinimumWidth(0)
+        row.addWidget(self.val, 1)
         self.spark = Sparkline(color)
         row.addWidget(self.spark, 0, Qt.AlignmentFlag.AlignBottom)
         self.lay.addLayout(row)
+        self.chg = shrinkable(label("", 12, color=T.text3))
+        self.lay.addWidget(self.chg)
 
     def set(self, value_text, change_text="", change_color=None, spark=None):
         self.val.setText(value_text)
@@ -145,7 +165,7 @@ class DailyChart(QWidget):
         W, H = self.width(), self.height()
         rtl = self.isRightToLeft()
         ml, mr = (6, 30) if rtl else (30, 6)
-        mt, mb = 18, 38
+        mt, mb = 40, 38
         return W, H, rtl, ml, mr, mt, mb, W - ml - mr, H - mt - mb
 
     def mouseMoveEvent(self, e):
@@ -172,6 +192,45 @@ class DailyChart(QWidget):
             import sys
             print("DailyChart:", ex, file=sys.stderr)
 
+    def _legend(self, p, W, rtl, ch):
+        """Hours / 7-day average / goal / exam, drawn in the top margin; items that do not fit are left out (never a wider page)."""
+        from .dashboard import tx
+        items = [("dot", QColor(T.cyan), tx("Hours", "ساعت")), ("line", QColor(T.violet).lighter(125) if not T.light else QColor(T.violet), tx("7-day average", "میانگین ۷ روزه"))]
+        if ch["goal_sec"]:
+            items.append(("dash", qc(T.violet, 0.95), tx("Goal", "هدف")))
+        if any(b["exam"] for b in ch["bars"]):
+            items.append(("tri", QColor(T.amber), tx("Exam", "آزمون")))
+        p.setFont(font(11))
+        fm = p.fontMetrics()
+        x = (W - 8) if rtl else 8
+        for kind, col, text in items:
+            tw = fm.horizontalAdvance(text)
+            need = tw + 38
+            if (rtl and x - need < 6) or (not rtl and x + need > W - 6):
+                break
+            ix = x - 8 if rtl else x + 8
+            cy = 12.0
+            if kind == "dot":
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(col)
+                p.drawEllipse(QPointF(ix, cy), 4.5, 4.5)
+            elif kind in ("line", "dash"):
+                pen = QPen(col, 2.4)
+                if kind == "dash":
+                    pen.setDashPattern([3.0, 2.5])
+                p.setPen(pen)
+                p.drawLine(QPointF(ix - 8, cy), QPointF(ix + 8, cy))
+            else:
+                tri = QPainterPath(QPointF(ix - 5, cy - 4))
+                tri.lineTo(QPointF(ix + 5, cy - 4))
+                tri.lineTo(QPointF(ix, cy + 5))
+                tri.closeSubpath()
+                p.fillPath(tri, QBrush(col))
+            p.setPen(QColor(T.text2))
+            tx0 = (ix - 14 - tw) if rtl else (ix + 14)
+            p.drawText(QRectF(tx0, 2, tw + 4, 20), ABS_L | Qt.AlignmentFlag.AlignVCenter, text)
+            x = (x - need - 10) if rtl else (x + need + 10)
+
     def _paint(self, ch):
         p = QPainter(self)
         p.setRenderHint(AA)
@@ -190,6 +249,7 @@ class DailyChart(QWidget):
         def Y(sec):
             return base - ph * min(sec, top) / top
 
+        self._legend(p, W, rtl, ch)
         # grid + hour labels
         p.setFont(font(10))
         for hh in range(0, ch["top_h"] + 1, ch["step_h"]):
@@ -201,7 +261,7 @@ class DailyChart(QWidget):
             p.drawLine(QPointF(ml, y), QPointF(W - mr, y))
             p.setPen(QColor(T.text3))
             lab = QRectF((W - mr + 4) if rtl else 0, y - 8, (mr - 4) if rtl else (ml - 6), 16)
-            p.drawText(lab, (Qt.AlignmentFlag.AlignLeft if rtl else Qt.AlignmentFlag.AlignRight) | Qt.AlignmentFlag.AlignVCenter, num(hh))
+            p.drawText(lab, ABS_L if rtl else ABS_R, num(hh))
         # exam days
         for i, b in enumerate(bars):
             if b["exam"]:
@@ -214,7 +274,7 @@ class DailyChart(QWidget):
                 tri.closeSubpath()
                 p.fillPath(tri, QBrush(QColor(T.amber)))
         # columns
-        top_c, low_c = QColor(T.cyan), mix(T.cyan, T.violet, 0.55)
+        top_c, low_c = mix(T.cyan, "#7FF3FF", 0.45), mix(T.cyan, "#2F6BFF", 0.85)
         best = max(range(n), key=lambda k: bars[k]["sec"]) if any(b["sec"] for b in bars) else -1
         for i, b in enumerate(bars):
             if b["sec"] <= 0:
@@ -226,9 +286,12 @@ class DailyChart(QWidget):
             r = QRectF(X(i) - bw / 2, base - hgt, bw, hgt)
             g = QLinearGradient(r.topLeft(), r.bottomLeft())
             reached = goal and b["sec"] >= goal
-            g.setColorAt(0, qc(top_c, 1.0 if reached else 0.55))
-            g.setColorAt(1, qc(low_c, 1.0 if reached else 0.32))
+            g.setColorAt(0, qc(top_c, 1.0 if reached else 0.86))
+            g.setColorAt(1, qc(low_c, 1.0 if reached else 0.62))
             p.setPen(Qt.PenStyle.NoPen)
+            if reached:                                       # a soft glow behind the days that reached the goal
+                p.setBrush(qc(T.cyan, 0.13))
+                p.drawRoundedRect(r.adjusted(-3, -3, 3, 0), 6, 6)
             p.setBrush(g)
             rad = min(4.5, bw / 2, hgt / 2)
             p.drawRoundedRect(r, rad, rad)
@@ -287,6 +350,9 @@ class ShareChart(QWidget):
         self.setMinimumHeight(170)
         self._rows, self._total = [], 0
 
+    def minimumSizeHint(self):
+        return QSize(150, 170)
+
     def set_data(self, rows, total):
         self._rows, self._total = rows, total
         self.update()
@@ -322,9 +388,9 @@ class ShareChart(QWidget):
             if span < 0.5:
                 continue
             pen = QPen(QColor(color), sw)
-            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            pen.setCapStyle(Qt.PenCapStyle.FlatCap)
             p.setPen(pen)
-            gap = 3.0 if len(self._rows) > 1 else 0.0
+            gap = 2.4 if len(self._rows) > 1 else 0.0
             if span > gap:
                 p.drawArc(rect, int(-(ang - gap / 2) * 16), int(-(span - gap) * 16))
             ang -= span
@@ -350,11 +416,11 @@ class ShareChart(QWidget):
             nm = name or i18n.tr("Others")
             tx0, tx1 = (lx0 + 40, lx1 - 16) if rtl else (lx0 + 16, lx1 - 40)
             fm = p.fontMetrics()
-            p.drawText(QRectF(tx0, y, tx1 - tx0, rh), (Qt.AlignmentFlag.AlignRight if rtl else Qt.AlignmentFlag.AlignLeft) | Qt.AlignmentFlag.AlignVCenter,
+            p.drawText(QRectF(tx0, y, tx1 - tx0, rh), ABS_R if rtl else ABS_L,
                        fm.elidedText(nm, Qt.TextElideMode.ElideRight, int(tx1 - tx0)))
             p.setPen(QColor(T.text2))
-            p.drawText(QRectF((lx0 if rtl else lx1 - 38), y, 38, rh), (Qt.AlignmentFlag.AlignLeft if rtl else Qt.AlignmentFlag.AlignRight) | Qt.AlignmentFlag.AlignVCenter,
-                       num(f"{round(sec / tot * 100)}%"))
+            p.drawText(QRectF((lx0 if rtl else lx1 - 38), y, 38, rh), ABS_L if rtl else ABS_R,
+                       num(round(sec / tot * 100)) + ("٪" if i18n.is_fa() else "%"))
             y += rh
 
 
