@@ -36,6 +36,9 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
+## What changed in 1.13.2
+* Fix: the donut of the subject share started at the wrong angle (arcs did not join, a dark wedge showed). It is a closed ring now (`dashboard.donut_arcs`, tested). Cards without data show a dashed baseline instead of a block.
+
 ## What changed in 1.13.1
 * **Dashboard fixes after the first real run:** nothing is wider than the window any more (the dashboard follows the window width: 4 / 2 columns of cards, stacked rows, the goal card hides when narrow; long texts wrap), flat donut segments with thin gaps, correct right-to-left alignment of the painted legend, a header with a greeting card, the day's goal and the start square (same height), brighter chart columns and a stronger window glow.
 * **Screenshots of every tab for presentations:** `VoidLock.exe --home "C:\vl-shots" --screenshots "C:\vl-shots\out" --shot-lang fa` fills the (empty!) `--home` folder with anonymous demo data (`voidlock/demo.py`), shows each tab in turn, saves `01_overview.png` ... `10_help.png` at twice the resolution and quits. Options: `--shot-lang fa|en`, `--shot-theme void|ocean|...`, `--shot-size 1500x1000`, `--shot-scale 2`. It refuses a folder that already has data, so your own data is never used.

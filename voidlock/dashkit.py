@@ -7,7 +7,7 @@ from PySide6.QtCore import QPoint, QPointF, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QHBoxLayout, QMenu, QSizePolicy, QToolTip, QVBoxLayout, QWidget
 
-from . import i18n
+from . import dashboard as DB, i18n
 from .icons import paint_icon
 from .theme import T, font, qc
 from .widgets import AA, AC, AnimWidget, Button, Card, Pill, label, tween
@@ -85,9 +85,13 @@ class Sparkline(QWidget):
         w, h = self.width(), self.height()
         lo, hi = min(self._v), max(self._v)
         span = (hi - lo) or 1.0
+        if hi == lo:                                       # nothing to show yet (all equal): a faint dashed baseline instead of a block
+            pen = QPen(qc(self._c, 0.45), 1.6)
+            pen.setDashPattern([3.0, 3.0])
+            p.setPen(pen)
+            p.drawLine(QPointF(2, h - 8), QPointF(w - 2, h - 8))
+            return
         pts = [QPointF(2 + i * (w - 4) / (n - 1), h - 4 - (h - 10) * (v - lo) / span) for i, v in enumerate(self._v)]
-        if hi == lo:                                       # a flat line sits in the middle
-            pts = [QPointF(q.x(), h / 2) for q in pts]
         path = QPainterPath(pts[0])
         _smooth(path, pts)
         fill = QPainterPath(path)
@@ -382,18 +386,14 @@ class ShareChart(QWidget):
             p.setFont(font(12))
             p.drawText(rect, AC, i18n.tr("No study time yet"))
             return
-        ang = 90.0
-        for name, color, sec in self._rows:
-            span = 360.0 * sec / tot
-            if span < 0.5:
+        arcs = DB.donut_arcs([r[2] for r in self._rows], 0.8 if len(self._rows) > 1 else 0.0)
+        for (name, color, sec), arc in zip(self._rows, arcs):
+            if arc is None:
                 continue
             pen = QPen(QColor(color), sw)
             pen.setCapStyle(Qt.PenCapStyle.FlatCap)
             p.setPen(pen)
-            gap = 2.4 if len(self._rows) > 1 else 0.0
-            if span > gap:
-                p.drawArc(rect, int(-(ang - gap / 2) * 16), int(-(span - gap) * 16))
-            ang -= span
+            p.drawArc(rect, int(arc[0] * 16), int(arc[1] * 16))
         hours = tot / 3600.0
         p.setPen(QColor(T.text))
         p.setFont(font(max(15, size // 7), QFont.Weight.Bold))

@@ -30,6 +30,10 @@
     },
     order: ['today', 'stats', 'exams', 'tasks', 'more'],
     news: {
+      '1.13.2': {
+        fa: ['شماره‌ی نسخه با برنامه‌ی کامپیوتر یکی شد (اصلاح دونات «نمای کلی» کامپیوتر). در گوشی تغییر دیگری نیست.'],
+        en: ['The version number now matches the computer app (donut fix there). No other changes on the phone.']
+      },
       '1.13.1': {
         fa: ['شماره‌ی نسخه با برنامه‌ی کامپیوتر یکی شد (اصلاحات «نمای کلی» کامپیوتر). در گوشی تغییر دیگری نیست.'],
         en: ['The version number now matches the computer app (Overview fixes there). No other changes on the phone.']

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.13.2
+* Fix: the subject donut started at the wrong angle (the arcs did not join and left a dark gap). It is a closed ring starting at 12 o'clock now, with a hairline between the colours; `dashboard.donut_arcs` is tested.
+* The tiny chart of a card without data is a faint dashed line, not a coloured block.
+
 ## 1.13.1
 * Dashboard fixes after the first real run: nothing is wider than the window any more (cards wrap and re-flow with the width), donut segments are flat with thin gaps, right-to-left alignment of the painted legend, a header with a greeting card, the day's goal and the start square of the same height, brighter columns and a stronger glow.
 * `--screenshots` tool and demo data for presentation pictures (see README).

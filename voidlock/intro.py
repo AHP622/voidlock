@@ -111,6 +111,13 @@ TABS = {
 }
 
 NEWS = {
+    "1.13.2": (
+        ["The subject donut was drawn from the wrong starting angle and left a dark gap: it is now a closed ring that starts at the top, "
+         "with only a hairline between the colours.",
+         "The little chart of a card that has no data yet is a faint dashed line instead of a coloured block."],
+        ["دونات سهم درس‌ها از زاویه‌ی اشتباه شروع می‌شد و یک شکاف تیره می‌گذاشت: حالا حلقه‌ی بسته‌ای است که از بالا شروع می‌شود "
+         "و بین رنگ‌ها فقط یک خط باریک است.",
+         "نمودار کوچک کارتی که هنوز داده ندارد، به‌جای یک بلوک رنگی، یک خط‌چین کم‌رنگ است."]),
     "1.13.1": (
         ["The Overview now fits any window width: cards re-flow into fewer columns and nothing is cut off at the edge.",
          "A cleaner subject donut, brighter chart columns, a stronger glow, and a header with a greeting card, today's goal and the start square.",

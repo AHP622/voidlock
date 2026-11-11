@@ -126,6 +126,19 @@ def share(study, today, days, keep=5):
     return [tuple(r) for r in rows], total
 
 
+def donut_arcs(values, gap=0.8, start=90.0):
+    """[(start_deg, span_deg)] for a donut, Qt angle convention (0 = 3 o'clock, counter-clockwise positive): the first segment
+    begins at 12 o'clock and the rest follow clockwise (negative spans), touching each other except for a hairline `gap`.
+    A segment too small to show gets None."""
+    tot = float(sum(values))
+    out, ang = [], float(start)
+    for v in values:
+        span = 360.0 * v / tot if tot > 0 else 0.0
+        out.append((ang - gap / 2.0, -(span - gap)) if span > gap else None)
+        ang -= span
+    return out
+
+
 def recent_sessions(history, n=3):
     """Newest first: [{subject, start (datetime), focus_sec, planned_min, status}]."""
     out = []

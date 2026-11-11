@@ -98,6 +98,23 @@ class Dash(unittest.TestCase):
         self.assertEqual(up[0]["days"], 6)
         self.assertTrue(1 <= up[1]["minutes"] <= 120)
 
+    def test_donut_arcs_cover_the_circle_without_holes(self):
+        vals = [26, 23, 15, 13, 10, 13]
+        arcs = D.donut_arcs(vals, 0.8)
+        self.assertEqual(len(arcs), 6)
+        self.assertAlmostEqual(arcs[0][0], 90 - 0.4)                          # the first segment starts at 12 o'clock
+        total = 0.0
+        prev_end = None
+        for st, sp in arcs:
+            self.assertLess(sp, 0)                                            # clockwise
+            if prev_end is not None:
+                self.assertAlmostEqual(prev_end - st, 0.8, places=6)          # the next one starts a hairline after the last ended
+            prev_end = st + sp
+            total += -sp + 0.8
+        self.assertAlmostEqual(total, 360.0, places=6)
+        self.assertEqual(D.donut_arcs([100, 0.1], 0.8)[1], None)              # too small to draw
+        self.assertEqual(D.donut_arcs([5], 0.0)[0], (90.0, -360.0))
+
     def test_chart_axis_steps_stay_readable(self):
         for hrs in (1, 3, 5, 7.5, 11, 30):
             secs = {date.today(): int(hrs * 3600)}
