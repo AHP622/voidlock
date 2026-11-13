@@ -172,8 +172,6 @@ def jalali_str(jy, jm, jd):
 
 FA_MONTHS = ["فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور", "مهر", "آبان", "آذر", "دی",
              "بهمن", "اسفند"]
-EN_JMONTHS = ["Farvardin", "Ordibehesht", "Khordad", "Tir", "Mordad", "Shahrivar", "Mehr", "Aban", "Azar",
-              "Dey", "Bahman", "Esfand"]
 FA_DAYS = ["دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه", "یکشنبه"]        # Mon..Sun
 FA_DAYS_SHORT = ["د", "س", "چ", "پ", "ج", "ش", "ی"]
 EN_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]

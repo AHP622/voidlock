@@ -25,16 +25,16 @@ import platform
 import time
 from datetime import date
 
-from .store import clean_history, read_json, uid, write_json
+from .store import clean_classes, clean_history, read_json, uid, write_json
 
 FORMAT = "voidlock-sync"
 VERSION = 2
 EXT = ".voidsync"
 MAX_BYTES = 60 * 1024 * 1024
-LIST_KINDS = ("subjects", "entries", "exams", "exam_subjects", "todos", "sessions")
+LIST_KINDS = ("subjects", "entries", "exams", "exam_subjects", "todos", "sessions", "classes")
 LEAF_KINDS = ("tests", "words")                     # one record per day and subject: id "date|subject_id", value {"n": count}
 KINDS = LIST_KINDS + LEAF_KINDS + ("gone",)
-LOCAL_ONLY = {"exams": ("notified",)}               # per-device state that must not count as a change
+LOCAL_ONLY = {"exams": ("notified",), "classes": ("rem_done", "start_done")}               # per-device state that must not count as a change
 MASS_DELETE_MIN = 10                                # removing this many (and half of what is here) is flagged
 TOMB_KEEP_MS = 400 * 86400 * 1000
 
@@ -76,6 +76,8 @@ def _valid(kind, r):
         if kind == "sessions":
             float(r["start"])
             return True
+        if kind == "classes":
+            return bool(clean_classes([r]))
         if kind in LEAF_KINDS:
             return isinstance(r.get("n"), int) and r["n"] > 0
         return True
@@ -91,6 +93,8 @@ def _records(store):
         for x in st.get(kind) or []:
             if isinstance(x, dict) and isinstance(x.get("id"), str) and x["id"]:
                 out[kind][x["id"]] = _strip(kind, copy.deepcopy(x))
+    for x in clean_classes(getattr(store, "classes", None) or []):
+        out["classes"][x["id"]] = _strip("classes", copy.deepcopy(x))
     for r in store.history or []:
         try:
             sid = _session_id(r)
@@ -518,7 +522,16 @@ def apply(store, merged, remap=None, sl=None):
     if isinstance(act, dict) and act.get("subject") in remap:
         act["subject"] = remap[act["subject"]]       # the running stopwatch follows its subject
     store.history = copy.deepcopy(sorted(recs["sessions"].values(), key=lambda r: float(r.get("start", 0))))
+    old_cls = {c.get("id"): c for c in (getattr(store, "classes", None) or []) if isinstance(c, dict)}
+    cls = []
+    for c in clean_classes(list(recs["classes"].values())):
+        o = old_cls.get(c["id"]) or {}
+        c["rem_done"], c["start_done"] = o.get("rem_done", ""), o.get("start_done", "")      # which reminders fired is per device
+        cls.append(c)
+    cls.sort(key=lambda c: (c["day"], c["time"], c["id"]))
+    store.classes = cls
     if sl is not None:
         sl._gen += 1
     store.save_study()
     store.save_history()
+    store.save_classes()

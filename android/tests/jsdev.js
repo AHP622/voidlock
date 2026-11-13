@@ -29,6 +29,9 @@ if (cmd === 'init') {
       if (e && s) Core.setExamResult(db, e.id, { taraz: op.taraz, rank: op.rank, rank_region: op.region, subjects: [{ sid: s.id, pct: op.pct, taraz: op.taraz }] });
       break;
     }
+    case 'add_class': Core.addClass(db, { name: op.name, day: op.day, time: op.time, minutes: op.min, remind: op.remind, place: op.place }); break;
+    case 'edit_class': { const c = db.classes.find((x) => x.name === op.name); if (c) Core.updateClass(db, c.id, { time: op.time, place: op.place }); break; }
+    case 'remove_class': { const c = db.classes.find((x) => x.name === op.name); if (c) Core.removeClass(db, c.id); break; }
     case 'counter': { const s = byName(db, 'subjects', op.name); if (s) Core.setCounter(db, op.kind, d, s.id, op.n); break; }
   }
   save(db); out({ ok: true });

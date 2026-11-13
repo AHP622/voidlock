@@ -111,6 +111,19 @@ TABS = {
 }
 
 NEWS = {
+    "1.14.0": (
+        ["Weekly classes now sync between the computer and the phone, just like exams and study data: add or edit a class on either one and "
+         "it travels with the next sync.",
+         "The phone can add, edit and delete classes itself (More ▸ Tasks ▸ Classes), and the phone's report now includes the weekly timetable.",
+         "Class and exam reminders, and a notice for new versions, now arrive on the phone as real notifications — even when the app is closed "
+         "(turn them on in More ▸ Notifications).",
+         "A smoother phone interface: a sliding highlight on switches, a gentle fade when a tab opens, nicer toggle switches, and a Reduce Motion "
+         "setting for anyone who prefers fewer animations."],
+        ["از این به بعد کلاس‌های هفتگی هم مثل آزمون‌ها و داده‌ی مطالعه بین کامپیوتر و گوشی همگام می‌شوند: کلاس را در هرکدام اضافه یا "
+         "ویرایش کنید، با همگام‌سازی بعدی به آن یکی هم می‌رسد.",
+         "گوشی هم می‌تواند کلاس اضافه، ویرایش و حذف کند (بیشتر ◂ کارها ◂ کلاس‌ها)، و گزارش گوشی حالا برنامه‌ی هفتگی کلاس‌ها را هم دارد.",
+         "یادآوری کلاس و آزمون، و خبر نسخه‌ی تازه، حالا در گوشی به‌صورت اعلان واقعی می‌آیند — حتی وقتی برنامه بسته است (از بیشتر ◂ اعلان‌ها روشن کنید).",
+         "رابط گوشی نرم‌تر شد: هایلایت لغزان روی کلیدهای دوتایی، محو شدن ملایم هنگام باز شدن هر تب، کلیدهای روشن/خاموش زیباتر، و یک گزینه‌ی کاهش انیمیشن برای کسانی که حرکت کمتر می‌خواهند."]),
     "1.13.2": (
         ["The subject donut was drawn from the wrong starting angle and left a dark gap: it is now a closed ring that starts at the top, "
          "with only a hairline between the colours.",

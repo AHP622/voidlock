@@ -54,6 +54,11 @@ def make_data():
         sl.set_exam_result(e["id"], taraz=6000 + i * 150 + rnd.randint(-80, 80), rank=9000 - i * 700 + rnd.randint(-200, 200),
                            rank_region=420 - i * 40 + rnd.randint(-15, 15), subjects=rows, note="note %d" % i if i % 2 else "")
     sl.add_exam("Future exam", today + timedelta(days=5))
+    st.classes = S.clean_classes([{"id": f"k{i}", "name": n, "day": d, "time": tm, "minutes": mn, "remind": 15, "place": pl, "enabled": en}
+                                  for i, (n, d, tm, mn, pl, en) in enumerate([("Calculus", 0, "17:00", 90, "Room 3", True), ("Physics", 0, "09:30", 60, "", True),
+                                                                              ("Chem", 2, "16:15", 120, "Online", True), ("Bio", 5, "08:00", 45, "Hall B", True),
+                                                                              ("Lit", 3, "10:00", 75, "", False), ("Math2", 6, "18:00", 90, "A1", True)])])
+    st.save_classes()
     hist = []
     for k in range(10):
         t0 = datetime.combine(today - timedelta(days=k * 3 + 1), datetime.min.time()) + timedelta(hours=9)

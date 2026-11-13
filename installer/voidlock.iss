@@ -36,9 +36,18 @@ Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription
 [Files]
 Source: "..\dist\VoidLock.exe"; DestDir: "{app}"; Flags: ignoreversion
 
+[InstallDelete]
+; Windows treats VOIDLOCK.lnk and Voidlock.lnk as the same file and keeps the old capitalisation when it is overwritten:
+; remove the old shortcuts first so the new name (Voidlock) is what is shown under the icon (the desktop one only when the
+; desktop-icon task is selected, i.e. when it is created again right after)
+Type: files; Name: "{autoprograms}\VOIDLOCK.lnk"
+Type: files; Name: "{autodesktop}\VOIDLOCK.lnk"; Tasks: desktopicon
+Type: files; Name: "{commonprograms}\VOIDLOCK.lnk"
+Type: files; Name: "{commondesktop}\VOIDLOCK.lnk"; Tasks: desktopicon
+
 [Icons]
-Name: "{autoprograms}\VOIDLOCK"; Filename: "{app}\VoidLock.exe"
-Name: "{autodesktop}\VOIDLOCK"; Filename: "{app}\VoidLock.exe"; Tasks: desktopicon
+Name: "{autoprograms}\Voidlock"; Filename: "{app}\VoidLock.exe"
+Name: "{autodesktop}\Voidlock"; Filename: "{app}\VoidLock.exe"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\VoidLock.exe"; Description: "Launch VOIDLOCK"; Flags: nowait postinstall skipifsilent

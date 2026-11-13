@@ -16,7 +16,7 @@
 
   // ------------------------------------------------------------------ summaries of an import
   function planLines(plan) {
-    var names = { entries: 'k_entries', subjects: 'k_subjects_n', exams: 'k_exams_n', exam_subjects: 'k_exam_subjects_n', todos: 'k_todos_n', sessions: 'k_sessions_n' }, lines = [];
+    var names = { entries: 'k_entries', subjects: 'k_subjects_n', exams: 'k_exams_n', exam_subjects: 'k_exam_subjects_n', todos: 'k_todos_n', sessions: 'k_sessions_n', classes: 'k_classes_n' }, lines = [];
     [['new_here', 'added'], ['changed', 'updated'], ['removed_here', 'removed']].forEach(function (p) {
       var items = Object.keys(names).filter(function (k) { return plan.stats[k][p[1]]; }).map(function (k) { return I18n.num(plan.stats[k][p[1]]) + ' ' + t(names[k]); });
       var c = plan.stats.tests[p[1]] + plan.stats.words[p[1]]; if (c) items.push(I18n.num(c) + ' ' + t('k_counts'));
@@ -185,6 +185,13 @@
     return card(t('settings'), [
       h('label', { class: 'field', style: { marginTop: 0 } }, t('language')),
       seg([['fa', t('persian')], ['en', t('english')]], db.settings.lang, function (l) { db.settings.lang = l; I18n.setLang(l); App.save(); App.render(); }),
+      h('label', { class: 'field' }, t('reduce_motion_label')),
+      (function () {
+        var cb = h('input', { type: 'checkbox' });
+        cb.checked = db.settings.reduce_motion === true;
+        cb.addEventListener('change', function () { db.settings.reduce_motion = cb.checked; App.save(); Motion.setReduced(cb.checked ? true : (db.settings.reduce_motion === false ? false : null)); });
+        return h('label', { class: 'row sb', style: { padding: '2px 0 0' } }, h('span', { class: 'small dim' }, t('reduce_motion_hint')), cb);
+      })(),
       h('label', { class: 'field' }, t('daily_goal')), goal,
       h('label', { class: 'field' }, t('theme')),
       seg([['ocean', t('theme_ocean')], ['void', t('theme_void')], ['midnight', t('theme_midnight')], ['paper', t('theme_paper')]], db.settings.theme || 'ocean', function (th) { db.settings.theme = th; App.applyTheme(); App.save(); App.render(); })]);
@@ -212,8 +219,25 @@
     return card(t('about'), kids);
   }
 
+  // ---------------------------------------------------------------- notifications (class / exam reminders, new version)
+  function notifyCard(App) {
+    var st = App.db.settings, shell = Native.hasShell(), allowed = Native.notificationsAllowed(), exact = Native.canExactAlarms();
+    var kids = [h('div', { class: 'small dim', style: { marginBottom: '8px' } }, shell ? t('notify_hint') : t('notify_browser'))];
+    if (shell && !allowed) kids.push(h('button', { class: 'btn primary block', onclick: function () { Native.requestNotifications(); setTimeout(function () { App.render(); }, 1800); } }, t('notify_enable')));
+    [['classes', 'notify_classes'], ['exams', 'notify_exams'], ['updates', 'notify_updates']].forEach(function (r) {
+      var cb = h('input', { type: 'checkbox' }); cb.checked = st['notify_' + r[0]] !== false;
+      cb.addEventListener('change', function () { st['notify_' + r[0]] = cb.checked; App.save(); App.replan(); });
+      kids.push(h('label', { class: 'row sb', style: { padding: '10px 0 0' } }, h('span', null, t(r[1])), cb));
+    });
+    if (shell && allowed && !exact) kids.push(h('div', { class: 'small dim', style: { marginTop: '10px' } }, t('notify_exact')),
+      h('button', { class: 'btn block', style: { marginTop: '6px' }, onclick: function () { Native.openAlarmSettings(); } }, t('notify_exact_btn')));
+    if (shell && allowed) kids.push(h('button', { class: 'btn block', style: { marginTop: '12px' }, onclick: function () { Native.notify(t('notify_test_title'), t('notify_test_text'), 'test|' + Date.now()); } }, t('notify_test')));
+    return card(t('notify_title'), kids);
+  }
+
   Views.more = function (host, App) {
     host.appendChild(syncCard(App));
+    host.appendChild(notifyCard(App));
     host.appendChild(reportCard(App));
     host.appendChild(subjectsCard(App));
     host.appendChild(settingsCard(App));

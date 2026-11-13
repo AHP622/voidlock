@@ -19,7 +19,9 @@
   App.applyTheme = function () { document.documentElement.setAttribute('data-theme', App.db.settings.theme || 'ocean'); };
 
   // ------------------------------------------------------------------ changes and rendering
-  App.changed = function () { App.dirty = true; App.save(); App.render(); App.scheduleSync(); };
+  var planTimer = null;
+  App.replan = function () { clearTimeout(planTimer); planTimer = setTimeout(function () { Notify.sync(App); }, 1200); };      // class / exam reminders follow the data
+  App.changed = function () { App.dirty = true; App.save(); App.render(); App.scheduleSync(); App.replan(); };
   App.refresh = function () { App.save(); App.render(); };
   App.go = function (v) { App.view = v; var el = document.getElementById('view'); App.render(); el.scrollTop = 0; };
   var TITLES = { today: 'nav_today', stats: 'nav_stats', exams: 'nav_exams', tasks: 'nav_tasks', more: 'nav_more' };
@@ -30,6 +32,7 @@
     catch (e) { host.appendChild(h('section', { class: 'card' }, h('b', null, 'Error'), h('pre', { style: { whiteSpace: 'pre-wrap', fontSize: '12px', direction: 'ltr' } }, String(e && e.stack || e)))); if (root.console) console.error(e); }
     if (root.Intro) { try { Intro.attachTip(host, App); } catch (e) { if (root.console) console.error(e); } }
     host.scrollTop = sc;
+    if (root.Motion) { Motion.replayViewIn(host); requestAnimationFrame(function () { Motion.layoutSegThumbs(); }); Motion.layoutSegThumbsSettled(); }
     var nav = document.getElementById('nav'); nav.innerHTML = '';
     Object.keys(TITLES).forEach(function (k) { nav.appendChild(h('button', { class: App.view === k ? 'on' : '', onclick: function () { if (App.view !== k) App.go(k); }, html: UI.icon(k) + '<span>' + t(TITLES[k]) + '</span>' })); });
     var title = document.getElementById('top-title'); title.innerHTML = '';
@@ -65,6 +68,7 @@
         lap.lastRev = r.rev; lap.last = Date.now(); App.dirty = false; App.syncState = 'ok'; App.syncMsg = '';
         App.saveNow();
         if (r.changes) App.render(); else if (App.view === 'more') App.render();
+        if (r.changes) App.replan();                               // the computer may have changed classes or exams
         if (manual) UI.toast(r.changes ? t('synced_ok') : t('up_to_date'), 'success');
       } else {
         App.syncState = 'err';
@@ -97,7 +101,7 @@
     return Net.checkUpdate().then(function (r) {
       App.db.settings.last_update_check = Date.now(); App.save();
       if (!r.ok) App.update = manual ? { state: 'error', err: r.error } : { state: 'idle' };
-      else if (r.newer && r.hasApk) { App.update = { state: 'available', info: r }; if (!manual) UI.toast(t('update_available', { v: I18n.digits(r.version) }), 'info'); }
+      else if (r.newer && r.hasApk) { App.update = { state: 'available', info: r }; if (!manual) UI.toast(t('update_available', { v: I18n.digits(r.version) }), 'info'); if (!manual || App.bg) Notify.updateNotice(App, r); }
       else App.update = { state: 'none' };
       if (App.view === 'more') App.render();
     });
@@ -140,8 +144,9 @@
     var finished = false;
     function finish() { if (finished) return; finished = true; App.saveNow(); Native.bgDone(true); }
     setTimeout(finish, 65000);
-    if (!App.db.sync.laptop || App.db.settings.auto_sync === false) return finish();
-    App.syncNow(false).then(finish, finish);
+    var st = App.db.settings, doSync = App.db.sync.laptop && st.auto_sync !== false;
+    var upd = st.update_check !== false && Date.now() - (st.last_update_check || 0) > 12 * 3600 * 1000 ? App.checkUpdate(false).catch(function () {}) : Promise.resolve();
+    (doSync ? App.syncNow(false).catch(function () {}) : Promise.resolve()).then(function () { return upd; }).then(function () { Notify.sync(App); finish(); }, finish);
   }
 
   App.boot = function () {
@@ -151,6 +156,7 @@
     var a = App.db.active;
     if (a && Core.elapsed(App.db) > 12 * 3600) { App.db.active = null; App.saveNow(); UI.toast(t('timer_hint'), 'warn'); }
     App.syncState = App.db.sync.laptop ? 'ok' : 'off';
+    if (root.Motion) Motion.setReduced(App.db.settings.reduce_motion === true ? true : App.db.settings.reduce_motion === false ? false : null);
     App.render();
     setInterval(function () { if (App.tick) App.tick(); }, 1000);
     setInterval(App.poll, 12000);
@@ -162,6 +168,7 @@
     Native.onOpenFile(function (name, text) { App.go('more'); Views.importText(App, text); });
     setTimeout(welcome, 500);
     setTimeout(function () { Intro.afterBoot(App); }, 900);
+    App.replan();
     var st = App.db.settings;
     if (st.update_check !== false && Date.now() - (st.last_update_check || 0) > 12 * 3600 * 1000) setTimeout(function () { App.checkUpdate(false); }, 4000);
     if (App.db.sync.laptop) { setTimeout(App.poll, 1500); Native.setBackgroundSync(App.db.settings.bg_sync !== false); }

@@ -1553,7 +1553,7 @@ class SettingsPage(Page):
     def _sync_lines(plan):
         fa = i18n.is_fa()
         names = {"entries": "study records", "subjects": "subjects", "exams": "exams", "exam_subjects": "exam subjects",
-                 "todos": "to-dos", "sessions": "focus sessions"}
+                 "todos": "to-dos", "sessions": "focus sessions", "classes": "classes"}
         num = lambda n: i18n.digits(f"{n:,}")
         lines = []
         for title, field in (("New here", "added"), ("Changed", "updated"), ("Removed here", "removed")):

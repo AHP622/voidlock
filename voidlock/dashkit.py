@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QHBoxLayout, QMenu, QSizePolicy, QToolTip, QVBoxLa
 
 from . import dashboard as DB, i18n
 from .icons import paint_icon
-from .theme import T, font, qc
+from .theme import Motion, T, font, qc
 from .widgets import AA, AC, AnimWidget, Button, Card, Pill, label, tween
 
 
@@ -443,7 +443,7 @@ class MiniRing(AnimWidget):
         self.update()
 
     def on_tick(self, t):
-        if self.state == "running":
+        if self.state == "running" and not Motion.reduced:        # a purely decorative pulse: skip it entirely under Reduced Motion
             self._pulse = (t % 2.4) / 2.4
             self.update()
 

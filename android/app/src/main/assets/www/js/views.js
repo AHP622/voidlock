@@ -69,6 +69,7 @@
     function drawRing() { var tot = Core.daySec(db, today); el.ring.innerHTML = Charts.ring(goal ? tot / goal : 0, 170, I18n.dur(tot), t('of_goal', { goal: I18n.dur(goal) })); }
     drawRing(); el.drawRing = drawRing;
     host.appendChild(card(null, [el.ring]));
+    var nc = Views.nextClassCard && Views.nextClassCard(App, false); if (nc) host.appendChild(nc);
 
     if (!db.subjects.length) {
       host.appendChild(card(null, [h('div', { class: 'empty' }, t('no_subjects')), h('button', { class: 'btn primary block', onclick: function () { subjectSheet(App, null); } }, t('add_subject'))]));
@@ -164,6 +165,11 @@
   // ------------------------------------------------------------------ Tasks
   Views.tasks = function (host, App) {
     var db = App.db, today = Core.dkey(), day = App.taskDay || today, fa = I18n.lang === 'fa';
+    var mode = App.tasksMode === 'classes' ? 'classes' : 'tasks';
+    host.appendChild(h('div', { class: 'seg mode', style: { margin: '2px 0 10px' } },
+      h('button', { class: mode === 'tasks' ? 'on' : '', onclick: function () { App.tasksMode = 'tasks'; App.render(); } }, t('mode_tasks')),
+      h('button', { class: mode === 'classes' ? 'on' : '', onclick: function () { App.tasksMode = 'classes'; App.render(); } }, t('mode_classes'))));
+    if (mode === 'classes') return Views.classesList(host, App);
     var seg = h('div', { class: 'seg' },
       h('button', { class: day === today ? 'on' : '', onclick: function () { App.taskDay = today; App.render(); } }, t('today')),
       h('button', { class: day === dayAfter(today, 1) ? 'on' : '', onclick: function () { App.taskDay = dayAfter(today, 1); App.render(); } }, t('tomorrow')),

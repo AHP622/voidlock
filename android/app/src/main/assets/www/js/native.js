@@ -47,6 +47,14 @@
     keepAwake: function (on) { try { if (A && A.keepAwake) A.keepAwake(!!on); } catch (e) {} },
     setBackgroundSync: function (on) { try { if (A && A.setBackgroundSync) A.setBackgroundSync(!!on); } catch (e) {} },
     bgDone: function (ok) { try { if (A && A.bgDone) A.bgDone(!!ok); } catch (e) {} },
+    // reminders / notifications (Reminders.kt); harmless in a browser
+    scheduleReminders: function (json) { try { if (A && A.scheduleReminders) A.scheduleReminders(json); } catch (e) {} },
+    notify: function (title, text, id) { try { if (A && A.showNotification) A.showNotification(String(title), String(text), String(id || '')); } catch (e) {} },
+    notificationsAllowed: function () { try { if (A && A.notificationsAllowed) return !!A.notificationsAllowed(); } catch (e) {} return false; },
+    requestNotifications: function () { try { if (A && A.requestNotifications) A.requestNotifications(); } catch (e) {} },
+    canExactAlarms: function () { try { if (A && A.canExactAlarms) return !!A.canExactAlarms(); } catch (e) {} return false; },
+    openAlarmSettings: function () { try { if (A && A.openAlarmSettings) A.openAlarmSettings(); } catch (e) {} },
+    hasShell: function () { return !!(A && A.scheduleReminders); },
     printHtml: function (title, html) {
       if (A && A.printHtml) { try { A.printHtml(title, html); return true; } catch (e) { return false; } }
       var w = root.open('', '_blank'); if (!w) return false; w.document.write(html); w.document.close(); setTimeout(function () { try { w.print(); } catch (e) {} }, 400); return true;

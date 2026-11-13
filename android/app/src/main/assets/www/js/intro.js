@@ -30,6 +30,16 @@
     },
     order: ['today', 'stats', 'exams', 'tasks', 'more'],
     news: {
+      '1.14.0': {
+        fa: ['کلاس‌ها حالا با کامپیوتر همگام می‌شوند و خودتان هم می‌توانید اینجا کلاس اضافه کنید (کارها ◂ کلاس‌ها).',
+             'گزارش شما حالا برنامه‌ی هفتگی کلاس‌ها را هم دارد.',
+             'یادآوری کلاس و آزمون و خبر نسخه‌ی تازه به‌صورت اعلان واقعی می‌آیند؛ در بیشتر ◂ اعلان‌ها روشنشان کنید.',
+             'رابط کمی نرم‌تر و شیک‌تر شد؛ در تنظیمات می‌توانید انیمیشن‌ها را هم کم کنید.'],
+        en: ['Classes now sync with the computer, and you can add classes here too (Tasks ▸ Classes).',
+             'Your report now includes the weekly class timetable.',
+             'Class and exam reminders and new-version notices arrive as real notifications; turn them on in More ▸ Notifications.',
+             'A smoother interface, plus a Reduce Motion setting if you prefer fewer animations.']
+      },
       '1.13.2': {
         fa: ['شماره‌ی نسخه با برنامه‌ی کامپیوتر یکی شد (اصلاح دونات «نمای کلی» کامپیوتر). در گوشی تغییر دیگری نیست.'],
         en: ['The version number now matches the computer app (donut fix there). No other changes on the phone.']

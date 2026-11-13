@@ -4,10 +4,10 @@
 (function (root) {
   'use strict';
   var FORMAT = 'voidlock-sync', VERSION = 2;
-  var LIST_KINDS = ['subjects', 'entries', 'exams', 'exam_subjects', 'todos', 'sessions'];
+  var LIST_KINDS = ['subjects', 'entries', 'exams', 'exam_subjects', 'todos', 'sessions', 'classes'];
   var LEAF_KINDS = ['tests', 'words'];
   var KINDS = LIST_KINDS.concat(LEAF_KINDS, ['gone']);
-  var LOCAL_ONLY = { exams: ['notified'] };
+  var LOCAL_ONLY = { exams: ['notified'], classes: ['rem_done', 'start_done'] };
   var MASS_DELETE_MIN = 10, TOMB_KEEP_MS = 400 * 86400 * 1000;
   var SUBJECT_COLORS = ['#FF5DA2', '#8B5CF6', '#00C2FF', '#34D399', '#FBBF24', '#FB7185', '#60A5FA', '#F97316'];
 
@@ -74,7 +74,7 @@
   // ---------------------------------------------------------------- the database
   function newDb() {
     return {
-      v: 1, subjects: [], entries: [], tests: {}, words: {}, gone: {}, exams: [], exam_subjects: [], todos: [], sessions: [],
+      v: 1, subjects: [], entries: [], tests: {}, words: {}, gone: {}, exams: [], exam_subjects: [], todos: [], sessions: [], classes: [],
       active: null,
       settings: { lang: 'fa', goal_min: 120 },
       sync: { device_id: uid(), device_name: '', dg: {}, mt: {}, tomb: {}, peers: {}, laptop: null }
@@ -82,7 +82,7 @@
   }
   function ensure(db) {
     db = isObj(db) ? db : newDb();
-    ['subjects', 'entries', 'exams', 'exam_subjects', 'todos', 'sessions'].forEach(function (k) { if (!Array.isArray(db[k])) db[k] = []; });
+    ['subjects', 'entries', 'exams', 'exam_subjects', 'todos', 'sessions', 'classes'].forEach(function (k) { if (!Array.isArray(db[k])) db[k] = []; });
     ['tests', 'words', 'gone'].forEach(function (k) { if (!isObj(db[k])) db[k] = {}; });
     if (!isObj(db.settings)) db.settings = {};
     if (!db.settings.lang) db.settings.lang = 'fa';
@@ -199,6 +199,14 @@
   }
 
   // ---------------------------------------------------------------- to-dos
+  // ---- weekly classes (the same list the computer has; it travels with the sync)
+  function classes(db) { return db.classes.slice().sort(function (a, b) { return a.day - b.day || (a.time < b.time ? -1 : a.time > b.time ? 1 : 0); }); }
+  function addClass(db, f) { var c = cleanClass({ name: f.name, day: f.day, time: f.time, minutes: f.minutes, remind: f.remind, place: f.place, enabled: f.enabled === undefined ? true : f.enabled, id: uid() }); if (c) db.classes.push(c); return c; }
+  function updateClass(db, id, f) {
+    var i = db.classes.findIndex(function (c) { return c.id === id; }); if (i < 0) return null;
+    var c = cleanClass(Object.assign({}, db.classes[i], f, { id: id })); if (c) db.classes[i] = c; return c;
+  }
+  function removeClass(db, id) { db.classes = db.classes.filter(function (c) { return c.id !== id; }); }
   function addTodo(db, date, text) { var t = { id: uid(), date: dkey(date), text: String(text).trim(), done: false }; if (t.text) db.todos.push(t); return t; }
   function toggleTodo(db, id) { db.todos.forEach(function (t) { if (t.id === id) t.done = !t.done; }); }
   function removeTodo(db, id) { db.todos = db.todos.filter(function (t) { return t.id !== id; }); }
@@ -281,6 +289,21 @@
     var drop = LOCAL_ONLY[kind]; if (!drop) return rec;
     var o = {}; Object.keys(rec).forEach(function (k) { if (drop.indexOf(k) < 0) o[k] = rec[k]; }); return o;
   }
+  // weekly classes, exactly the computer's rules (store.clean_classes): {id, name, day 0-6 (Mon=0), time "HH:MM", minutes, remind, enabled, place}
+  function cleanClass(c) {
+    try {
+      if (!isObj(c)) return null;
+      var day = parseInt(c.day, 10), tp = String(c.time).split(':'), h = parseInt(tp[0], 10), m = parseInt(tp[1], 10);
+      if (!(day >= 0 && day <= 6 && h >= 0 && h <= 23 && m >= 0 && m <= 59) || tp.length !== 2) return null;
+      var name = String(c.name === undefined || c.name === null ? '' : c.name).trim().slice(0, 40); if (!name) return null;
+      var d = clone(c), mins = parseInt(c.minutes === undefined ? 90 : c.minutes, 10), rem = parseInt(c.remind === undefined ? 15 : c.remind, 10);
+      if (!isFinite(mins) || !isFinite(rem)) { mins = 90; rem = 15; }
+      d.minutes = Math.max(5, Math.min(600, mins)); d.remind = Math.max(0, Math.min(180, rem));
+      d.name = name; d.day = day; d.time = (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m; d.enabled = c.enabled === undefined ? true : !!c.enabled;
+      d.place = String(c.place === undefined || c.place === null ? '' : c.place).slice(0, 40); d.id = String(c.id || uid());
+      return d;
+    } catch (e) { return null; }
+  }
   function sessionId(r) { return String(r.id || '') || 's' + Math.floor(Number(r.start || 0) * 1000); }
   function records(db) {
     var out = {}; KINDS.forEach(function (k) { out[k] = {}; });
@@ -294,6 +317,7 @@
         Object.keys(row).forEach(function (sid) { var n = parseInt(row[sid], 10); if (n > 0) out[kind][day + '|' + sid] = { n: n }; });
       });
     });
+    db.classes.forEach(function (x) { var c = cleanClass(x); if (c) out.classes[c.id] = strip('classes', c); });
     Object.keys(db.gone).forEach(function (k) { if (isObj(db.gone[k])) out.gone[k] = clone(db.gone[k]); });
     return out;
   }
@@ -444,6 +468,7 @@
       if (kind === 'exams') return typeof r.name === 'string' && typeof r.date === 'string' && r.date.length === 10;
       if (kind === 'todos') return typeof r.text === 'string';
       if (kind === 'sessions') return isFinite(Number(r.start));
+      if (kind === 'classes') return !!cleanClass(r);
       if (kind === 'tests' || kind === 'words') return Number.isInteger(r.n) && r.n > 0;
       return true;
     } catch (e) { return false; }
@@ -517,6 +542,8 @@
     db.gone = clone(recs.gone);
     if (db.active && remap[db.active.subject]) db.active.subject = remap[db.active.subject];
     db.sessions = clone(Object.keys(recs.sessions).map(function (i) { return recs.sessions[i]; }).sort(function (a, b) { return Number(a.start) - Number(b.start); }));
+    db.classes = Object.keys(recs.classes).map(function (i) { return cleanClass(recs.classes[i]); }).filter(Boolean)
+      .sort(function (a, b) { return a.day - b.day || (a.time < b.time ? -1 : a.time > b.time ? 1 : 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0); });
   }
   function commit(db, plan) {
     applyMerged(db, plan.merged, plan.remap);
@@ -541,7 +568,7 @@
     subject: subject, addSubject: addSubject, editSubject: editSubject, removeSubject: removeSubject, subjectOrGhost: subjectOrGhost,
     addEntry: addEntry, addManual: addManual, removeEntry: removeEntry, startTimer: startTimer, stopTimer: stopTimer, elapsed: elapsed,
     daySec: daySec, daySubjectTimes: daySubjectTimes, counter: counter, setCounter: setCounter,
-    addTodo: addTodo, toggleTodo: toggleTodo, removeTodo: removeTodo,
+    cleanClass: cleanClass, classes: classes, addClass: addClass, updateClass: updateClass, removeClass: removeClass, addTodo: addTodo, toggleTodo: toggleTodo, removeTodo: removeTodo,
     exams: exams, addExam: addExam, updateExam: updateExam, removeExam: removeExam, examSubject: examSubject, addExamSubject: addExamSubject,
     editExamSubject: editExamSubject, removeExamSubject: removeExamSubject, setExamResult: setExamResult, clearExamResult: clearExamResult,
     examProgress: examProgress, nextExam: nextExam,

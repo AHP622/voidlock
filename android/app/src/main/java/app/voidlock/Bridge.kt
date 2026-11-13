@@ -44,6 +44,44 @@ class Bridge(private val ctx: Context, private val web: WebView, private val act
     private val main = Handler(Looper.getMainLooper())
     private var printView: WebView? = null
 
+    // ---- reminders and notifications (see Reminders.kt)
+    @JavascriptInterface
+    fun scheduleReminders(json: String) {
+        try { Reminders.schedule(ctx, json) } catch (_: Exception) { }
+    }
+
+    @JavascriptInterface
+    fun showNotification(title: String, text: String, id: String) {
+        try { Reminders.show(ctx, if (id.isEmpty()) "n" + System.currentTimeMillis() else id, title, text, Reminders.CH_UPDATE) } catch (_: Exception) { }
+    }
+
+    @JavascriptInterface
+    fun notificationsAllowed(): Boolean = try { Reminders.allowed(ctx) } catch (_: Exception) { false }
+
+    @JavascriptInterface
+    fun requestNotifications() {
+        val a = activity ?: return
+        main.post {
+            try {
+                if (Build.VERSION.SDK_INT >= 33) a.requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 71)
+                else a.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName))
+            } catch (_: Exception) { }
+        }
+    }
+
+    @JavascriptInterface
+    fun canExactAlarms(): Boolean = try { Reminders.canExact(ctx) } catch (_: Exception) { false }
+
+    @JavascriptInterface
+    fun openAlarmSettings() {
+        val a = activity ?: return
+        main.post {
+            try {
+                if (Build.VERSION.SDK_INT >= 31) a.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:" + ctx.packageName)))
+            } catch (_: Exception) { }
+        }
+    }
+
     /** Called by the page when a background sync is over. */
     var onBgDone: (() -> Unit)? = null
 

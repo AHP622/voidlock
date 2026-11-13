@@ -613,7 +613,9 @@ def _schedule_html(R):
                 sub.append(it["place"])
             items.append(f'<div class="it {it["kind"]}"><b>{esc(_digits(it["time"], lang))} · {esc(title)}</b><span>{esc(" · ".join(sub))}</span></div>')
         cols.append(f'<div class="sd"><h4>{esc(name)}</h4>{"".join(items) or "<div class=muted style=text-align:center>" + esc(t["none"]) + "</div>"}</div>')
-    stats = [_stat(t["week_class_h"], fmt_dur(sch["class_min"] * 60, lang)), _stat(t["week_session_h"], fmt_dur(sch["session_min"] * 60, lang))]
+    stats = [_stat(t["week_class_h"], fmt_dur(sch["class_min"] * 60, lang))]
+    if sch["session_min"]:                       # (the phone has no planned study sessions: its report shows just the classes)
+        stats.append(_stat(t["week_session_h"], fmt_dur(sch["session_min"] * 60, lang)))
     return (f'<div class="card"><h2>{esc(t["schedule_title"])}</h2><div class="sched">{"".join(cols)}</div>'
             f'<div class="grid" style="margin-top:10px">{"".join(stats)}</div></div>\n')
 
@@ -931,8 +933,10 @@ def _schedule_pdf(R, row, h, al):
     body = ['<table width="100%" cellspacing="0" cellpadding="3" border="0">',
             row(heads, bg="#eef2f9", head=True, aligns=["center"] * 7), row(cells, aligns=[al] * 7), "</table>"]
     out.append("".join(body))
-    out.append(f'<p style="font-size:8.5pt; color:#475569">{esc(t["week_class_h"])}: <b>{esc(fmt_dur(sch["class_min"] * 60, lang))}</b> &nbsp;·&nbsp; '
-               f'{esc(t["week_session_h"])}: <b>{esc(fmt_dur(sch["session_min"] * 60, lang))}</b></p>')
+    tail = f'{esc(t["week_class_h"])}: <b>{esc(fmt_dur(sch["class_min"] * 60, lang))}</b>'
+    if sch["session_min"]:
+        tail += f' &nbsp;·&nbsp; {esc(t["week_session_h"])}: <b>{esc(fmt_dur(sch["session_min"] * 60, lang))}</b>'
+    out.append(f'<p style="font-size:8.5pt; color:#475569">{tail}</p>')
     return "".join(out)
 
 

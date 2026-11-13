@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.14.0
+* Weekly classes sync between computer and phone; the phone can add/edit/delete its own classes; the phone's report includes the timetable.
+* Real Android notifications for class reminders, exam reminders and new-version notices (not run on a real device/emulator here).
+* Smoother phone UI: sliding segmented-control highlight, tab fade-in, nicer switches, a Reduce Motion setting.
+* Windows motion system reviewed (already complete from an earlier revision); fixed one Reduced-Motion gap in the new Overview's session ring.
+
 ## 1.13.2
 * Fix: the subject donut started at the wrong angle (the arcs did not join and left a dark gap). It is a closed ring starting at 12 o'clock now, with a hairline between the colours; `dashboard.donut_arcs` is tested.
 * The tiny chart of a card without data is a faint dashed line, not a coloured block.

@@ -140,11 +140,26 @@
       summary: { total: total2, active_days: active.length, period_days: days.length, avg_active: active.length ? Math.floor(total2 / active.length) : 0, avg_cal: days.length ? Math.floor(total2 / days.length) : 0,
                  best: best, tests: days.reduce(function (a, x) { return a + x.tests; }, 0), words: days.reduce(function (a, x) { return a + x.words; }, 0), streak: streak, goal_days: goalDays,
                  sessions: sessions.length, sessions_sec: sess },
-      version: opts.version || VERSION(), week_start: isFinite(ws) ? ws : 5, schedule: null,
+      version: opts.version || VERSION(), week_start: isFinite(ws) ? ws : 5, schedule: scheduleData(db),
       results: resultsData(db, toDk, lang, H), H: H
     };
   }
 
+  // the weekly timetable (the phone has the classes; planned study sessions exist only on the computer), days in the person's week order
+  function scheduleData(db) {
+    var ws = db.settings && db.settings.week_start !== undefined ? parseInt(db.settings.week_start, 10) : 5, days = [], cmin = 0, any = false;
+    if (!isFinite(ws)) ws = 5;
+    for (var k = 0; k < 7; k++) {
+      var wd = (ws + k) % 7, items = [];
+      db.classes.forEach(function (c) {
+        if (c.enabled !== false && c.day === wd) { items.push({ kind: 'class', time: c.time, minutes: parseInt(c.minutes, 10), name: c.name, place: c.place || '' }); cmin += parseInt(c.minutes, 10); }
+      });
+      items.sort(function (a, b) { return a.time < b.time ? -1 : a.time > b.time ? 1 : 0; });
+      if (items.length) any = true;
+      days.push({ weekday: wd, items: items });
+    }
+    return { days: days, class_min: cmin, session_min: 0, has: any };
+  }
   function has(v) { return v !== null && v !== undefined; }
   function resultsData(db, endDk, lang, H) {
     H = H || helpers(lang);
@@ -276,6 +291,23 @@
     return out.join('');
   }
 
+  function scheduleHtml(R) {
+    var sch = R.schedule, H = R.H, t = H.STR, rtl = H.fa;
+    if (!sch || !sch.has) return '';
+    var cols = sch.days.map(function (d) {
+      var name = rtl ? WC.FA_DAYS[d.weekday] : WC.EN_DAYS[d.weekday];
+      var items = d.items.map(function (it) {
+        var kind = it.kind === 'class' ? t.kind_class : t.kind_session, title = it.name || kind, sub = [H.fmtDur(it.minutes * 60)];
+        if (it.place) sub.push(it.place);
+        return '<div class="it ' + it.kind + '"><b>' + esc(H.dg(it.time)) + ' · ' + esc(title) + '</b><span>' + esc(sub.join(' · ')) + '</span></div>';
+      });
+      return '<div class="sd"><h4>' + esc(name) + '</h4>' + (items.join('') || '<div class=muted style=text-align:center>' + esc(t.none) + '</div>') + '</div>';
+    });
+    var stats = [stat(t.week_class_h, H.fmtDur(sch.class_min * 60))];
+    if (sch.session_min) stats.push(stat(t.week_session_h, H.fmtDur(sch.session_min * 60)));
+    return '<div class="card"><h2>' + esc(t.schedule_title) + '</h2><div class="sched">' + cols.join('') + '</div><div class="grid" style="margin-top:10px">' + stats.join('') + '</div></div>\n';
+  }
+
   function renderHtml(R, interactive) {
     if (interactive === undefined) interactive = true;
     var H = R.H, t = H.STR, lang = R.lang, rtl = lang === 'fa', s = R.summary, total = s.total, out = [], dash = '<span class="muted">' + esc(t.none) + '</span>';
@@ -312,6 +344,7 @@
       if (wk) out.push('<div class="card"><h2>' + esc(t.weekday_chart) + '</h2><div class="chart" style="max-width:520px;margin:0 auto">' + wk.toSvg(t.weekday_chart) + '</div></div>\n');
     }
     out.push(resultsHtml(R));
+    out.push(scheduleHtml(R));
     if (R.daily_rows && R.days.length) {
       var mx = Math.max.apply(null, R.days.map(function (x) { return x.sec; }).concat([1])), anyExam = R.days.some(function (x) { return x.exam.length; });
       var rws = R.days.map(function (x) {
@@ -377,6 +410,14 @@
     w([]); w([t.sessions_title]); w([t.gdate, 'HH:MM', t.subject, t.planned_min, t.focus_min, t.status, t.blocked]);
     R.sessions.forEach(function (x) { w([x.dk, pad2(x.start.getHours()) + ':' + pad2(x.start.getMinutes()), x.subject, x.planned_min, mins(x.focus_sec), H.status(x.status), x.blocked]); });
     if (R.exams.length) { w([]); w([t.exams]); R.exams.forEach(function (e) { w([e.dk, H.jdateNumeric(e), e.name]); }); }
+    var sch = R.schedule;
+    if (sch && sch.has) {
+      w([]); w([t.schedule_title]); w([t.kind, t.weekday, 'HH:MM', t.csv_minutes, t.subject, t.place]);
+      sch.days.forEach(function (d) {
+        var dn = lang === 'fa' ? WC.FA_DAYS[d.weekday] : WC.EN_DAYS[d.weekday];
+        d.items.forEach(function (it) { w([it.kind === 'class' ? t.kind_class : t.kind_session, dn, it.time, it.minutes, it.name, it.place]); });
+      });
+    }
     var res = R.results;
     if (res) {
       w([]); w([t.results_title]);

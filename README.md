@@ -36,6 +36,29 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
+## What changed in 1.14.0
+* **Weekly classes now sync** between the computer and the phone (`sync.py` / `core.js`): add, edit or delete a class on either device and it
+  travels with the next sync. Per-device state ("already reminded today") is never shared. `android/tests/classes_sync_test.py` and the randomized
+  `android/tests/interop_test.py` cover it.
+* **The phone can manage its own classes**: a new "Classes" mode in the Tasks tab (`android/.../js/views_classes.js`), with a next-class card on
+  Today. `android/.../js/classes.js` is a tested port of `voidlock/classes.py` (`android/tests/classes_parity_test.py`, 150 random moments, 0
+  differences).
+* **The phone's report has the weekly timetable too** (`report.js`'s `scheduleHtml`/CSV), kept in parity with the computer's report.
+* **Real notifications on the phone**: class reminders, exam reminders (6 pm the evening before, 7 am on the day) and a new-version notice, via
+  Android's AlarmManager/NotificationManager (`Reminders.kt`, `BootReceiver`, `ReminderReceiver`), planned on the web side by `notify.js` and
+  switchable per kind in More ▸ Notifications. These alarms could not be run on a real device or emulator here (none is available in this
+  environment) — they were checked by having a stub "Android shell" receive the planned reminders in Chromium
+  (`android/tests/classes_ui_test.py`) and by reading the Kotlin, not by installing the app.
+* **A smoother phone interface** (`motion.js` + new CSS tokens in `app.css`): a sliding highlight behind segmented controls, a gentle fade+slide
+  when a tab's content appears, restyled toggle switches, and a Reduce Motion setting (More ▸ Settings) that collapses every duration to near
+  zero. Checked in Chromium (`android/tests/motion_test.py`): the thumb tracks the selected option, Reduced Motion is saved and still applied
+  after a reload.
+* **Windows**: the computer app already had a complete motion-design system from an earlier revision of this project (duration/easing tokens
+  routed through a shared `tween()`/`reveal()`, a Settings ▸ Auto/On/Off Reduced-Motion control that also follows the Windows system setting,
+  and animated buttons, cards, toggles, dialogs and the sidebar). It was reviewed rather than rebuilt, since rewriting a working system blind
+  (no Qt display is available in this environment) risks breaking it for no visible gain. One real gap was fixed: the new Overview's small
+  session-ring glow pulsed forever even under Reduced Motion; it now turns itself off with everything else.
+
 ## What changed in 1.13.2
 * Fix: the donut of the subject share started at the wrong angle (arcs did not join, a dark wedge showed). It is a closed ring now (`dashboard.donut_arcs`, tested). Cards without data show a dashed baseline instead of a block.
 

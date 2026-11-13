@@ -75,6 +75,19 @@ class Py:
         elif t == "exam_result":
             e = next((x for x in sl.d["exams"] if x["name"] == o["name"]), None); s = by(sl.exam_subjects(), o["subject"])
             if e and s: sl.set_exam_result(e["id"], o["taraz"], o["rank"], [{"sid": s["id"], "pct": o["pct"], "taraz": o["taraz"]}], "", o["region"])
+        elif t == "add_class":
+            self.st.classes = S.clean_classes(self.st.classes + [{"id": S.uid(), "name": o["name"], "day": o["day"], "time": o["time"], "minutes": o["min"],
+                                                                  "remind": o["remind"], "place": o["place"]}])
+            self.st.save_classes()
+        elif t == "edit_class":
+            c = next((x for x in self.st.classes if x["name"] == o["name"]), None)
+            if c:
+                c["time"], c["place"] = o["time"], o["place"]
+                self.st.classes = S.clean_classes(self.st.classes)
+                self.st.save_classes()
+        elif t == "remove_class":
+            self.st.classes = [c for c in self.st.classes if c["name"] != o["name"]]
+            self.st.save_classes()
         elif t == "counter":
             s = by(sl.subjects(), o["name"])
             if s:
@@ -110,6 +123,11 @@ def rand_op(rnd, step, names, ex_names):
     if r < 0.76: return {"t": "exam_result", "name": f"exam {rnd.randint(0, step)}", "subject": rnd.choice(ex_names), "taraz": rnd.randint(4000, 9000),
                          "rank": rnd.randint(1, 20000), "region": rnd.randint(1, 900), "pct": rnd.choice([40, 55.5, 62.25, 71])}
     if r < 0.82: return {"t": "counter", "kind": rnd.choice(["tests", "words"]), "name": rnd.choice(names), "n": rnd.randint(0, 40), "date": day}
+    hm = lambda: f"{rnd.randint(6, 21):02d}:{rnd.choice([0, 15, 30, 45]):02d}"
+    if r < 0.86: return {"t": "add_class", "name": f"class {step}", "day": rnd.randint(0, 6), "time": hm(), "min": rnd.choice([45, 60, 90, 120]), "remind": rnd.choice([0, 10, 15, 30]),
+                         "place": rnd.choice(["", "Room 12", "Online"])}
+    if r < 0.89: return {"t": "edit_class", "name": f"class {rnd.randint(0, step)}", "time": hm(), "place": rnd.choice(["", "Hall B"])}
+    if r < 0.92: return {"t": "remove_class", "name": f"class {rnd.randint(0, step)}"}
     return None
 
 

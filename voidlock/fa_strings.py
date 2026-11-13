@@ -601,4 +601,5 @@ FA.update({
     "No study time yet": "هنوز مطالعه‌ای ثبت نشده",
     "hours": "ساعت",
     "Others": "سایر",
+    "classes": "کلاس",
 })
