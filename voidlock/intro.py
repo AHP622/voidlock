@@ -111,6 +111,11 @@ TABS = {
 }
 
 NEWS = {
+    "1.14.1": (
+        ["Fixed: with the language set to English, the Study Timer and Settings tabs would not open when clicked (a missing name in the "
+         "exam-countdown date text raised an error that silently aborted the tab switch, every time)."],
+        ["اصلاح شد: وقتی زبان روی انگلیسی بود، با کلیک روی تب‌های «تایمر مطالعه» و «تنظیمات» صفحه عوض نمی‌شد (یک نام ناقص در متن "
+         "شمارش‌معکوس آزمون باعث خطایی می‌شد که هر بار بی‌صدا جلوی عوض‌شدن تب را می‌گرفت)."]),
     "1.14.0": (
         ["Weekly classes now sync between the computer and the phone, just like exams and study data: add or edit a class on either one and "
          "it travels with the next sync.",

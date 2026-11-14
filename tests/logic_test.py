@@ -1519,6 +1519,21 @@ def test_report_exams_and_schedule():
     ok("chart_taraz" in p and "حسابان" in p, "the PDF HTML refers to the exam charts and has the timetable")
 
 
+def test_jalali_str_works_in_both_languages():
+    """Regression: EN_JMONTHS was referenced in i18n.jalali_str() but never defined, so every English-mode call raised
+    NameError. This is what the Study Timer tab (pages_c.StudyPage.refresh, the exam countdown line) and the Settings
+    tab (pages_b.SettingsPage._exam_label) call on every refresh - the exception aborted goto() before the stack
+    actually switched pages, so clicking either tab while the language was English did nothing visible."""
+    from voidlock import i18n
+    i18n.set_language("en")
+    ok(i18n.jalali_str(1406, 4, 10) == "10 Tir 1406 (Jalali)", "jalali_str formats in English")
+    for m in range(1, 13):
+        i18n.jalali_str(1406, m, 10)                                 # must not raise
+    ok(True, "jalali_str never raises in English, for every month")
+    i18n.set_language("fa")
+    ok(i18n.jalali_str(1406, 4, 10) == i18n.digits("10 تیر 1406"), "jalali_str still formats in Persian")
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
@@ -1532,3 +1547,4 @@ if __name__ == "__main__":
     print()
     print(f"{len(FAILS)} failure(s)" if FAILS else "ALL PASSED")
     sys.exit(1 if FAILS else 0)
+

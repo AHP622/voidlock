@@ -36,6 +36,16 @@ rolling backup (15 kept), damaged files are restored from backup, and Settings h
 Settings -> Language: English / فارسی (right-to-left, Jalali calendar). Translations: `voidlock/fa_strings.py`.
 To add another language, add a catalog like that file and a code in `i18n.LANGS`.
 
+## What changed in 1.14.1
+* **Fixed a real bug, found and reproduced in Python** (not just suspected): `i18n.jalali_str()` referenced `EN_JMONTHS`, a name that was
+  never defined anywhere in the project. In Persian this code path is never taken, so it went unnoticed; in English it raised `NameError`
+  every time it ran. It's called, unconditionally, by `pages_c.StudyPage.refresh()` (the exam-countdown line) and
+  `pages_b.SettingsPage._exam_label()` (the exam-date field) on every refresh, and by `messages.block_message()` (what the lock overlay says
+  when it blocks a game). Because `goto()` sets the sidebar's highlight before calling `refresh()`, the highlighted tab changed but the
+  exception stopped `goto()` before `self.stack.show_index(i)` ran — so clicking Study Timer or Settings while the language was English did
+  nothing, exactly as reported. Fixed by defining `EN_JMONTHS` (transliterated month names) next to `FA_MONTHS`; reproduced and verified in
+  plain Python (no Qt needed) before and after the fix, and covered by a new regression test.
+
 ## What changed in 1.14.0
 * **Weekly classes now sync** between the computer and the phone (`sync.py` / `core.js`): add, edit or delete a class on either device and it
   travels with the next sync. Per-device state ("already reminded today") is never shared. `android/tests/classes_sync_test.py` and the randomized

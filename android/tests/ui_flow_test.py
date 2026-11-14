@@ -26,7 +26,7 @@ try:
     with sync_playwright() as p:
         b = p.chromium.launch()
         ctx = b.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=1)
-        ctx.add_init_script("localStorage.setItem('voidlock.db', JSON.stringify({settings:{lang:'en',welcomed:true,update_check:false,tips:false,seen_version:'1.14.0'},subjects:[{id:'s1',name:'Math',color:'#8B5CF6'},{id:'s2',name:'Physics',color:'#00C2FF',words:false}],entries:[],exams:[{id:'e1',name:'Mock 1',date:'%s'}],exam_subjects:[],todos:[]}));" % (today + timedelta(days=3)).isoformat())
+        ctx.add_init_script("localStorage.setItem('voidlock.db', JSON.stringify({settings:{lang:'en',welcomed:true,update_check:false,tips:false,seen_version:'1.14.1'},subjects:[{id:'s1',name:'Math',color:'#8B5CF6'},{id:'s2',name:'Physics',color:'#00C2FF',words:false}],entries:[],exams:[{id:'e1',name:'Mock 1',date:'%s'}],exam_subjects:[],todos:[]}));" % (today + timedelta(days=3)).isoformat())
         page = ctx.new_page()
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)

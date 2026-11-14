@@ -164,6 +164,10 @@ def from_jalali(jy, jm, jd):
     return d.year, d.month, d.day
 
 
+EN_JMONTHS = ["Farvardin", "Ordibehesht", "Khordad", "Tir", "Mordad", "Shahrivar", "Mehr", "Aban", "Azar", "Dey",
+              "Bahman", "Esfand"]
+
+
 def jalali_str(jy, jm, jd):
     if is_fa():
         return digits(f"{jd} {FA_MONTHS[jm - 1]} {jy}")

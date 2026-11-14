@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.14.1
+* Fixed: with the app language set to English, clicking the Study Timer or Settings tab did nothing (`i18n.jalali_str()` referenced an
+  undefined `EN_JMONTHS`, raised `NameError` on every refresh of those two tabs, which silently aborted the tab switch before it happened).
+  The same function is also used by the lock-screen message and the exam-date field, so this could have surfaced elsewhere in English too.
+  Regression test: `tests/logic_test.py::test_jalali_str_works_in_both_languages`.
+
 ## 1.14.0
 * Weekly classes sync between computer and phone; the phone can add/edit/delete its own classes; the phone's report includes the timetable.
 * Real Android notifications for class reminders, exam reminders and new-version notices (not run on a real device/emulator here).
