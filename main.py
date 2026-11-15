@@ -25,47 +25,18 @@ def _startup_failure(err):
 
 
 def _run_screenshots(app, win, args):
-    """Shows every tab in turn and saves the window as a PNG (01_overview.png ...), then quits."""
-    from pathlib import Path
-    from PySide6.QtCore import QTimer
+    """One PNG per tab (01_overview.png ...), strictly one after the other, then the program quits (see voidlock/shots.py)."""
     from voidlock import demo
-    out = Path(args.screenshots)
-    out.mkdir(parents=True, exist_ok=True)
+    from voidlock.shots import ShotRunner
     try:
-        w, h = (int(x) for x in args.shot_size.lower().split("x"))
+        size = tuple(int(x) for x in args.shot_size.lower().split("x"))
+        if len(size) != 2 or min(size) < 400:
+            raise ValueError
     except ValueError:
-        w, h = 1500, 1000
-    win.showNormal()
-    win.resize(w, h)
-    keys = demo.order_of_tabs()
-    state = {"i": 0}
-
-    def save(i, key):
-        from PySide6.QtGui import QImage, QPainter
-        path = out / f"{i + 1:02d}_{key}.png"
-        scale = max(1.0, min(4.0, float(args.shot_scale)))
-        img = QImage(int(win.width() * scale), int(win.height() * scale), QImage.Format.Format_ARGB32_Premultiplied)
-        img.setDevicePixelRatio(scale)                              # the layout stays the same, every pixel count is multiplied
-        img.fill(0)
-        painter = QPainter(img)
-        win.render(painter)
-        painter.end()
-        img.save(str(path))
-        print("saved", path)
-        state["i"] += 1
-        QTimer.singleShot(200, step)
-
-    def step():
-        i = state["i"]
-        if i >= len(keys):
-            print("Done:", out)
-            app.quit()
-            return
-        key = keys[i]
-        win.goto(key, animate=False)
-        QTimer.singleShot(2400, lambda: save(i, key))               # let the animations settle
-
-    QTimer.singleShot(1800, step)
+        size = (1500, 1000)
+    runner = ShotRunner(app, win, demo.order_of_tabs(), args.screenshots, size=size, scale=args.shot_scale)
+    runner.start()
+    return runner                                  # the caller keeps it alive until the program ends
 
 
 def main():
@@ -234,8 +205,7 @@ def main():
         win.show()
     if store.notices and not args.screenshots:
         QTimer.singleShot(900, lambda: [win.toast(n, "info") for n in store.notices])
-    if args.screenshots:
-        _run_screenshots(app, win, args)
+    runner = _run_screenshots(app, win, args) if args.screenshots else None
     code = app.exec()
     server.close()
     lock.unlock()

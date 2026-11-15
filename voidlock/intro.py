@@ -111,6 +111,11 @@ TABS = {
 }
 
 NEWS = {
+    "1.14.4": (
+        ["Fixed: the presentation pictures (`--screenshots`) were never saved. Each tab is now shown, painted and saved one after the other, "
+         "problems are reported in a log file, and the demo data is now a strong student's panel. Nothing changes for normal use."],
+        ["اصلاح شد: عکس‌های معرفی برنامه (`--screenshots`) ذخیره نمی‌شدند. حالا هر تب به‌نوبت نمایش داده، رندر و ذخیره می‌شود، مشکلات در "
+         "یک فایل گزارش نوشته می‌شوند و داده‌ی نمایشی پنل یک دانش‌آموز قوی است. برای استفاده‌ی عادی چیزی تغییر نمی‌کند."]),
     "1.14.3": (
         ["Fixed: updating could stop with \u201cCould not read the checksum\u201d when the connection to GitHub was cut (common with a VPN or "
          "a filter). The program now takes the file's checksum from GitHub's release data and, when it has to download it separately, "

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.14.4
+* Fixed: `--screenshots` saved nothing. `QWidget.render(painter)` needs a target offset in PySide6, so every picture raised a TypeError inside a
+  timer callback - which was invisible in the windowed exe and left the program running without ever quitting. The logic now lives in
+  `voidlock/shots.py`: one tab at a time (show, wait until it is really the visible page, paint, save, verify the file, only then the
+  next tab), every failure is printed and written to `screenshots.log`, a watchdog ends a stuck run, the window is closed properly and
+  the exit code is 0 (all saved) or 1 (something failed). The demo data is now a strong student (studies every day, high taraz and
+  ranks) and the same every run; update checks are off in screenshot mode.
+
 ## 1.14.3
 * Fixed: updating could fail with "Could not read the checksum: ... WinError 10054" because the small `.sha256` file was fetched once with no
   retry. `updater.check()` now reads the SHA-256 from the release asset's `digest` field (GitHub provides it) so no extra download is needed;

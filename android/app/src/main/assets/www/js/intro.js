@@ -30,6 +30,10 @@
     },
     order: ['today', 'stats', 'exams', 'tasks', 'more'],
     news: {
+      '1.14.4': {
+        fa: ['فقط رفع یک باگ کامپیوتر (عکس‌های معرفی برنامه). در گوشی تغییری نیست.'],
+        en: ['Just a computer-side fix (the presentation pictures). No changes on the phone.']
+      },
       '1.14.3': {
         fa: ['فقط رفع یک باگ کامپیوتر (خطای checksum هنگام آپدیت). در گوشی تغییری نیست.'],
         en: ['Just a computer-side fix (the checksum error when updating). No changes on the phone.']

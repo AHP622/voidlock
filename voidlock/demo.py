@@ -1,4 +1,5 @@
-"""Demo data for screenshots: a believable, anonymous month of studying, exams with results, classes and sessions.
+"""Demo data for screenshots: an anonymous, STRONG student - studies every day for hours, high test counts, exam results that climb to
+the top ranks, nearly every focus session completed. Fixed seed, so every run gives the same pictures.
 Used by  `VoidLock.exe --home <empty folder> --screenshots <folder>`  (see main.py). Never touches a folder that already has data."""
 import random
 import uuid
@@ -31,25 +32,23 @@ def fill(store, sl, points, lang="fa", seed=11, today=None):
     sl.d["subjects"] = []
     subs = [sl.add_subject(n, c, words=(i == 5)) for i, (n, c) in enumerate(SUBJECTS[lang])]
     made = 0
-    for k in range(44, -1, -1):
+    for k in range(44, -1, -1):                      # no day off: a strong student studies every single day
         d = today - timedelta(days=k)
-        if rnd.random() < 0.1 and k:
-            continue
-        for s in rnd.sample(subs, rnd.randint(2, 4)):
-            sl.add_manual(d, s["id"], rnd.randint(25, 110))
+        for s in rnd.sample(subs, rnd.randint(4, 5)):
+            sl.add_manual(d, s["id"], rnd.randint(55, 120))
             made += 1
         for s in subs[:3]:
-            if rnd.random() < 0.8:
-                sl.set_tests(d, s["id"], rnd.randint(10, 55))
-        if rnd.random() < 0.5:
-            sl.set_words(d, subs[5]["id"], rnd.randint(10, 35))
-    # exams: the program's own exam subjects (separate from the study timer's)
+            sl.set_tests(d, s["id"], rnd.randint(30, 75))
+        sl.set_words(d, subs[5]["id"], rnd.randint(30, 60))
+    # exams: the program's own exam subjects (separate from the study timer's). Taraz climbs 7400 -> ~8300, the country rank
+    # falls from about 480 to about 40, the region rank to the single digits, subject percentages stay between 70 and 98.
     es = [sl.add_exam_subject(n, c) for n, c in SUBJECTS[lang][:5]]
     for i, off in enumerate((35, 28, 21, 14, 7)):
         e = sl.add_exam(EXAMS[lang].format(n=i + 1), today - timedelta(days=off))
-        sl.set_exam_result(e["id"], taraz=6000 + i * 190 + rnd.randint(0, 80), rank=10400 - i * 1050 + rnd.randint(0, 180),
-                           rank_region=520 - i * 52 + rnd.randint(0, 12),
-                           subjects=[{"sid": x["id"], "pct": 36 + i * 7 + rnd.randint(0, 22), "taraz": 5100 + i * 230 + rnd.randint(0, 900)} for x in es],
+        sl.set_exam_result(e["id"], taraz=7400 + i * 230 + rnd.randint(0, 60), rank=480 - i * 105 + rnd.randint(0, 25),
+                           rank_region=max(1, 24 - i * 5 + rnd.randint(0, 2)),
+                           subjects=[{"sid": x["id"], "pct": min(98, 70 + i * 5 + rnd.randint(0, 8)),
+                                      "taraz": 7000 + i * 260 + rnd.randint(0, 700)} for x in es],
                            note="")
     sl.add_exam(FINAL[lang], today + timedelta(days=6))
     for t in TASKS[lang]:
@@ -60,19 +59,19 @@ def fill(store, sl, points, lang="fa", seed=11, today=None):
         t0 = datetime.combine(today - timedelta(days=k * 2 + (0 if k else 0)), datetime.min.time()) + timedelta(hours=16 + (k % 3), minutes=(k * 7) % 50)
         if t0 > datetime.now():
             t0 -= timedelta(days=1)
-        planned = rnd.choice((25, 45, 50, 60))
-        done = rnd.random() > 0.18
+        planned = rnd.choice((50, 60, 90))
+        done = rnd.random() > 0.05
         hist.append({"start": t0.timestamp(), "subject": SUBJECTS[lang][k % 4][0], "planned_min": planned,
-                     "focus_sec": planned * 60 if done else planned * 60 - rnd.randint(300, 900), "status": "completed" if done else "ended", "blocked_count": rnd.randint(0, 5)})
+                     "focus_sec": planned * 60 if done else planned * 60 - rnd.randint(300, 900), "status": "completed" if done else "ended", "blocked_count": rnd.randint(0, 1)})
     store.history = hist
     # weekly classes
     store.classes = [{"id": uuid.uuid4().hex[:8], "name": n, "day": d, "time": t, "minutes": 90, "remind": 15, "enabled": True, "place": p} for n, d, t, p in CLASSES[lang]]
     store.save_classes()
     # points
-    for k in range(10, 0, -1):
+    for k in range(30, 0, -1):
         points.add(20, "clean", day=(today - timedelta(days=k)).isoformat())
-    points.add(30, "bonus", day=today.isoformat())
-    store.settings.update({"daily_goal_min": 240, "play_tracking": False, "default_minutes": 50})
+    points.add(60, "bonus", day=today.isoformat())
+    store.settings.update({"daily_goal_min": 420, "play_tracking": False, "default_minutes": 50})
     store.save_history()
     store.save_settings()
     store.save_study()
@@ -81,7 +80,8 @@ def fill(store, sl, points, lang="fa", seed=11, today=None):
 
 def quiet_first_run(store, version):
     """No welcome / tips in the pictures."""
-    store.settings.update({"intro_done": True, "tips_enabled": False, "intro_version": version})
+    store.settings.update({"intro_done": True, "tips_enabled": False, "intro_version": version,
+                           "update_check": False, "update_auto_install": False})   # no network, and never an update in the middle of the pictures
 
 
 def order_of_tabs():
