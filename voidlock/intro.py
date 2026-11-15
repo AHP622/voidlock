@@ -111,6 +111,13 @@ TABS = {
 }
 
 NEWS = {
+    "1.14.3": (
+        ["Fixed: updating could stop with \u201cCould not read the checksum\u201d when the connection to GitHub was cut (common with a VPN or "
+         "a filter). The program now takes the file's checksum from GitHub's release data and, when it has to download it separately, "
+         "retries a few times instead of giving up at the first reset."],
+        ["اصلاح شد: آپدیت گاهی با پیام «Could not read the checksum» متوقف می‌شد، وقتی اتصال به گیت‌هاب قطع می‌شد (با فیلترشکن یا فیلترینگ "
+         "رایج است). حالا برنامه چک‌سام فایل را از اطلاعات ریلیز گیت‌هاب می‌گیرد و اگر لازم شد جدا دانلودش کند، به‌جای تسلیم شدن در "
+         "اولین قطعی چند بار دوباره تلاش می‌کند."]),
     "1.14.2": (
         ["Fixed: several texts (including the Overview greeting) were unreadable in the Candy, Paper and Mint themes - they were quietly "
          "stuck on the dark theme's colour no matter which theme was chosen. Found and fixed at the source (a handful of widgets that only "

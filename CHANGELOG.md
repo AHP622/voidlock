@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.14.3
+* Fixed: updating could fail with "Could not read the checksum: ... WinError 10054" because the small `.sha256` file was fetched once with no
+  retry. `updater.check()` now reads the SHA-256 from the release asset's `digest` field (GitHub provides it) so no extra download is needed;
+  when it is missing the `.sha256` file is fetched with up to 5 tries. The `.sha256` asset is optional if the digest is present.
+
 ## 1.14.2
 * Fixed a real, confirmed bug: several widgets (`label()`, `Pill`, `Chip`, `IconTile`, `EmptyState`, `Modal`) used `color=T.something` as a
   Python default *parameter* value. Default parameter values are evaluated once, when the function is defined (at import time, before any

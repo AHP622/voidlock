@@ -88,10 +88,15 @@ def check(repo=REPO, timeout=10):
     exe, sha = assets.get(ASSET), assets.get(ASSET + ".sha256")
     if not exe:
         raise UpdateError(f"Release {tag} has no {ASSET} file.")
-    if not sha:
+    digest = str(exe.get("digest") or "").lower()           # GitHub fills this in itself: "sha256:<64 hex>"
+    digest = digest.split(":", 1)[1] if digest.startswith("sha256:") else ""
+    if not re.fullmatch(r"[0-9a-f]{64}", digest):
+        digest = ""
+    if not sha and not digest:
         raise UpdateError(f"Release {tag} has no {ASSET}.sha256 file, so it cannot be verified.")
-    return {"tag": tag, "version": ".".join(str(n) for n in parse_version(tag)),
-            "url": _safe_url(exe["browser_download_url"]), "sha_url": _safe_url(sha["browser_download_url"]),
+    return {"tag": tag, "sha": digest, "sha_url": _safe_url(sha["browser_download_url"]) if sha else "",
+            "version": ".".join(str(n) for n in parse_version(tag)),
+            "url": _safe_url(exe["browser_download_url"]),
             "size": int(exe.get("size", 0)), "notes": (data.get("body") or "")[:600]}
 
 
@@ -147,6 +152,23 @@ def _fetch(url, part, expected, progress, timeout):
     return have
 
 
+def _read_checksum(url, timeout, tries=5):
+    """The .sha256 file is tiny, but the connection to GitHub's CDN is often reset (WinError 10054) behind a VPN / filter.
+    Retry with a growing pause instead of giving up on the first reset."""
+    last = None
+    for i in range(tries):
+        if i:
+            time.sleep(min(8, 2 * i))
+        try:
+            with urlopen(urllib.request.Request(url, headers=HEADERS), timeout=timeout) as r:
+                return r.read(4096).decode("utf-8", "ignore").strip().split()[0].lower()
+        except UpdateError:
+            raise
+        except (urllib.error.URLError, OSError, IndexError, http.client.HTTPException) as e:
+            last = e
+    raise UpdateError(f"Could not read the checksum: {last}")
+
+
 def download(info, dest_dir, progress=None, timeout=30, attempts=4):
     """Download + verify. Returns the verified file path.
 
@@ -156,11 +178,9 @@ def download(info, dest_dir, progress=None, timeout=30, attempts=4):
     times before giving up."""
     dest_dir = Path(dest_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
-    try:
-        with urlopen(urllib.request.Request(info["sha_url"], headers=HEADERS), timeout=timeout) as r:
-            want = r.read(4096).decode("utf-8", "ignore").strip().split()[0].lower()
-    except (urllib.error.URLError, OSError, IndexError) as e:
-        raise UpdateError(f"Could not read the checksum: {e}")
+    want = (info.get("sha") or "").lower()
+    if not want:
+        want = _read_checksum(info["sha_url"], timeout)
     if not re.fullmatch(r"[0-9a-f]{64}", want):
         raise UpdateError("The checksum file is not a valid SHA-256.")
     expected = int(info.get("size") or 0)

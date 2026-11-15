@@ -30,6 +30,10 @@
     },
     order: ['today', 'stats', 'exams', 'tasks', 'more'],
     news: {
+      '1.14.3': {
+        fa: ['فقط رفع یک باگ کامپیوتر (خطای checksum هنگام آپدیت). در گوشی تغییری نیست.'],
+        en: ['Just a computer-side fix (the checksum error when updating). No changes on the phone.']
+      },
       '1.14.2': {
         fa: ['فقط رفع چند باگ کامپیوتر (رنگ‌ها در تم‌های روشن، تقویم مطالعه، جهت نمودار) و یک قابلیت کوچک (بازه‌ی «کل زمان‌ها»). در گوشی تغییری نیست.'],
         en: ['Just computer-side fixes (light theme colours, the study calendar, chart direction) and a small feature (an \u201cAll time\u201d range). No changes on the phone.']
