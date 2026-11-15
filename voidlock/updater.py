@@ -25,6 +25,7 @@ API = "https://api.github.com/repos/{repo}/releases/latest"
 ASSET = "VoidLock.exe"
 HOSTS = ("github.com", "githubusercontent.com")
 HEADERS = {"User-Agent": "VoidLock-Updater", "Accept": "application/vnd.github+json"}
+MAX_TRIES = 300                           # hard stop for a connection that keeps dying a little at a time
 MAX_DOWNLOAD = 400 * 1024 * 1024          # a program file larger than this is not ours
 
 
@@ -169,7 +170,7 @@ def _read_checksum(url, timeout, tries=5):
     raise UpdateError(f"Could not read the checksum: {last}")
 
 
-def download(info, dest_dir, progress=None, timeout=30, attempts=4):
+def download(info, dest_dir, progress=None, timeout=30, attempts=6):
     """Download + verify. Returns the verified file path.
 
     A cut or filtered connection is common (VPN / proxy / flaky network). Python's HTTP client does NOT raise when the
@@ -192,6 +193,38 @@ def download(info, dest_dir, progress=None, timeout=30, attempts=4):
         _DOWNLOAD_LOCK.release()
 
 
+def _curl_fallback(url, part, expected, want, progress, timeout_s=900):
+    """Last resort on Windows: the curl.exe that ships with Windows 10/11 uses the system's own network stack, which a filter / antivirus
+    often treats differently from Python's (the browser and the phone app work while urllib gets "connection reset"). It resumes the
+    same .part file; the SHA-256 is checked again, so nothing unverified is ever installed."""
+    import shutil as _sh
+    import subprocess
+    exe = _sh.which("curl.exe") if sys.platform == "win32" else None
+    if not exe:
+        return False
+    try:
+        _safe_url(url)
+        cmd = [exe, "-L", "--fail", "--silent", "--show-error", "--retry", "8", "--retry-delay", "2", "--retry-all-errors",
+               "--connect-timeout", "20", "-C", "-", "-A", HEADERS["User-Agent"], "-o", str(part), url]
+        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        end = time.time() + timeout_s
+        while proc.poll() is None:
+            if time.time() > end:
+                proc.kill()
+                return False
+            if progress and expected and part.exists():
+                progress(min(99, int(part.stat().st_size * 100 / expected)))
+            time.sleep(0.5)
+        if proc.returncode != 0 or not part.exists():
+            return False
+        if part.stat().st_size > MAX_DOWNLOAD or (expected and part.stat().st_size != expected):
+            return False
+        return _sha256_file(part) == want
+    except (OSError, UpdateError, subprocess.SubprocessError):
+        return False
+
+
 def _download_locked(info, dest_dir, progress, timeout, attempts, want, expected):
     import time as _t
     part = dest_dir / (ASSET + ".part")
@@ -200,28 +233,40 @@ def _download_locked(info, dest_dir, progress, timeout, attempts, want, expected
     except OSError:
         part = dest_dir / f"{ASSET}.{os.getpid()}.{int(_t.time())}.part"       # the old half-file is still held by something: use a fresh name
     problem = "unknown"
-    for attempt in range(attempts):
+    stalls, done = 0, False                           # `stalls` = tries in a row that brought not a single new byte
+    for attempt in range(MAX_TRIES):
         if attempt:
-            _t.sleep(min(8, 2 * attempt))
+            _t.sleep(min(6, 1 + stalls))
+        before = part.stat().st_size if part.exists() else 0
+        complete = False
         try:
             got = _fetch(info["url"], part, expected, progress, timeout)
+            complete = not expected or got >= expected
+            if not complete:
+                problem = f"the download was cut off ({got} of {expected} bytes)"
         except UpdateError:
             _fail_cleanup(part)
             raise
         except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as e:
-            problem = f"connection problem: {e}"
-            continue                                   # whatever arrived stays in .part and is resumed
-        if expected and got < expected:
-            problem = f"the download was cut off ({got} of {expected} bytes)"
-            continue
-        if _sha256_file(part) == want:
+            problem = f"connection problem: {e}"       # whatever arrived stays in .part and is resumed
+        if complete:
+            if _sha256_file(part) == want:
+                done = True
+                break
+            problem = "the file does not match its checksum"
+            _fail_cleanup(part)                        # corrupted in transit: start from zero
+            stalls += 1
+        else:
+            after = part.stat().st_size if part.exists() else 0
+            stalls = 0 if after > before else stalls + 1   # a line that is cut every few MB still finishes: progress resets the count
+        if stalls >= attempts:
             break
-        problem = "the file does not match its checksum"
-        _fail_cleanup(part)                            # corrupted in transit: start from zero
-    else:
+    if not done and _curl_fallback(info["url"], part, expected, want, progress):
+        done = True
+    if not done:
         _fail_cleanup(part)
         raise UpdateError(f"The update could not be downloaded safely ({problem}). Nothing was installed. Check the "
-                          f"connection (VPN / proxy) and try again later.")
+                          f"connection (VPN / proxy) and try again later, or download VoidLock.exe from the Releases page.")
     with open(part, "rb") as f:
         if f.read(2) != b"MZ":
             _fail_cleanup(part)

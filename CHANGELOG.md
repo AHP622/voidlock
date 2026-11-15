@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.14.5
+* Fixed: updating on a line that keeps cutting the connection (VPN / filter, `WinError 10054` while downloading `VoidLock.exe`) failed
+  after 4 cuts in total. Now the download resumes (Range) for as long as every try brings new bytes (6 tries in a row without a single new
+  byte end it), and on Windows `curl.exe` is used as a last resort on the same `.part` file. The SHA-256 is verified every time.
+  `tests/updater_test.py` simulates the flaky line.
+
 ## 1.14.4
 * Fixed: `--screenshots` saved nothing. `QWidget.render(painter)` needs a target offset in PySide6, so every picture raised a TypeError inside a
   timer callback - which was invisible in the windowed exe and left the program running without ever quitting. The logic now lives in

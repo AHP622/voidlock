@@ -111,6 +111,13 @@ TABS = {
 }
 
 NEWS = {
+    "1.14.5": (
+        ["Fixed: updating on a bad connection (VPN / filter) kept failing with \u201cconnection was forcibly closed\u201d. The download now "
+         "carries on from where it was cut for as long as it makes progress (it used to give up after 4 cuts), and as a last resort uses "
+         "Windows' own downloader. The file is still checked (SHA-256) before anything is installed."],
+        ["اصلاح شد: آپدیت روی اتصال بد (فیلترشکن / فیلترینگ) مدام با «connection was forcibly closed» شکست می‌خورد. حالا دانلود تا وقتی "
+         "پیشرفت دارد از همان جای قطع‌شده ادامه می‌دهد (قبلاً بعد از ۴ قطعی تسلیم می‌شد) و آخرین راه از دانلودر خود ویندوز استفاده "
+         "می‌کند. فایل همچنان قبل از نصب با SHA-256 بررسی می‌شود."]),
     "1.14.4": (
         ["Fixed: the presentation pictures (`--screenshots`) were never saved. Each tab is now shown, painted and saved one after the other, "
          "problems are reported in a log file, and the demo data is now a strong student's panel. Nothing changes for normal use."],

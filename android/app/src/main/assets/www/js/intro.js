@@ -30,6 +30,10 @@
     },
     order: ['today', 'stats', 'exams', 'tasks', 'more'],
     news: {
+      '1.14.5': {
+        fa: ['فقط رفع یک باگ کامپیوتر (آپدیت روی اتصال ضعیف). در گوشی تغییری نیست.'],
+        en: ['Just a computer-side fix (updating on a weak connection). No changes on the phone.']
+      },
       '1.14.4': {
         fa: ['فقط رفع یک باگ کامپیوتر (عکس‌های معرفی برنامه). در گوشی تغییری نیست.'],
         en: ['Just a computer-side fix (the presentation pictures). No changes on the phone.']
