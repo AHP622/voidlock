@@ -139,6 +139,26 @@ def donut_arcs(values, gap=0.8, start=90.0):
     return out
 
 
+def earliest_study_date(study, today, cap_days=1460):
+    """The date of the oldest study entry, or None if there is none yet. Capped so a stray bad date can't blow up a chart."""
+    d = None
+    for e in study.d.get("entries", []):
+        try:
+            dt = date.fromisoformat(str(e.get("date", "")))
+        except (TypeError, ValueError):
+            continue
+        if d is None or dt < d:
+            d = dt
+    if d is None:
+        return None
+    return max(d, today - timedelta(days=cap_days))
+
+
+def average_sec_per_day(bars):
+    """Plain daily average over a set of chart bars (the days actually shown, not the look-back days)."""
+    return int(round(sum(b["sec"] for b in bars) / len(bars))) if bars else 0
+
+
 def recent_sessions(history, n=3):
     """Newest first: [{subject, start (datetime), focus_sec, planned_min, status}]."""
     out = []

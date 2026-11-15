@@ -30,6 +30,10 @@
     },
     order: ['today', 'stats', 'exams', 'tasks', 'more'],
     news: {
+      '1.14.2': {
+        fa: ['فقط رفع چند باگ کامپیوتر (رنگ‌ها در تم‌های روشن، تقویم مطالعه، جهت نمودار) و یک قابلیت کوچک (بازه‌ی «کل زمان‌ها»). در گوشی تغییری نیست.'],
+        en: ['Just computer-side fixes (light theme colours, the study calendar, chart direction) and a small feature (an \u201cAll time\u201d range). No changes on the phone.']
+      },
       '1.14.1': {
         fa: ['فقط رفع یک باگ کامپیوتر (تب‌های «تایمر مطالعه» و «تنظیمات» در حالت زبان انگلیسی). در گوشی تغییری نیست.'],
         en: ['Just a computer-side bug fix (the Study Timer and Settings tabs in English). No changes on the phone.']

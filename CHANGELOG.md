@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.14.2
+* Fixed a real, confirmed bug: several widgets (`label()`, `Pill`, `Chip`, `IconTile`, `EmptyState`, `Modal`) used `color=T.something` as a
+  Python default *parameter* value. Default parameter values are evaluated once, when the function is defined (at import time, before any
+  theme is applied) - not each time the function runs - so every caller that left the colour out got permanently stuck with whatever the
+  Void theme's colour happened to be, regardless of the theme actually chosen. In dark themes this mostly went unnoticed; in light themes
+  (Candy, Paper, Mint) it meant text in the Void theme's near-white colour on a near-white background. Fixed by resolving the theme colour
+  inside the function body instead of in the signature.
+* Fixed: `Heatmap.mouseMoveEvent` (the study calendar) computed the hovered cell's column with a plain left-to-right formula while the cells
+  are drawn mirrored in a right-to-left (Persian) layout - the tooltip for the cell under the mouse was actually the tooltip for a different,
+  mirrored cell. Mirrored the hit-test to match the drawing.
+* The Overview's daily chart no longer mirrors its time axis for Persian; it always runs oldest (left) to newest (right).
+* The Overview's date range can now be set to "All time", and the period's daily average is shown next to the range button.
+* Investigated the window-resize video: the native Win32 edge-resize hit-testing and the background painter both look correct by reading
+  (the root widget always fills its full current rect first), but this could not be reproduced or confirmed without a live Windows session -
+  see the reply for what to check.
+
 ## 1.14.1
 * Fixed: with the app language set to English, clicking the Study Timer or Settings tab did nothing (`i18n.jalali_str()` referenced an
   undefined `EN_JMONTHS`, raised `NameError` on every refresh of those two tabs, which silently aborted the tab switch before it happened).

@@ -421,7 +421,7 @@ class OverviewPage(Page):
     lists (recent sessions, what is coming, protection). Numbers come from dashboard.py; the heavy part is recomputed at most every
     20 seconds, the live bits (today, the running timer, protection) on every tick."""
     HEAVY_EVERY = 20.0
-    RANGES = (7, 30, 90)
+    RANGES = (7, 30, 90, "all")
 
     def __init__(self, ctx):
         super().__init__(ctx, "Overview", "Your focus command center")
@@ -455,8 +455,11 @@ class OverviewPage(Page):
         ttl.addWidget(self.greet)
         ttl.addWidget(self.greet_sub)
         rr = QHBoxLayout()
+        rr.setSpacing(10)
         self.b_range = Button("", "ghost", height=32)
         rr.addWidget(self.b_range)
+        self.avg_label = shrinkable(label("", 12, color=T.text2))
+        rr.addWidget(self.avg_label, 1)
         rr.addStretch(1)
         ttl.addSpacing(4)
         ttl.addLayout(rr)
@@ -659,7 +662,16 @@ class OverviewPage(Page):
 
     @staticmethod
     def _range_label(d):
+        if d == "all":
+            return DB.tx("All time", "کل زمان‌ها")
         return DB.tx(f"Last {d} days", f"{d} روز اخیر")
+
+    def _effective_days(self, today):
+        """self._days as an actual day count: "all" resolves to since the first study entry (at least 1)."""
+        if self._days != "all":
+            return self._days
+        first = DB.earliest_study_date(self.ctx.study, today)
+        return max(1, (today - first).days + 1) if first else 30
 
     def _set_range_text(self):
         self.b_range.setText(self._range_label(self._days) + "  ▾")
@@ -692,10 +704,11 @@ class OverviewPage(Page):
         # heavy part: once in a while
         t = time.time()
         heavy = force or self._secs is None or t - self._heavy_t >= self.HEAVY_EVERY
+        days = self._effective_days(today)
         if heavy:
             self._heavy_t = t
-            self._secs = DB.daily(c.study, today, self._days, 0)
-            self._share = DB.share(c.study, today, self._days)
+            self._secs = DB.daily(c.study, today, days, 0)
+            self._share = DB.share(c.study, today, days)
             self._up = DB.upcoming(c.study, st.classes, now, c.hours_state())
         # live part: today's number (+ the running timer) and everything derived from it
         self._secs[today] = c.study.day_sec(today, True) + extra
@@ -703,7 +716,10 @@ class OverviewPage(Page):
         goal_sec = goal * 60
         exams = [e["date"] for e in c.study.exams()]
         self._apply_kpis(DB.kpis(self._secs, st.history, c.points, today))
-        self.chart.set_chart(DB.chart(self._secs, today, self._days, goal_sec, exams))
+        ch = DB.chart(self._secs, today, days, goal_sec, exams)
+        self.chart.set_chart(ch)
+        avg = DB.average_sec_per_day(ch["bars"])
+        self.avg_label.setText(DB.tx(f"Average this period: {DB.fmt_dur(avg)} / day", f"میانگین این بازه: {DB.fmt_dur(avg)} در روز"))
         self.sharec.set_data(*self._share)
         self.greet.setText(DB.greeting(now.hour))
         self.greet_sub.setText(DB.tx(f"{DB.fmt_dur(self._secs[today])} studied today", f"امروز {DB.fmt_dur(self._secs[today])} مطالعه کرده‌اید"))

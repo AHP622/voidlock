@@ -34,7 +34,8 @@ class Modal(QWidget):
         self.body = None
 
     def build(self, title, message=None, body=None, confirm="Confirm", cancel="Cancel", danger=False,
-              validator=None, cooldown=0, icon=None, icon_color=T.cyan, width=460):
+              validator=None, cooldown=0, icon=None, icon_color=None, width=460):
+        icon_color = icon_color if icon_color is not None else T.cyan
         self.panel.setFixedWidth(width)
         head = QHBoxLayout()
         head.setSpacing(12)

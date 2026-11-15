@@ -166,9 +166,12 @@ class DailyChart(QWidget):
         self.update()
 
     def _layout(self):
+        # The time axis always runs left (oldest) to right (newest), like any other chart of a quantity over time -
+        # this one stays left-to-right even in a right-to-left (Persian) interface, by design. `rtl` is still
+        # reported for things that genuinely are direction-of-text concerns (the legend).
         W, H = self.width(), self.height()
         rtl = self.isRightToLeft()
-        ml, mr = (6, 30) if rtl else (30, 6)
+        ml, mr = 30, 6
         mt, mb = 40, 38
         return W, H, rtl, ml, mr, mt, mb, W - ml - mr, H - mt - mb
 
@@ -178,7 +181,7 @@ class DailyChart(QWidget):
             W, H, rtl, ml, mr, mt, mb, pw, ph = self._layout()
             n = len(ch["bars"])
             x = e.position().x()
-            i = int((ml + pw - x) / (pw / n)) if rtl else int((x - ml) / (pw / n))
+            i = int((x - ml) / (pw / n))              # always left-to-right, see _layout()
             if 0 <= i < n:
                 b = ch["bars"][i]
                 from .store import fmt_hm
@@ -248,7 +251,7 @@ class DailyChart(QWidget):
         fa = i18n.is_fa()
 
         def X(i):
-            return (ml + pw - (i + 0.5) * slot) if rtl else (ml + (i + 0.5) * slot)
+            return ml + (i + 0.5) * slot               # always left-to-right, see _layout()
 
         def Y(sec):
             return base - ph * min(sec, top) / top
@@ -264,8 +267,8 @@ class DailyChart(QWidget):
             p.setPen(pen)
             p.drawLine(QPointF(ml, y), QPointF(W - mr, y))
             p.setPen(QColor(T.text3))
-            lab = QRectF((W - mr + 4) if rtl else 0, y - 8, (mr - 4) if rtl else (ml - 6), 16)
-            p.drawText(lab, ABS_L if rtl else ABS_R, num(hh))
+            lab = QRectF(0, y - 8, ml - 6, 16)          # the value axis sits on the left, as in any math graph
+            p.drawText(lab, ABS_R, num(hh))
         # exam days
         for i, b in enumerate(bars):
             if b["exam"]:

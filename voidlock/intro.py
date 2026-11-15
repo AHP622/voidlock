@@ -111,6 +111,20 @@ TABS = {
 }
 
 NEWS = {
+    "1.14.2": (
+        ["Fixed: several texts (including the Overview greeting) were unreadable in the Candy, Paper and Mint themes - they were quietly "
+         "stuck on the dark theme's colour no matter which theme was chosen. Found and fixed at the source (a handful of widgets that only "
+         "picked up a theme's colour the first time the app ran, not on every theme).",
+         "Fixed: hovering the study calendar's little squares could show the wrong day's tooltip (the mouse position and the grid were "
+         "measured in opposite directions).",
+         "The Overview's daily chart now always runs left to right by date, oldest to newest, like any other chart of a quantity over time.",
+         "The Overview's date-range button now also offers \u201cAll time\u201d, and shows the period's daily average next to it."],
+        ["اصلاح شد: چند نوشته (از جمله خوش‌آمد نمای کلی) در تم‌های آبنبات، کاغذ و نعنایی خوانا نبودند - بی‌صدا روی رنگ تم تیره گیر کرده "
+         "بودند، مهم نبود کدام تم انتخاب شده. ریشه‌اش پیدا و درست شد (چند ویجت که رنگ تم را فقط بار اول اجرای برنامه می‌گرفتند، نه هر بار).",
+         "اصلاح شد: رفتن روی مربع‌های کوچک تقویم مطالعه گاهی اطلاعات روز اشتباه را نشان می‌داد (جهت محاسبه‌ی موقعیت موس با جهت ترسیم جدول "
+         "یکی نبود).",
+         "نمودار مطالعه‌ی روزانه‌ی نمای کلی حالا همیشه از چپ (قدیمی‌تر) به راست (جدیدتر) است، مثل هر نموداری که یک کمیت را در طول زمان نشان می‌دهد.",
+         "دکمه‌ی بازه‌ی زمانی نمای کلی حالا «کل زمان‌ها» را هم دارد و میانگین روزانه‌ی همان بازه را کنارش نشان می‌دهد."]),
     "1.14.1": (
         ["Fixed: with the language set to English, the Study Timer and Settings tabs would not open when clicked (a missing name in the "
          "exam-countdown date text raised an error that silently aborted the tab switch, every time)."],

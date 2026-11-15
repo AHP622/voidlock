@@ -278,6 +278,8 @@ class Heatmap(AnimWidget):
     def mouseMoveEvent(self, e):
         c = self._cell()
         w = int(e.position().x() // c)
+        if self.isRightToLeft():                     # cells are drawn mirrored in RTL (paintEvent); the hit-test must match
+            w = len(self.cols) - 1 - w
         d = int(e.position().y() // c)
         h = (w, d) if 0 <= w < len(self.cols) and 0 <= d < 7 and self.cols[w][d] >= 0 else None
         if h != self._hover:

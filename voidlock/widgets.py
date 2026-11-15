@@ -189,12 +189,12 @@ def reveal(widget, delay=0, dy=0, ms=240):
         QTimer.singleShot(int(delay), go)
 
 
-def label(text="", px=13, weight=QFont.Weight.Normal, color=T.text, mono=False, spacing=0.0,
+def label(text="", px=13, weight=QFont.Weight.Normal, color=None, mono=False, spacing=0.0,
           wrap=False, align=None):
     lb = QLabel()
     lb.setText(text)
     lb.setFont(font(px, weight, mono, spacing))
-    lb.setStyleSheet(f"color:{color}; background:transparent;")
+    lb.setStyleSheet(f"color:{color if color is not None else T.text}; background:transparent;")
     lb.setWordWrap(wrap)
     if align is not None:
         lb.setAlignment(align)
@@ -370,11 +370,11 @@ class Button(QAbstractButton):
 class Chip(QAbstractButton):
     """Small selectable filter chip."""
 
-    def __init__(self, text, parent=None, color=T.cyan, count=None):
+    def __init__(self, text, parent=None, color=None, count=None):
         super().__init__(parent)
         self.setText(text)
         self.setCheckable(True)
-        self.color = color
+        self.color = color if color is not None else T.cyan
         self._on = 0.0
         self._hover = 0.0
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -491,10 +491,10 @@ class Toggle(QAbstractButton):
 class Pill(QWidget):
     """Tinted status label."""
 
-    def __init__(self, text="", color=T.cyan, dot=False, parent=None, px=11):
+    def __init__(self, text="", color=None, dot=False, parent=None, px=11):
         super().__init__(parent)
         from .i18n import tr
-        self._t, self._c, self._dot = tr(text), color, dot
+        self._t, self._c, self._dot = tr(text), color if color is not None else T.cyan, dot
         self._px = px
         self.setFont(font(px, QFont.Weight.DemiBold, spacing=0.6))
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)

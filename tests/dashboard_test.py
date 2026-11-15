@@ -115,6 +115,18 @@ class Dash(unittest.TestCase):
         self.assertEqual(D.donut_arcs([100, 0.1], 0.8)[1], None)              # too small to draw
         self.assertEqual(D.donut_arcs([5], 0.0)[0], (90.0, -360.0))
 
+    def test_earliest_study_date_and_period_average(self):
+        st, sl, subs, today = build()
+        first = D.earliest_study_date(sl, today)
+        self.assertIsNotNone(first)
+        self.assertLessEqual(first, today)
+        direct_min = min(date.fromisoformat(e["date"]) for e in sl.d["entries"])
+        self.assertEqual(first, direct_min)
+        self.assertIsNone(D.earliest_study_date(study.StudyLog(S.Store(Path(tempfile.mkdtemp()))), today))
+        bars = [{"sec": 3600}, {"sec": 0}, {"sec": 7200}]
+        self.assertEqual(D.average_sec_per_day(bars), 3600)
+        self.assertEqual(D.average_sec_per_day([]), 0)
+
     def test_chart_axis_steps_stay_readable(self):
         for hrs in (1, 3, 5, 7.5, 11, 30):
             secs = {date.today(): int(hrs * 3600)}

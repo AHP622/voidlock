@@ -427,9 +427,9 @@ class Skeleton(AnimWidget):
 class IconTile(QWidget):
     """Rounded tile: real executable icon if available, else a tinted initial/glyph."""
 
-    def __init__(self, text="?", color=T.cyan, size=40, icon=None, pixmap: QPixmap = None, parent=None):
+    def __init__(self, text="?", color=None, size=40, icon=None, pixmap: QPixmap = None, parent=None):
         super().__init__(parent)
-        self.text, self.color, self.icon, self.pix = text, color, icon, pixmap
+        self.text, self.color, self.icon, self.pix = text, color if color is not None else T.cyan, icon, pixmap
         self.setFixedSize(size, size)
 
     def paintEvent(self, e):
@@ -459,8 +459,9 @@ class IconTile(QWidget):
 class EmptyState(QWidget):
     action = Signal()
 
-    def __init__(self, icon, title, text, button=None, color=T.cyan, parent=None):
+    def __init__(self, icon, title, text, button=None, color=None, parent=None):
         super().__init__(parent)
+        color = color if color is not None else T.cyan
         lay = QVBoxLayout(self)
         lay.setSpacing(8)
         lay.setContentsMargins(20, 34, 20, 34)
