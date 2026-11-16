@@ -65,29 +65,30 @@
     var running = db.active && Core.subject(db, db.active.subject) ? db.active : null;
     if (running) sel = running.subject;
     var total = Core.daySec(db, today), el = {};
-    el.ring = h('div', { class: 'grow', style: { textAlign: 'center' } });
-    function drawRing() { var tot = Core.daySec(db, today); el.ring.innerHTML = Charts.ring(goal ? tot / goal : 0, 170, I18n.dur(tot), t('of_goal', { goal: I18n.dur(goal) })); }
-    drawRing(); el.drawRing = drawRing;
-    host.appendChild(card(null, [el.ring]));
+    var toggle = function () {
+      if (running) { Core.stopTimer(db); App.changed(); }
+      else if (sel) { Core.startTimer(db, sel); db.settings.last_subject = sel; App.changed(); }
+      else if (!db.subjects.length) subjectSheet(App, null);
+      else UI.toast(t('pick_subject'), 'warn');
+    };
+    var hero = Art.hero({ db: db, today: today, goal: goal, sel: sel, running: running, onToggle: toggle,
+      onManual: function () { manualSheet(App, sel); }, onAddSubject: function () { subjectSheet(App, null); } });
+    host.appendChild(hero.el);
     var nc = Views.nextClassCard && Views.nextClassCard(App, false); if (nc) host.appendChild(nc);
 
     if (!db.subjects.length) {
-      host.appendChild(card(null, [h('div', { class: 'empty' }, t('no_subjects')), h('button', { class: 'btn primary block', onclick: function () { subjectSheet(App, null); } }, t('add_subject'))]));
+      host.appendChild(card(null, [Art.empty('subjects', t('no_subjects')), h('button', { class: 'btn primary block', onclick: function () { subjectSheet(App, null); } }, t('add_subject'))]));
     } else {
       var chips = h('div', { class: 'chips' }, db.subjects.map(function (s) {
         return h('button', { class: 'chip' + (s.id === sel ? ' on' : ''), style: { '--c': s.color }, disabled: running && s.id !== sel, onclick: function () {
           if (running) return; db.settings.last_subject = s.id; App.refresh(); } }, subjectDot(s.color), s.name);
       }));
-      el.clock = h('div', { class: 'timer num' }, I18n.clock(running ? Core.elapsed(db) : 0));
-      el.hint = h('div', { class: 'small dim', style: { textAlign: 'center' } }, running ? t('running') + ' · ' + Core.subjectOrGhost(db, running.subject).name : t('timer_hint'));
-      var go = h('button', { class: 'btn primary block', style: { minHeight: '56px', fontSize: '17px' }, onclick: function () {
-        if (running) { Core.stopTimer(db); App.changed(); }
-        else if (sel) { Core.startTimer(db, sel); db.settings.last_subject = sel; App.changed(); }
-        else UI.toast(t('pick_subject'), 'warn');
-      } }, UI.ic(running ? 'stop' : 'play'), running ? t('stop') : t('start'));
-      host.appendChild(card(null, [chips, el.clock, el.hint, h('div', { style: { height: '12px' } }), go,
-        h('div', { style: { height: '10px' } }), h('button', { class: 'btn block', onclick: function () { manualSheet(App, sel); } }, UI.ic('plus'), t('add_time'))]));
-
+      host.appendChild(chips);
+      var rem = Math.max(0, goal - total), pct = goal ? Math.min(999, Math.round(total / goal * 100)) : 0;
+      host.appendChild(h('div', { class: 'tiles' },
+        h('div', { class: 'tile' }, h('b', { class: 'num' }, I18n.dur(total)), h('span', null, t('today'))),
+        h('div', { class: 'tile hot' }, h('b', { class: 'num' }, I18n.digits(pct) + '%'), h('span', null, t('goal_pct'))),
+        h('div', { class: 'tile' }, h('b', { class: 'num' }, I18n.dur(rem)), h('span', null, t('left_goal')))));
       var times = Core.daySubjectTimes(db, today), by = {}; times.forEach(function (x) { by[x.subject.id] = x.sec; });
       function subjectRow(s) {
         var sec = by[s.id] || 0;
@@ -108,14 +109,10 @@
         var s = Core.subjectOrGhost(db, e.subject);
         return h('div', { class: 'item' }, subjectDot(s.color), h('div', { class: 'grow' }, h('b', null, I18n.subjName(s)), h('div', { class: 'small dim' }, I18n.dur(e.sec) + (e.source === 'manual' ? ' · ✎' : ''))),
           h('button', { class: 'icon-btn', 'aria-label': t('delete'), html: UI.icon('trash'), onclick: function () { Core.removeEntry(db, e.id); App.changed(); } }));
-      })) : h('div', { class: 'empty' }, t('no_entries'))));
+      })) : Art.empty('entries', t('no_entries'))));
       if (db.sessions.some(function (r) { return Core.dkey(new Date(r.start * 1000)) === today; })) host.appendChild(h('div', { class: 'small dim', style: { textAlign: 'center', marginBottom: '10px' } }, t('sessions_note')));
     }
-    App.tick = function () {
-      var r = db.active && Core.subject(db, db.active.subject);
-      if (el.clock && r) el.clock.textContent = I18n.clock(Core.elapsed(db));
-      if (el.drawRing) el.drawRing();
-    };
+    App.tick = hero.update;
   };
   function stepper(db, App, kind, s, day, show) {
     if (!show) return null;
@@ -183,7 +180,12 @@
     inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') add(); });
     host.appendChild(card(null, h('div', { class: 'row' }, h('div', { class: 'grow' }, inp), h('button', { class: 'btn primary', 'aria-label': t('add'), onclick: add }, UI.ic('plus')))));
     var todays = db.todos.filter(function (x) { return x.date === day; });
-    host.appendChild(card(null, todays.length ? h('div', { class: 'list' }, todays.map(function (x) { return todoRow(App, x); })) : h('div', { class: 'empty' }, t('no_tasks'))));
+    if (todays.length) {
+      var nd = todays.filter(function (x) { return x.done; }).length, pc = Math.round(nd / todays.length * 100);
+      host.appendChild(h('section', { class: 'card prog' }, h('div', { class: 'row sb' }, h('div', null, h('div', { class: 'big num' }, I18n.digits(nd) + ' / ' + I18n.digits(todays.length)), h('div', { class: 'small dim' }, t('tasks_done'))),
+        h('div', { class: 'pc num' }, I18n.digits(pc) + '%')), h('div', { class: 'bar thick', style: { marginTop: '12px' } }, h('i', { style: { width: pc + '%' } }))));
+      host.appendChild(h('div', { class: 'todo-list' }, todays.map(function (x) { return todoRow(App, x); })));
+    } else host.appendChild(card(null, Art.empty('tasks', t('no_tasks'))));
     if (day === today) {
       var old = db.todos.filter(function (x) { return x.date < today && !x.done; }).sort(function (a, b) { return a.date < b.date ? 1 : -1; }).slice(0, 30);
       if (old.length) host.appendChild(card(t('open_before'), h('div', { class: 'list' }, old.map(function (x) { return todoRow(App, x, true); }))));
@@ -191,7 +193,7 @@
   };
   function dayAfter(dk, n) { return Core.dkey(Core.addDays(Core.parseDkey(dk), n)); }
   function todoRow(App, x, showDate) {
-    return h('div', { class: 'item' },
+    return h('div', { class: 'item todo' + (x.done ? ' is-done' : '') },
       h('button', { class: 'check' + (x.done ? ' on' : ''), 'aria-label': 'toggle', html: x.done ? UI.icon('check') : '', onclick: function () { Core.toggleTodo(App.db, x.id); App.changed(); } }),
       h('div', { class: 'grow' }, h('div', { class: x.done ? 'done' : '' }, x.text), showDate ? h('div', { class: 'small dim' }, I18n.dateStr(x.date)) : null),
       h('button', { class: 'icon-btn', 'aria-label': t('delete'), html: UI.icon('trash'), onclick: function () { Core.removeTodo(App.db, x.id); App.changed(); } }));

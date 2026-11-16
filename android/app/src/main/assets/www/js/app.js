@@ -2,19 +2,21 @@
 (function (root) {
   'use strict';
   var KEY = 'voidlock.db', h = UI.h, t = function (k, v) { return I18n.t(k, v); };
-  var App = root.App = { db: null, view: 'today', range: 14, taskDay: null, examKind: 'taraz', tick: null, syncState: 'off', syncMsg: '', syncing: false, dirty: false, update: { state: 'idle' } };
+  var App = root.App = { db: null, view: 'today', range: 14, taskDay: null, examKind: 'taraz', tick: null, syncState: 'off', syncMsg: '', syncing: false, dirty: false, update: { state: 'idle' }, scroll: {}, hist: [], perf: { boots: 0, renders: 0, navs: 0, shellBuilds: 0, lastRenderMs: 0, avgRenderMs: 0 } };
+  var lastRaw = null, navBtns = null, lastLang = null, lastTitle = '';
   var saveTimer = null, syncTimer = null;
 
   // ------------------------------------------------------------------ storage
   App.load = function () {
     var raw = null, db = null;
     try { raw = localStorage.getItem(KEY); } catch (e) {}
+    lastRaw = raw;
     try { db = raw ? JSON.parse(raw) : null; } catch (e) { db = null; }
     App.db = Core.ensure(db);
     if (!App.db.sync.device_name) App.db.sync.device_name = Native.deviceName();
     I18n.setLang(App.db.settings.lang); App.applyTheme();
   };
-  App.saveNow = function () { clearTimeout(saveTimer); saveTimer = null; try { localStorage.setItem(KEY, JSON.stringify(App.db)); } catch (e) { UI.toast('Storage error: ' + e, 'error'); } };
+  App.saveNow = function () { clearTimeout(saveTimer); saveTimer = null; try { lastRaw = JSON.stringify(App.db); localStorage.setItem(KEY, lastRaw); } catch (e) { UI.toast('Storage error: ' + e, 'error'); } };
   App.save = function () { if (saveTimer) return; saveTimer = setTimeout(App.saveNow, 250); };
   App.applyTheme = function () { document.documentElement.setAttribute('data-theme', App.db.settings.theme || 'ocean'); };
 
@@ -23,23 +25,54 @@
   App.replan = function () { clearTimeout(planTimer); planTimer = setTimeout(function () { Notify.sync(App); }, 1200); };      // class / exam reminders follow the data
   App.changed = function () { App.dirty = true; App.save(); App.render(); App.scheduleSync(); App.replan(); };
   App.refresh = function () { App.save(); App.render(); };
-  App.go = function (v) { App.view = v; var el = document.getElementById('view'); App.render(); el.scrollTop = 0; };
+  /* Navigation: the shell (top bar, bottom nav) is built once; a tab switch swaps only the content of #view. Each tab remembers its scroll
+   * position, Back walks the tab history, and only a real tab switch plays the entrance animation (data edits re-render silently). */
+  App.go = function (v, o) {
+    o = o || {}; if (v === App.view && !o.force) return;
+    var host = document.getElementById('view'); App.scroll[App.view] = host.scrollTop;
+    if (!o.back) { if (App.hist[App.hist.length - 1] !== App.view) App.hist.push(App.view); if (App.hist.length > 20) App.hist.shift(); }
+    App.view = v; App.perf.navs++;
+    App.render({ enter: true, scrollTo: o.top ? 0 : (App.scroll[v] || 0) });
+  };
   var TITLES = { today: 'nav_today', stats: 'nav_stats', exams: 'nav_exams', tasks: 'nav_tasks', more: 'nav_more' };
-  App.render = function () {
-    var host = document.getElementById('view'), sc = host.scrollTop;
+  function now() { return root.performance && performance.now ? performance.now() : Date.now(); }
+  function buildNav() {
+    var nav = document.getElementById('nav'); nav.innerHTML = ''; navBtns = {}; App.perf.shellBuilds++;
+    Object.keys(TITLES).forEach(function (k) {
+      var b = h('button', { 'data-v': k, html: UI.icon(k) + '<span></span>' });
+      b.addEventListener('click', function () { if (App.view !== k) App.go(k); });
+      navBtns[k] = b; nav.appendChild(b);
+    });
+  }
+  function syncShell() {
+    if (!navBtns) buildNav();
+    var lang = I18n.lang;
+    Object.keys(TITLES).forEach(function (k) {
+      var b = navBtns[k], on = App.view === k;
+      if (b.classList.contains('on') !== on) b.classList.toggle('on', on);
+      if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+      if (lang !== lastLang || !b.lastChild.textContent) b.lastChild.textContent = t(TITLES[k]);
+    });
+    lastLang = lang;
+    var title = document.getElementById('top-title'), txt = (App.view === 'today' ? t('app') : t(TITLES[App.view])), sub = I18n.dateStr(Core.dkey(), true), sig = txt + '|' + sub;
+    if (sig !== lastTitle) { lastTitle = sig; title.innerHTML = ''; title.appendChild(document.createTextNode(txt)); title.appendChild(h('small', null, sub)); }
+  }
+  App.render = function (o) {
+    o = o || {}; var t0 = now(), host = document.getElementById('view'), sc = host.scrollTop;
+    App.perf.renders++;
     host.innerHTML = ''; App.tick = null;
     try { Views[App.view](host, App); }
     catch (e) { host.appendChild(h('section', { class: 'card' }, h('b', null, 'Error'), h('pre', { style: { whiteSpace: 'pre-wrap', fontSize: '12px', direction: 'ltr' } }, String(e && e.stack || e)))); if (root.console) console.error(e); }
     if (root.Intro) { try { Intro.attachTip(host, App); } catch (e) { if (root.console) console.error(e); } }
-    host.scrollTop = sc;
-    if (root.Motion) { Motion.replayViewIn(host); requestAnimationFrame(function () { Motion.layoutSegThumbs(); }); Motion.layoutSegThumbsSettled(); }
-    var nav = document.getElementById('nav'); nav.innerHTML = '';
-    Object.keys(TITLES).forEach(function (k) { nav.appendChild(h('button', { class: App.view === k ? 'on' : '', onclick: function () { if (App.view !== k) App.go(k); }, html: UI.icon(k) + '<span>' + t(TITLES[k]) + '</span>' })); });
-    var title = document.getElementById('top-title'); title.innerHTML = '';
-    title.appendChild(document.createTextNode(App.view === 'today' ? t('app') : t(TITLES[App.view])));
-    title.appendChild(h('small', null, I18n.dateStr(Core.dkey(), true)));
+    host.scrollTop = o.scrollTo !== undefined ? o.scrollTo : sc;
+    if (root.Motion) {
+      if (o.enter) Motion.replayViewIn(host); else Motion.clearViewIn(host);
+      requestAnimationFrame(function () { Motion.layoutSegThumbs(); }); Motion.layoutSegThumbsSettled();
+    }
+    syncShell();
     App.renderStatus();
     Native.keepAwake(!!(App.db.active && Core.subject(App.db, App.db.active.subject)));
+    var dt = now() - t0; App.perf.lastRenderMs = dt; App.perf.avgRenderMs = App.perf.avgRenderMs ? App.perf.avgRenderMs * 0.9 + dt * 0.1 : dt;
   };
   App.renderStatus = function () {
     var box = document.getElementById('top-actions'); box.innerHTML = '';
@@ -135,7 +168,12 @@
       actions: [h('button', { class: 'btn', onclick: function () { s.close(); } }, t('start_fresh')),
                 h('button', { class: 'btn primary', onclick: function () { s.close(); App.go('more'); setTimeout(function () { Views.pairFlow(App); }, 350); } }, t('from_laptop'))] });
   }
-  root.__back = function () { if (UI.closeTop()) return true; if (App.view !== 'today') { App.go('today'); return true; } return false; };
+  root.__back = function () {
+    if (UI.closeTop()) return true;
+    while (App.hist.length) { var prev = App.hist.pop(); if (prev !== App.view) { App.go(prev, { back: true }); return true; } }
+    if (App.view !== 'today') { App.go('today', { back: true }); return true; }
+    return false;
+  };
 
   // "#bg": the Android background sync opens this page without a screen: one sync, save, tell the shell, nothing else
   function bgMode() {
@@ -149,7 +187,9 @@
     (doSync ? App.syncNow(false).catch(function () {}) : Promise.resolve()).then(function () { return upd; }).then(function () { Notify.sync(App); finish(); }, finish);
   }
 
+  var booted = false;
   App.boot = function () {
+    if (booted) return; booted = true; App.perf.boots++;
     if (location.hash === '#bg') return bgMode();
     App.load();
     Net.persist = App.saveNow;                                  // the request counter is saved before every encrypted call
@@ -158,11 +198,15 @@
     App.syncState = App.db.sync.laptop ? 'ok' : 'off';
     if (root.Motion) Motion.setReduced(App.db.settings.reduce_motion === true ? true : App.db.settings.reduce_motion === false ? false : null);
     App.render();
-    setInterval(function () { if (App.tick) App.tick(); }, 1000);
+    setInterval(function () { if (App.tick && document.visibilityState !== 'hidden') App.tick(); }, 1000);   // display only: the elapsed time is always computed from the saved start time
     setInterval(App.poll, 12000);
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'hidden') App.saveNow();
-      else { App.load(); Net.persist = App.saveNow; App.render(); setTimeout(App.poll, 400); }       // the background sync may have changed the data
+      else {                                                                                       // the background sync may have changed the data: re-read and redraw only if it did
+        var raw = null; try { raw = localStorage.getItem(KEY); } catch (e) {}
+        if (raw !== lastRaw) { App.load(); Net.persist = App.saveNow; App.render(); } else if (App.tick) App.tick();
+        setTimeout(App.poll, 400);
+      }
     });
     root.addEventListener('pagehide', App.saveNow);
     Native.onOpenFile(function (name, text) { App.go('more'); Views.importText(App, text); });

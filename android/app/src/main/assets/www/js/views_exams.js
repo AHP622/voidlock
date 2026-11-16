@@ -97,7 +97,7 @@
     var db = App.db, ep = Core.examProgress(db), kind = App.examKind || 'taraz', fa = I18n.lang === 'fa';
     var seg = h('div', { class: 'seg' }, KINDS.map(function (k) { return h('button', { class: k[0] === kind ? 'on' : '', onclick: function () { App.examKind = k[0]; App.render(); } }, t(k[1])); }));
     var body = h('div'), W = Math.max(300, Math.min(root.innerWidth || 360, 720) - 34);
-    if (!ep.exams.length) body.appendChild(h('div', { class: 'empty' }, t('no_results_yet')));
+    if (!ep.exams.length) body.appendChild(Art.empty('chart', t('no_results_yet')));
     else {
       var labels = ep.exams.map(function (e) { return e.name; }), series, opts = { t: t, fa: fa, labels: labels, width: W };
       if (kind === 'taraz') series = [{ name: t('k_taraz'), color: '#2DD4BF', values: ep.exams.map(function (e) { return e.taraz; }) }];
@@ -110,7 +110,7 @@
       }
       opts.series = series;
       var ch = Charts.lineChart(opts);
-      if (!ch.svg) body.appendChild(h('div', { class: 'empty' }, t('no_results_yet')));
+      if (!ch.svg) body.appendChild(Art.empty('chart', t('no_results_yet')));
       else {
         body.appendChild(h('div', { html: ch.svg }));
         if (opts.invert) body.appendChild(h('div', { class: 'small dim', style: { textAlign: 'center' } }, t('rank_hint')));
@@ -122,9 +122,10 @@
 
   Views.exams = function (host, App) {
     var db = App.db, nx = Core.nextExam(db), list = Core.exams(db), fa = I18n.lang === 'fa';
-    if (nx) host.appendChild(h('section', { class: 'card', style: { background: 'linear-gradient(135deg,color-mix(in srgb,var(--accent) 16%,var(--panel)),var(--panel))' } },
-      h('h3', null, t('next_exam')), h('div', { class: 'row sb' }, h('div', null, h('b', { style: { fontSize: '18px' } }, nx.exam.name), h('div', { class: 'small muted' }, I18n.dateStr(nx.exam.date, true) + (nx.exam.time ? ' · ' + I18n.digits(nx.exam.time) : ''))),
-        h('div', { class: 'pill', style: { '--c': nx.days <= 3 ? 'var(--amber)' : 'var(--accent)', fontSize: '14px', padding: '6px 14px' } }, dueText(nx.exam.date)))));
+    if (nx) host.appendChild(h('section', { class: 'card xhero' }, h('div', { class: 'row', style: { gap: '16px' } },
+      Art.countdown(nx.days, t('days_word') , nx.days <= 3 ? 'warn' : 'ok'),
+      h('div', { class: 'grow' }, h('h3', null, t('next_exam')), h('b', { class: 'xname' }, nx.exam.name), h('div', { class: 'small muted' }, I18n.dateStr(nx.exam.date, true) + (nx.exam.time ? ' · ' + I18n.digits(nx.exam.time) : '')),
+        h('div', { class: 'pill', style: { '--c': nx.days <= 3 ? 'var(--amber)' : 'var(--accent)', marginTop: '8px' } }, dueText(nx.exam.date))))));
     host.appendChild(progressCard(App));
     var items = list.map(function (e) {
       var r = e.result, pills = [];
@@ -142,7 +143,7 @@
             h('button', { class: 'btn sm ' + (r ? '' : 'primary'), onclick: function () { resultSheet(App, e); } }, UI.ic('check'), r ? t('edit_results') : t('enter_results')),
             h('button', { class: 'btn sm', onclick: function () { examSheet(App, e); } }, UI.ic('edit'), t('edit')))));
     });
-    host.appendChild(h('section', { class: 'card' }, h('h3', null, t('exams')), items.length ? h('div', { class: 'list' }, items) : h('div', { class: 'empty' }, t('no_exams'))));
+    host.appendChild(h('section', { class: 'card' }, h('h3', null, t('exams')), items.length ? h('div', { class: 'list xl' }, items) : Art.empty('exams', t('no_exams'))));
     var chips = h('div', { class: 'row', style: { flexWrap: 'wrap', gap: '8px' } }, db.exam_subjects.map(function (s) {
       return h('button', { class: 'chip', style: { '--c': s.color }, onclick: function () { examSubjectSheet(App, s); } }, h('span', { class: 'dot', style: { '--c': s.color } }), s.name);
     }).concat([h('button', { class: 'chip', onclick: function () { examSubjectSheet(App, null); } }, UI.ic('plus'), t('add'))]));

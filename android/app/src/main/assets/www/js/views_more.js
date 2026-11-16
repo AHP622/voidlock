@@ -175,7 +175,7 @@
       return h('div', { class: 'item', onclick: function () { Views.subjectSheet(App, s); } }, h('span', { class: 'dot', style: { '--c': s.color } }), h('b', { class: 'grow' }, s.name),
         s.words ? h('span', { class: 'pill', style: { '--c': 'var(--violet)' } }, t('words_learned')) : null, h('span', { class: 'dim', html: UI.icon('edit'), style: { width: '18px' } }));
     });
-    return card(t('subjects'), [rows.length ? h('div', { class: 'list' }, rows) : h('div', { class: 'empty' }, t('no_subjects')),
+    return card(t('subjects'), [rows.length ? h('div', { class: 'list' }, rows) : Art.empty('subjects', t('no_subjects')),
       h('button', { class: 'btn block', style: { marginTop: '10px' }, onclick: function () { Views.subjectSheet(App, null); } }, UI.ic('plus'), t('add_subject'))]);
   }
 

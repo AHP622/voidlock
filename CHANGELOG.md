@@ -1,10 +1,9 @@
 # Changelog
 
-## 1.14.5
-* Fixed: updating on a line that keeps cutting the connection (VPN / filter, `WinError 10054` while downloading `VoidLock.exe`) failed
-  after 4 cuts in total. Now the download resumes (Range) for as long as every try brings new bytes (6 tries in a row without a single new
-  byte end it), and on Windows `curl.exe` is used as a last resort on the same `.part` file. The SHA-256 is verified every time.
-  `tests/updater_test.py` simulates the flaky line.
+## 1.14.5 (Android)
+* Fixed: switching tabs felt like the whole page reloaded. Causes found in `app.js` / `app.css`: (1) `App.render()` rebuilt the bottom bar and the top title on every call; (2) the entrance animation (`#view.v-in` plus `cardIn` on every card) replayed on every re-render - a tab switch, but also a "+" tap, a subject chip, a range switch, a sync result; (3) `#view` had `scroll-behavior:smooth`, so the scroll position restored after each rebuild visibly scrolled back from the top; (4) coming back to the app always re-read the database and redrew the screen even when nothing had changed; (5) Back always jumped to Today; (6) the Today ring was redrawn as SVG every second, even with no timer running.
+* Now: the shell (bottom bar, title) is built once and only updated; only a real tab switch plays the entrance animation; each tab remembers its scroll position; Back walks the tab history; returning to the app re-renders only if the stored data really changed; the ring is redrawn only when its value changes; `App.boot` cannot run twice. The timer is unchanged: it was already computed from the saved start time, so it never restarted on navigation, and it still is.
+* New look "Deep Blue Cinematic" (design layer `css/cinema.css`, components in `js/art.js`, bundled Vazirmatn + Space Grotesk fonts): orbital focus timer on the dashboard (goal ring, 60 ticks that light up during a session, orbiting seconds dot), layered atmosphere, glass cards with lit edges, redesigned Tasks and Exams, illustrated empty states, floating glass bottom bar. Ambient light is static and effects are limited to what kept frame rate close to 1.14.4 in the software-rendered test. The Void, Midnight and Light themes keep their colours and get the same shapes. Windows app: untouched.
 
 ## 1.14.4
 * Fixed: `--screenshots` saved nothing. `QWidget.render(painter)` needs a target offset in PySide6, so every picture raised a TypeError inside a

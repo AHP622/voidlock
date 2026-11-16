@@ -112,12 +112,10 @@ TABS = {
 
 NEWS = {
     "1.14.5": (
-        ["Fixed: updating on a bad connection (VPN / filter) kept failing with \u201cconnection was forcibly closed\u201d. The download now "
-         "carries on from where it was cut for as long as it makes progress (it used to give up after 4 cuts), and as a last resort uses "
-         "Windows' own downloader. The file is still checked (SHA-256) before anything is installed."],
-        ["اصلاح شد: آپدیت روی اتصال بد (فیلترشکن / فیلترینگ) مدام با «connection was forcibly closed» شکست می‌خورد. حالا دانلود تا وقتی "
-         "پیشرفت دارد از همان جای قطع‌شده ادامه می‌دهد (قبلاً بعد از ۴ قطعی تسلیم می‌شد) و آخرین راه از دانلودر خود ویندوز استفاده "
-         "می‌کند. فایل همچنان قبل از نصب با SHA-256 بررسی می‌شود."]),
+        ["Phone only: a new Deep Blue Cinematic look and smoother navigation (tabs keep their scroll position, the timer is untouched, Back returns to the previous tab). "
+         "Nothing changes on the computer."],
+        ["فقط گوشی: ظاهر جدید «آبی عمیق سینمایی» و ناوبری روان‌تر (هر بخش جای اسکرولش را نگه می‌دارد، تایمر دست‌نخورده است و دکمه‌ی برگشت به بخش قبلی می‌رود). "
+         "روی رایانه چیزی تغییر نمی‌کند."]),
     "1.14.4": (
         ["Fixed: the presentation pictures (`--screenshots`) were never saved. Each tab is now shown, painted and saved one after the other, "
          "problems are reported in a log file, and the demo data is now a strong student's panel. Nothing changes for normal use."],

@@ -56,7 +56,7 @@
         var used = 0;
         d.parts.forEach(function (p, k) {
           var hh = Math.max(ph * p.sec / ymax, 0.8), last = k === d.parts.length - 1;
-          s += '<rect x="' + x0 + '" y="' + (base - used - hh) + '" width="' + bw + '" height="' + hh + '" rx="' + (last ? 3 : 0) + '" fill="' + p.color + '" style="stroke:var(--panel)" stroke-width="1"><title>' + esc(d.tip || '') + ' · ' + esc(p.name || T('other_subjects')) + ': ' + esc(I18n.dur(p.sec)) + '</title></rect>';
+          s += '<rect x="' + x0 + '" y="' + (base - used - hh) + '" width="' + bw + '" height="' + hh + '" rx="' + (last ? 5 : 0) + '" fill="' + p.color + '" style="stroke:var(--panel)" stroke-width="1"><title>' + esc(d.tip || '') + ' · ' + esc(p.name || T('other_subjects')) + ': ' + esc(I18n.dur(p.sec)) + '</title></rect>';
           used += hh;
         });
         if (showTot) s += '<text x="' + cx(i) + '" y="' + (base - used - 6) + '" font-size="9.5" text-anchor="middle" style="fill:var(--text2)">' + I18n.digits(+(d.sec / 3600).toFixed(1)) + '</text>';
@@ -114,9 +114,9 @@
 
   function ring(frac, size, text, sub) {
     var r = size / 2 - 11, c = 2 * Math.PI * r, f = Math.max(0, Math.min(1, frac)), id = 'rg' + Math.floor(Math.random() * 1e6);
-    return '<svg class="ring" width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '"><defs><linearGradient id="' + id + '" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:var(--accent)"/><stop offset="1" style="stop-color:var(--accent2)"/></linearGradient></defs>' +
+    return '<svg class="ring" width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '"><defs><linearGradient id="' + id + '" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:var(--soft,var(--accent))"/><stop offset="0.55" style="stop-color:var(--accent)"/><stop offset="1" style="stop-color:var(--accent2)"/></linearGradient></defs>' +
       '<circle cx="' + size / 2 + '" cy="' + size / 2 + '" r="' + r + '" fill="none" style="stroke:var(--panel2)" stroke-width="12"/>' +
-      (f > 0.004 ? '<circle cx="' + size / 2 + '" cy="' + size / 2 + '" r="' + r + '" fill="none" stroke="url(#' + id + ')" stroke-width="12" stroke-linecap="round" stroke-dasharray="' + (c * f).toFixed(1) + ' ' + c.toFixed(1) + '" transform="rotate(-90 ' + size / 2 + ' ' + size / 2 + ')"/>' : '') +
+      (f > 0.004 ? '<circle cx="' + size / 2 + '" cy="' + size / 2 + '" r="' + r + '" fill="none" stroke="url(#' + id + ')" stroke-width="12" stroke-linecap="round" style="filter:drop-shadow(0 0 6px color-mix(in srgb,var(--accent) 55%,transparent))" stroke-dasharray="' + (c * f).toFixed(1) + ' ' + c.toFixed(1) + '" transform="rotate(-90 ' + size / 2 + ' ' + size / 2 + ')"/>' : '') +
       '<text x="50%" y="' + (sub ? '47%' : '53%') + '" text-anchor="middle" font-size="22" font-weight="700" style="fill:var(--text)">' + esc(text) + '</text>' +
       (sub ? '<text x="50%" y="63%" text-anchor="middle" font-size="11.5" style="fill:var(--text3)">' + esc(sub) + '</text>' : '') + '</svg>';
   }

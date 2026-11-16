@@ -60,7 +60,7 @@
     var db = App.db, today = Classes.weekday(new Date());
     var nx = nextClassCard(App, true); if (nx) host.appendChild(nx);
     host.appendChild(h('button', { class: 'btn primary block', style: { margin: '2px 0 12px' }, onclick: function () { classSheet(App, null); } }, UI.ic('plus'), ' ', t('add_class')));
-    if (!db.classes.length) { host.appendChild(card(null, h('div', { class: 'empty' }, t('no_classes')))); return; }
+    if (!db.classes.length) { host.appendChild(card(null, Art.empty('classes', t('no_classes')))); return; }
     var week = h('section', { class: 'card cls-week' });
     weekOrder(db).forEach(function (wd) {
       var list = Core.classes(db).filter(function (c) { return c.day === wd; });

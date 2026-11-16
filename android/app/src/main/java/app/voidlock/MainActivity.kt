@@ -33,7 +33,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         web = WebView(this)
         setContentView(web)
-        web.setBackgroundColor(0xFF06121A.toInt())
+        web.setBackgroundColor(0xFF07111F.toInt())
         web.overScrollMode = View.OVER_SCROLL_NEVER
 
         val loader = WebViewAssetLoader.Builder()

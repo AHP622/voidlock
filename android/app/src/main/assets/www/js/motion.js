@@ -50,8 +50,10 @@
     el.classList.add('v-in');
   }
 
+  function clearViewIn(el) { if (el) el.classList.remove('v-in'); }
+
   if (typeof root.addEventListener === 'function') root.addEventListener('resize', function () { layoutSegThumbs(); });
 
-  root.Motion = { isReduced: isReduced, setReduced: setReduced, layoutSegThumbs: layoutSegThumbs, layoutSegThumbsSettled: layoutSegThumbsSettled, replayViewIn: replayViewIn };
+  root.Motion = { isReduced: isReduced, setReduced: setReduced, layoutSegThumbs: layoutSegThumbs, layoutSegThumbsSettled: layoutSegThumbsSettled, replayViewIn: replayViewIn, clearViewIn: clearViewIn };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.Motion;
 })(typeof window !== 'undefined' ? window : globalThis);
