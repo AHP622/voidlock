@@ -111,6 +111,9 @@ TABS = {
 }
 
 NEWS = {
+    "1.14.64": (
+        ["Fixed a startup error in Help and added live download percentage for Windows updates."],
+        ["خطای اجرا در بخش راهنما برطرف شد و درصد دانلود زنده برای آپدیت ویندوز اضافه شد."]),
     "1.14.63": (
         ["Windows navigation can collapse to icons, expand manually, or adapt to the window width; the app version and Novum signature stay visible.",
          "Fixed Persian right-to-left alignment in Settings descriptions and Help."],

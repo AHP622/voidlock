@@ -1,4 +1,5 @@
 """Help page: every feature in one place, with search across titles and text."""
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QVBoxLayout
 
 from . import i18n, intro

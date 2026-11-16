@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.64
+* Fixed startup failure in the Help page caused by a missing Qt import.
+* Windows fallback downloads now report live percentage progress while curl is downloading.
+
 ## 1.14.63
 * Windows sidebar can now collapse to icon-only navigation, expand manually, or follow the window width automatically; the version and Novum signature remain visible.
 * Fixed Persian right-to-left alignment in Settings descriptions and Help content.

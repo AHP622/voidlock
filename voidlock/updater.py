@@ -145,15 +145,29 @@ def _curl_fetch(url, part, expected, progress, timeout):
     temp = part.with_name(part.name + ".curl")
     _fail_cleanup(temp)
     try:
-        result = subprocess.run(
-            [curl, "--fail", "--silent", "--show-error", "--proto", "=https", "--max-time", str(timeout),
+        command = [curl, "--fail", "--show-error", "--progress-meter", "--proto", "=https", "--max-time", str(timeout),
              "--retry", "2", "--retry-all-errors", "--retry-delay", "1", "--continue-at", "-",
              "--max-filesize", str(MAX_DOWNLOAD), "--user-agent", HEADERS["User-Agent"],
-             "--output", str(temp), "--", final_url],
-            capture_output=True, text=True, creationflags=flags,
-        )
-        if result.returncode:
-            raise OSError("curl download failed: " + (result.stderr.strip() or str(result.returncode)))
+             "--output", str(temp), "--", final_url]
+        proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                                text=True, errors="replace", creationflags=flags)
+        stderr_tail = ""
+        meter = ""
+        while True:
+            ch = proc.stderr.read(1)
+            if not ch:
+                break
+            if ch in "\r\n":
+                match = re.search(r"(\d{1,3}(?:\.\d+)?)%", meter)
+                if match and progress and expected:
+                    progress(min(99, int(float(match.group(1)))))
+                stderr_tail = (stderr_tail + meter.strip() + " ")[-2000:]
+                meter = ""
+            else:
+                meter += ch
+        return_code = proc.wait()
+        if return_code:
+            raise OSError("curl download failed: " + (stderr_tail.strip() or str(return_code)))
         got = temp.stat().st_size
         if got > MAX_DOWNLOAD:
             raise UpdateError("The update file is unreasonably large - update cancelled.")
