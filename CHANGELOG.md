@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.63
+* Windows sidebar can now collapse to icon-only navigation, expand manually, or follow the window width automatically; the version and Novum signature remain visible.
+* Fixed Persian right-to-left alignment in Settings descriptions and Help content.
+
 ## 1.14.62
 * Android launcher icons now follow the selected app palette (Ocean, Paper, Dark or Midnight), including Android themed monochrome icons.
 * Changed the untouched daily study goal from 2 hours to 10 hours (600 minutes); old 120-minute defaults migrate once, and other saved goals are preserved. Clarified the units in Settings.

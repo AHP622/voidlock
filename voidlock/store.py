@@ -114,6 +114,7 @@ DEFAULT_SETTINGS = {
     "reduce_motion": "auto",     # auto | on | off
     "week_start": 5,             # 0=Mon ... 5=Sat, 6=Sun
     "language": "en",            # en | fa
+    "sidebar_mode": "auto",       # auto | collapsed | expanded (Windows navigation)
     "theme": "void",             # see THEME_KEYS
     "sound": "soft",             # off | soft | bell
     "target_field": "",          # shown in the message when a blocked program is closed
@@ -174,6 +175,8 @@ def sanitize_settings(s):
     Settings page). Put every value back into its valid range. Unknown keys are kept."""
     out = dict(DEFAULT_SETTINGS)
     out.update(s if isinstance(s, dict) else {})
+    if out.get("sidebar_mode") not in ("auto", "collapsed", "expanded"):
+        out["sidebar_mode"] = "auto"
     for k, (lo, hi) in _INT_RANGES.items():
         try:
             out[k] = max(lo, min(hi, int(out[k])))

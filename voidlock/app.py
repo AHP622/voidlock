@@ -53,6 +53,7 @@ class NavButton(QAbstractButton):
         self._on = 0.0
         self._hover = 0.0
         self._kb = False
+        self._compact = False
         self.setFont(font(14, QFont.Weight.DemiBold))
         self.toggled.connect(lambda c: tween(self, self._on, 1.0 if c else 0.0, 260, self._so))
 
@@ -69,6 +70,10 @@ class NavButton(QAbstractButton):
         self.setChecked(a)
         self.blockSignals(False)
         tween(self, self._on, 1.0 if a else 0.0, 260, self._so)
+
+    def set_compact(self, compact):
+        self._compact = bool(compact)
+        self.update()
 
     def enterEvent(self, e):
         tween(self, self._hover, 1.0, 120, self._sh)
@@ -102,6 +107,13 @@ class NavButton(QAbstractButton):
             p.drawRoundedRect(QRectF(bx, r.center().y() - h / 2, 3, h), 1.5, 1.5)
         col = T.cyan if o > 0.5 else (T.text if self._hover > 0.4 else T.text2)
         rtl = self.isRightToLeft()
+        if self._compact:
+            paint_icon(p, self.icon_name, QRectF(r.center().x() - 10, r.center().y() - 10, 20, 20), col, 1.8)
+            if self.hasFocus() and self._kb:
+                p.setBrush(Qt.BrushStyle.NoBrush)
+                p.setPen(QPen(qc(T.cyan, 0.5), 1.2))
+                p.drawRoundedRect(r, 11, 11)
+            return
         paint_icon(p, self.icon_name, QRectF((self.width() - 38) if rtl else 18, r.center().y() - 10, 20, 20), col, 1.8)
         p.setPen(qc(T.text if o > 0.5 or self._hover > 0.4 else T.text2))
         p.setFont(self.font())
@@ -231,12 +243,15 @@ class Sidebar(QWidget):
     def __init__(self, win):
         super().__init__()
         self.win = win
+        self.mode = "auto"
+        self._compact = False
         self.setFixedWidth(240)
         lay = QVBoxLayout(self)
+        self.lay = lay
         lay.setContentsMargins(14, 18, 14, 16)
         lay.setSpacing(4)
         brand = QHBoxLayout()
-        brand.setContentsMargins(8, 0, 0, 0)
+        brand.setContentsMargins(4, 0, 0, 0)
         brand.setSpacing(10)
         self.logo = LockIcon(38)
         self.logo.set_locked(True, T.cyan)
@@ -245,8 +260,12 @@ class Sidebar(QWidget):
         bc.setSpacing(0)
         bc.addWidget(label("VOIDLOCK", 17, QFont.Weight.Bold, T.text, spacing=3.2))
         bc.addWidget(label("FOCUS GUARD", 9, QFont.Weight.DemiBold, T.cyan, spacing=2.6))
-        brand.addLayout(bc)
-        brand.addStretch(1)
+        self.brand_copy = QWidget()
+        self.brand_copy.setLayout(bc)
+        brand.addWidget(self.brand_copy)
+        self.layout_toggle = Button("", "icon", "chev-l", "Sidebar: automatic", square=34)
+        self.layout_toggle.clicked.connect(self.cycle_mode)
+        brand.addWidget(self.layout_toggle)
         lay.addLayout(brand)
         lay.addSpacing(26)
         self.buttons = {}
@@ -267,7 +286,32 @@ class Sidebar(QWidget):
         cl.addWidget(self.m_state)
         cl.addWidget(self.m_time)
         lay.addWidget(self.card)
-        lay.addWidget(label(f"v{__version__}  ·  {intro.SIGNATURE}", 10, color=T.text3), 0, Qt.AlignmentFlag.AlignHCenter)
+        self.version_label = label(f"v{__version__}  ·  {intro.SIGNATURE}", 10, color=T.text3, align=Qt.AlignmentFlag.AlignCenter)
+        lay.addWidget(self.version_label, 0, Qt.AlignmentFlag.AlignHCenter)
+
+    def cycle_mode(self):
+        self.mode = {"auto": "collapsed", "collapsed": "expanded", "expanded": "auto"}[self.mode]
+        self.win.store.settings["sidebar_mode"] = self.mode
+        self.win.store.save_settings()
+        self.win._apply_sidebar_mode()
+
+    def set_compact(self, compact):
+        compact = bool(compact)
+        if compact == self._compact:
+            return
+        self._compact = compact
+        self.setFixedWidth(76 if compact else 240)
+        self.lay.setContentsMargins(7 if compact else 14, 18, 7 if compact else 14, 16)
+        self.brand_copy.setVisible(not compact)
+        self.logo.setVisible(not compact)
+        self.layout_toggle.set_icon("chev-r" if compact else "chev-l")
+        self.layout_toggle.setToolTip({"auto": "Sidebar: automatic (click to compact)",
+                                       "collapsed": "Sidebar: compact (click to expand)",
+                                       "expanded": "Sidebar: expanded (click for automatic)"}[self.mode])
+        self.card.setVisible(not compact)
+        self.version_label.setText(f"v{__version__}\n{intro.SIGNATURE}" if compact else f"v{__version__}  ·  {intro.SIGNATURE}")
+        for button in self.buttons.values():
+            button.set_compact(compact)
 
     def set_active(self, key):
         for k, b in self.buttons.items():
@@ -363,7 +407,9 @@ class MainWindow(QMainWindow):
         sl.setContentsMargins(0, 0, 0, 0)
         sl.setSpacing(0)
         self.sidebar = Sidebar(self)
+        self.sidebar.mode = self.store.settings.get("sidebar_mode", "auto")
         sl.addWidget(self.sidebar)
+        self._apply_sidebar_mode()
         right = QVBoxLayout()
         right.setSpacing(0)
         sl.addLayout(right, 1)
@@ -437,9 +483,20 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, e):
         super().resizeEvent(e)
+        self._apply_sidebar_mode()
         if hasattr(self, "toasts"):
             self.toasts.setGeometry(self.root.rect())
             self.confetti.setGeometry(self.root.rect())
+
+    def _apply_sidebar_mode(self):
+        if not hasattr(self, "sidebar"):
+            return
+        mode = self.sidebar.mode
+        compact = mode == "collapsed" or (mode == "auto" and self.width() < 1180)
+        self.sidebar.set_compact(compact)
+        self.sidebar.layout_toggle.setToolTip({"auto": "Sidebar: automatic (click to compact)",
+                                               "collapsed": "Sidebar: compact (click to expand)",
+                                               "expanded": "Sidebar: expanded (click for automatic)"}[mode])
 
     def nativeEvent(self, eventType, message):
         """Edge resizing for the frameless window on Windows (WM_NCHITTEST)."""

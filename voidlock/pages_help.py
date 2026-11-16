@@ -164,6 +164,9 @@ class HelpPage(Page):
         self.search.setPlaceholderText("جستجو در راهنما (مثلاً صدا، ادمین، قفل)")
         self.search.setClearButtonEnabled(True)
         self.search.setMinimumHeight(40)
+        if i18n.is_fa():
+            self.search.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+            self.search.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.search.setStyleSheet(
             f"QLineEdit{{background:{T.panel2}; border:1px solid {T.border}; border-radius:12px;"
             f"padding:6px 14px; color:{T.text}; font-size:13px;}}"
@@ -193,12 +196,14 @@ class HelpPage(Page):
             if item.widget():
                 item.widget().deleteLater()
         if not topics:
-            self.list_box.addWidget(label("چیزی پیدا نشد. کلمه‌ی دیگه‌ای امتحان کن.", 13, color=T.text2))
+            self.list_box.addWidget(label("چیزی پیدا نشد. کلمه‌ی دیگه‌ای امتحان کن.", 13, color=T.text2,
+                                          align=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter) if i18n.is_fa() else Qt.AlignmentFlag.AlignLeft))
             return
         for tab, title, text in topics:
             card = Card(pad=16)
-            card.lay.addWidget(label(f"{i18n.tr(tab)}  ·  {title}", 13, color=T.cyan))
-            card.lay.addWidget(label(text, 12, color=T.text2, wrap=True))
+            align = (Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter) if i18n.is_fa() else (Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            card.lay.addWidget(label(f"{i18n.tr(tab)}  ·  {title}", 13, color=T.cyan, align=align))
+            card.lay.addWidget(label(text, 12, color=T.text2, wrap=True, align=align))
             self.list_box.addWidget(card)
 
     def _filter(self, text):

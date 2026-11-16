@@ -29,13 +29,15 @@ def section_title(text):
 
 
 def setting_row(title, desc, control):
+    fa = i18n.is_fa()
+    text_align = (Qt.AlignmentFlag.AlignRight if fa else Qt.AlignmentFlag.AlignLeft) | Qt.AlignmentFlag.AlignVCenter
     r = QHBoxLayout()
     r.setSpacing(16)
     col = QVBoxLayout()
     col.setSpacing(2)
-    col.addWidget(label(title, 14, QFont.Weight.DemiBold))
+    col.addWidget(label(title, 14, QFont.Weight.DemiBold, align=text_align))
     if desc:
-        col.addWidget(label(desc, 12, color=T.text3, wrap=True))
+        col.addWidget(label(desc, 12, color=T.text3, wrap=True, align=text_align))
     r.addLayout(col, 1)
     r.addWidget(control, 0, Qt.AlignmentFlag.AlignVCenter)
     return r
@@ -45,9 +47,11 @@ def setting_block(title, desc, control):
     """Title and description on top, a wide control (theme cards, many chips) underneath."""
     col = QVBoxLayout()
     col.setSpacing(6)
-    col.addWidget(label(title, 14, QFont.Weight.DemiBold))
+    fa = i18n.is_fa()
+    text_align = (Qt.AlignmentFlag.AlignRight if fa else Qt.AlignmentFlag.AlignLeft) | Qt.AlignmentFlag.AlignVCenter
+    col.addWidget(label(title, 14, QFont.Weight.DemiBold, align=text_align))
     if desc:
-        col.addWidget(label(desc, 12, color=T.text3, wrap=True))
+        col.addWidget(label(desc, 12, color=T.text3, wrap=True, align=text_align))
     col.addWidget(control)
     return col
 

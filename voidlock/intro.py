@@ -111,6 +111,11 @@ TABS = {
 }
 
 NEWS = {
+    "1.14.63": (
+        ["Windows navigation can collapse to icons, expand manually, or adapt to the window width; the app version and Novum signature stay visible.",
+         "Fixed Persian right-to-left alignment in Settings descriptions and Help."],
+        ["ناوبری ویندوز می‌تواند فقط آیکون‌ها را نشان دهد، دستی باز شود یا با عرض پنجره هماهنگ شود؛ نسخه و امضای Novum همیشه دیده می‌شوند.",
+         "راست‌چین متن‌های فارسی در توضیحات تنظیمات و راهنما اصلاح شد."]),
     "1.14.62": (
         ["Android app icons now match the selected theme. The default daily goal is 10 hours, and a small Exams button jump is fixed.",
          "Windows updates can fall back to the Windows download client if Python's connection to GitHub's file host is reset."],
