@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.14.67
+* Fixed sidebar tabs staying highlighted after the mouse moved quickly over them: a new hover animation now cancels the previous one, only one tab can look hovered, and a short guard releases a tab whose `leaveEvent` was skipped.
+* Reduced the gap between the VOIDLOCK logo and the first tab.
+* The sidebar collapse/expand arrow now follows the language: in Persian the sidebar is on the right, so the arrow points right to collapse and left to expand.
+
 ## 1.14.66
 * Fixed Persian Settings descriptions and Help text rendering left-aligned: the window is already right-to-left, and an explicit `AlignRight` is mirrored by Qt in RTL, so it ended up on the left. Labels now use the default (direction-aware) alignment, and the Help search box no longer overrides it.
 

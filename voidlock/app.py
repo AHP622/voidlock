@@ -6,7 +6,7 @@ import time
 from datetime import date, datetime, timedelta
 
 from PySide6.QtCore import QPoint, QPointF, QRectF, QSize, Qt, QTimer
-from PySide6.QtGui import QFont, QKeySequence, QLinearGradient, QPainter, QPen, QRadialGradient, QShortcut
+from PySide6.QtGui import QCursor, QFont, QKeySequence, QLinearGradient, QPainter, QPen, QRadialGradient, QShortcut
 from PySide6.QtWidgets import (QAbstractButton, QApplication, QFrame, QHBoxLayout, QLineEdit, QMainWindow, QStackedWidget,
                                QVBoxLayout, QWidget)
 
@@ -40,6 +40,8 @@ NAV = [("overview", "Overview", "overview"), ("study", "Study Timer", "stopwatch
 
 
 class NavButton(QAbstractButton):
+    _lit = None                                        # the tab that currently looks hovered
+
     def __init__(self, text, icon, tip):
         super().__init__()
         self.setText(text)
@@ -54,8 +56,24 @@ class NavButton(QAbstractButton):
         self._hover = 0.0
         self._kb = False
         self._compact = False
+        self._anims = {}
+        self._guard = QTimer(self)
+        self._guard.setInterval(120)
+        self._guard.timeout.connect(self._check_pointer)
         self.setFont(font(14, QFont.Weight.DemiBold))
-        self.toggled.connect(lambda c: tween(self, self._on, 1.0 if c else 0.0, 260, self._so))
+        self.toggled.connect(lambda c: self._run("on", self._on, 1.0 if c else 0.0, 260, self._so))
+
+    def _run(self, key, a, b, ms, cb):
+        """Start a value animation and stop the previous one with the same key. Without this, moving the mouse quickly
+        over the tabs leaves several animations running at once; a stale 'fade in' that finishes after the 'fade out'
+        puts the highlight back and the tab stays lit."""
+        old = self._anims.pop(key, None)
+        if old is not None:
+            try:
+                old.stop()
+            except RuntimeError:                       # already finished and deleted by Qt
+                pass
+        self._anims[key] = tween(self, a, b, ms, cb)
 
     def focusInEvent(self, e):
         self._kb = e.reason() in (Qt.FocusReason.TabFocusReason, Qt.FocusReason.BacktabFocusReason)
@@ -69,19 +87,41 @@ class NavButton(QAbstractButton):
         self.blockSignals(True)
         self.setChecked(a)
         self.blockSignals(False)
-        tween(self, self._on, 1.0 if a else 0.0, 260, self._so)
+        self._run("on", self._on, 1.0 if a else 0.0, 260, self._so)
 
     def set_compact(self, compact):
         self._compact = bool(compact)
         self.update()
 
     def enterEvent(self, e):
-        tween(self, self._hover, 1.0, 120, self._sh)
+        # Only one tab may look hovered. A fast mouse can skip a leaveEvent (between two tabs, or out of the frameless
+        # window), which left the old tab lit; so entering a tab always releases the previous one, and a short guard
+        # timer releases a tab whose pointer is no longer inside it.
+        prev = NavButton._lit
+        if prev is not None and prev is not self:
+            try:
+                prev._release()
+            except RuntimeError:                       # that button no longer exists
+                pass
+        NavButton._lit = self
+        self._run("hover", self._hover, 1.0, 120, self._sh)
+        self._guard.start()
         super().enterEvent(e)
 
     def leaveEvent(self, e):
-        tween(self, self._hover, 0.0, 180, self._sh)
+        self._release()
         super().leaveEvent(e)
+
+    def _release(self):
+        self._guard.stop()
+        if NavButton._lit is self:
+            NavButton._lit = None
+        if self._hover > 0.0 or "hover" in self._anims:
+            self._run("hover", self._hover, 0.0, 180, self._sh)
+
+    def _check_pointer(self):
+        if not self.isVisible() or not self.rect().contains(self.mapFromGlobal(QCursor.pos())):
+            self._release()
 
     def _sh(self, v):
         self._hover = float(v)
@@ -263,11 +303,11 @@ class Sidebar(QWidget):
         self.brand_copy = QWidget()
         self.brand_copy.setLayout(bc)
         brand.addWidget(self.brand_copy)
-        self.layout_toggle = Button("", "icon", "chev-l", "Sidebar: automatic", square=34)
+        self.layout_toggle = Button("", "icon", self._toggle_icon(False), "Sidebar: automatic", square=34)
         self.layout_toggle.clicked.connect(self.cycle_mode)
         brand.addWidget(self.layout_toggle)
         lay.addLayout(brand)
-        lay.addSpacing(26)
+        lay.addSpacing(10)
         self.buttons = {}
         for i, (key, text, icon) in enumerate(NAV):
             b = NavButton(text, icon, f"{tr(text)}  (Ctrl+{i + 1})")
@@ -289,6 +329,15 @@ class Sidebar(QWidget):
         self.version_label = label(f"v{__version__}  ·  {intro.SIGNATURE}", 10, color=T.text3, align=Qt.AlignmentFlag.AlignCenter)
         lay.addWidget(self.version_label, 0, Qt.AlignmentFlag.AlignHCenter)
 
+    @staticmethod
+    def _toggle_icon(compact):
+        """The arrow points to the edge the sidebar collapses into: left in English, right in Persian (sidebar on the
+        right). When the sidebar is compact it points back into the page."""
+        to_left = not compact
+        if i18n.is_fa():
+            to_left = not to_left
+        return "chev-l" if to_left else "chev-r"
+
     def cycle_mode(self):
         self.mode = {"auto": "collapsed", "collapsed": "expanded", "expanded": "auto"}[self.mode]
         self.win.store.settings["sidebar_mode"] = self.mode
@@ -304,7 +353,7 @@ class Sidebar(QWidget):
         self.lay.setContentsMargins(7 if compact else 14, 18, 7 if compact else 14, 16)
         self.brand_copy.setVisible(not compact)
         self.logo.setVisible(not compact)
-        self.layout_toggle.set_icon("chev-r" if compact else "chev-l")
+        self.layout_toggle.set_icon(self._toggle_icon(compact))
         self.layout_toggle.setToolTip({"auto": "Sidebar: automatic (click to compact)",
                                        "collapsed": "Sidebar: compact (click to expand)",
                                        "expanded": "Sidebar: expanded (click for automatic)"}[self.mode])

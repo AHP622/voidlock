@@ -111,6 +111,9 @@ TABS = {
 }
 
 NEWS = {
+    "1.14.67": (
+        ["Sidebar tabs no longer stay highlighted after a fast mouse sweep, the gap under the logo is smaller, and the collapse arrow now follows the language."],
+        ["تب‌های سایدبار بعد از حرکت سریع ماوس دیگر روشن نمی‌مانند، فاصله‌ی زیر لوگو کمتر شد و فلش جمع‌کردن سایدبار با زبان فارسی هماهنگ شد."]),
     "1.14.66": (
         ["Fixed Persian text in Settings and Help appearing left-aligned; descriptions and help text are right-aligned again."],
         ["متن فارسی در تنظیمات و راهنما که چپ‌چین نمایش داده می‌شد درست شد؛ توضیحات و متن راهنما دوباره راست‌چین هستند."]),
