@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.14.6
+* Fixed: study calendar (`Heatmap`, `voidlock/mascot.py`): in right-to-left layout the hit-test mirrored the column inside the grid's own width,
+  but the grid is drawn from the widget's right edge. In a card wider than the grid the highlighted day and its tooltip were hundreds of
+  pixels away from the mouse. The column is now counted from the same edge the cells are drawn from. `tests/heatmap_test.py` covers LTR/RTL,
+  the empty space beside the grid and days that do not exist.
+
 ## 1.14.5 (Android)
 * Fixed: switching tabs felt like the whole page reloaded. Causes found in `app.js` / `app.css`: (1) `App.render()` rebuilt the bottom bar and the top title on every call; (2) the entrance animation (`#view.v-in` plus `cardIn` on every card) replayed on every re-render - a tab switch, but also a "+" tap, a subject chip, a range switch, a sync result; (3) `#view` had `scroll-behavior:smooth`, so the scroll position restored after each rebuild visibly scrolled back from the top; (4) coming back to the app always re-read the database and redrew the screen even when nothing had changed; (5) Back always jumped to Today; (6) the Today ring was redrawn as SVG every second, even with no timer running.
 * Now: the shell (bottom bar, title) is built once and only updated; only a real tab switch plays the entrance animation; each tab remembers its scroll position; Back walks the tab history; returning to the app re-renders only if the stored data really changed; the ring is redrawn only when its value changes; `App.boot` cannot run twice. The timer is unchanged: it was already computed from the saved start time, so it never restarted on navigation, and it still is.

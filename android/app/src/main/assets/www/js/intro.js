@@ -30,6 +30,10 @@
     },
     order: ['today', 'stats', 'exams', 'tasks', 'more'],
     news: {
+      '1.14.6': {
+        fa: ['فقط رفع یک باگ کامپیوتر (تقویم مطالعه). در گوشی تغییری نیست.'],
+        en: ['Just a computer-side fix (the study calendar). No changes on the phone.']
+      },
       '1.14.5': {
         fa: ['ناوبری بین بخش‌ها دیگر صفحه را از اول نمی‌سازد؛ جای اسکرول هر بخش و تایمر حفظ می‌شود و دکمه‌ی برگشت به بخش قبلی می‌رود.', 'ظاهر کاملاً جدید «آبی عمیق سینمایی»: تایمر مداری با تیک‌های زنده، پس‌زمینه‌ی چندلایه، کارت‌های شیشه‌ای، کارها و آزمون‌های بازطراحی‌شده و حالت‌های خالی تصویری.'],
         en: ['Switching tabs no longer rebuilds the page: each tab keeps its scroll position, the timer is untouched and Back returns to the previous tab.', 'A completely new Deep Blue Cinematic look: an orbital focus timer with live ticks, layered backdrop, glass cards, redesigned tasks and exams, and illustrated empty states.']

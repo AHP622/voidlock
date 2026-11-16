@@ -111,6 +111,11 @@ TABS = {
 }
 
 NEWS = {
+    "1.14.6": (
+        ["Fixed: in the study calendar the highlighted day and its tooltip were far away from the mouse (hundreds of pixels to the right "
+         "in the wide card). The day under the pointer is now the one that lights up."],
+        ["اصلاح شد: در «تقویم مطالعه» روزی که هایلایت می‌شد و تولتیپش از ماوس فاصله زیادی داشت (در کارت عریض چند صد پیکسل به راست). "
+         "حالا همان روزی که زیر ماوس است روشن می‌شود."]),
     "1.14.5": (
         ["Phone only: a new Deep Blue Cinematic look and smoother navigation (tabs keep their scroll position, the timer is untouched, Back returns to the previous tab). "
          "Nothing changes on the computer."],

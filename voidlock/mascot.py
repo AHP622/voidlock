@@ -275,13 +275,19 @@ class Heatmap(AnimWidget):
         c = min((self.width() - 4) / n, (self.height() - 4) / 7)
         return max(8, c)
 
-    def mouseMoveEvent(self, e):
+    def _cell_at(self, x, y):
+        """(week, weekday) under the point, or None. In RTL the grid is drawn from the RIGHT edge of the widget (see paintEvent), so the
+        column is counted from that edge. The old code mirrored inside the grid's own width, which is only right when the grid fills
+        the whole widget; in a wide card the hover landed hundreds of pixels away from the mouse."""
         c = self._cell()
-        w = int(e.position().x() // c)
-        if self.isRightToLeft():                     # cells are drawn mirrored in RTL (paintEvent); the hit-test must match
-            w = len(self.cols) - 1 - w
-        d = int(e.position().y() // c)
-        h = (w, d) if 0 <= w < len(self.cols) and 0 <= d < 7 and self.cols[w][d] >= 0 else None
+        w = int((self.width() - x) // c) if self.isRightToLeft() else int(x // c)
+        d = int(y // c)
+        if 0 <= x <= self.width() and 0 <= w < len(self.cols) and 0 <= d < 7 and self.cols[w][d] >= 0:
+            return (w, d)
+        return None
+
+    def mouseMoveEvent(self, e):
+        h = self._cell_at(e.position().x(), e.position().y())
         if h != self._hover:
             self._hover = h
             self.update()
