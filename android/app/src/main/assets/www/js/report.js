@@ -140,7 +140,7 @@
       summary: { total: total2, active_days: active.length, period_days: days.length, avg_active: active.length ? Math.floor(total2 / active.length) : 0, avg_cal: days.length ? Math.floor(total2 / days.length) : 0,
                  best: best, tests: days.reduce(function (a, x) { return a + x.tests; }, 0), words: days.reduce(function (a, x) { return a + x.words; }, 0), streak: streak, goal_days: goalDays,
                  sessions: sessions.length, sessions_sec: sess },
-      version: opts.version || VERSION(), week_start: isFinite(ws) ? ws : 5, schedule: scheduleData(db),
+      plans: plansData(db, fromDk, toDk), version: opts.version || VERSION(), week_start: isFinite(ws) ? ws : 5, schedule: scheduleData(db),
       results: resultsData(db, toDk, lang, H), H: H
     };
   }
@@ -291,6 +291,44 @@
     return out.join('');
   }
 
+  // the day-by-day to-do lists inside the whole period asked for (future days included); only days that have tasks
+  function plansData(db, fromDk, toDk) {
+    var by = {}, keys = [];
+    db.todos.forEach(function (t) {
+      var k = String(t.date || '');
+      if (k >= fromDk && k <= toDk && String(t.text || '').trim()) { if (!by[k]) { by[k] = []; keys.push(k); } by[k].push({ text: String(t.text), done: !!t.done }); }
+    });
+    keys.sort();
+    return { days: keys.map(function (k) { var di = dinfo(k); di.tasks = by[k]; return di; }) };
+  }
+
+  // the advisor's view of the daily plans: hidden until the button at the top is pressed (same markup as the computer's report)
+  function plansHtml(R) {
+    var H = R.H, t = H.STR, days = R.plans.days, oneDay = R.start.dk === R.end.dk;
+    function fill(d, n) { return t.plans_done_of.replace('{d}', d).replace('{n}', n); }
+    function line(d, n) { return H.dg(fill(d, n)) + ' (' + H.dg((n ? Math.floor(d * 100 / n) : 0) + '%') + ')'; }
+    function counts(x) { var d = 0; x.tasks.forEach(function (k) { if (k.done) d++; }); return [d, x.tasks.length]; }
+    var out = ['<div class="card" id="plans" style="display:none">', '<h2>' + esc(t.plans_title) + '</h2>'];
+    if (!days.length) { out.push('<div class="empty">' + esc(t.plans_none) + '</div></div>\n'); return out.join(''); }
+    var td = 0, tn = 0;
+    days.forEach(function (x) { var c = counts(x); td += c[0]; tn += c[1]; });
+    if (oneDay) out.push('<div class="pbar"><span class="psum">' + esc(line(td, tn)) + '</span></div>');
+    else {
+      var opts = ['<option value="all" data-sum="' + esc(line(td, tn)) + '">' + esc(t.plans_all) + ' - ' + esc(line(td, tn)) + '</option>'];
+      days.forEach(function (x) { var c = counts(x); opts.push('<option value="' + x.dk + '" data-sum="' + esc(line(c[0], c[1])) + '">' + esc(H.fmtDate(x, true)) + ' - ' + esc(line(c[0], c[1])) + '</option>'); });
+      out.push('<div class="pbar noprint"><label>' + esc(t.plans_pick) + ': <select onchange="' + t.plans_js_pick + '">' + opts.join('') + '</select></label><span class="psum">' + esc(line(td, tn)) + '</span></div>');
+    }
+    days.forEach(function (x) {
+      var c = counts(x);
+      var items = x.tasks.map(function (k) {
+        return '<li class="' + (k.done ? 'done' : 'open') + '"><i class="ck">' + (k.done ? '&#10003;' : '') + '</i><span class="tx">' + esc(k.text) + '</span><em>' + esc(k.done ? t.plans_done : t.plans_open) + '</em></li>';
+      }).join('');
+      out.push('<div class="pday" data-d="' + x.dk + '"><div class="ph"><b>' + esc(H.fmtDate(x, true)) + '</b><span>' + esc(H.dg(fill(c[0], c[1]))) + '</span></div><ul class="pl">' + items + '</ul></div>');
+    });
+    out.push('</div>\n');
+    return out.join('');
+  }
+
   function scheduleHtml(R) {
     var sch = R.schedule, H = R.H, t = H.STR, rtl = H.fa;
     if (!sch || !sch.has) return '';
@@ -313,11 +351,14 @@
     var H = R.H, t = H.STR, lang = R.lang, rtl = lang === 'fa', s = R.summary, total = s.total, out = [], dash = '<span class="muted">' + esc(t.none) + '</span>';
     out.push('<!DOCTYPE html>\n<html lang="' + lang + '" dir="' + (rtl ? 'rtl' : 'ltr') + '">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width,initial-scale=1">\n<title>' + esc(t.title) +
       (R.name ? ' - ' + esc(R.name) : '') + '</title>\n<style>' + CSS + '</style>\n</head>\n<body>\n<div class="page">\n');
-    if (interactive) out.push('<button class="noprint" onclick="window.print()">' + esc(t.print) + '</button>\n');
+    if (interactive) {
+      out.push('<button class="noprint" onclick="window.print()">' + esc(t.print) + '</button><button class="noprint" onclick="' + t.plans_js_open + '">' + esc(t.plans_btn) + '</button>\n');
+    }
     var meta = ['<span>' + esc(t.period) + ': <b>' + esc(periodTitle(R)) + '</b></span>'];
     if (R.name) meta.unshift('<span>' + esc(t.student) + ': <b>' + esc(R.name) + '</b></span>');
     meta.push('<span>' + esc(t.generated) + ': ' + esc(H.fmtDate(dinfo(dkeyOf(R.generated)))) + '</span>');
     out.push('<div class="head"><h1>' + esc(t.title) + '</h1><div class="meta">' + meta.join('') + '</div></div>\n');
+    if (interactive) out.push(plansHtml(R));                 // (hidden until the "Daily plans" button is pressed)
     if (!R.days.length || (!total && !R.sessions.length && !R.subjects.length)) out.push('<div class="card"><div class="empty">' + esc(t.no_data) + '</div></div>\n');
     var best = s.best, stats = [
       stat(t.total, H.fmtDur(total)), stat(t.active_days, H.dg(s.active_days + ' ' + t.of_days.replace('{n}', s.period_days))), stat(t.avg_active, H.fmtDur(s.avg_active)), stat(t.avg_cal, H.fmtDur(s.avg_cal)),
@@ -363,14 +404,6 @@
       out.push('<div class="card tall"><h2>' + esc(t.monthly) + '</h2><table><thead><tr><th>' + esc(t.month) + '</th><th class="num">' + esc(t.time) + '</th><th></th><th class="num">' + esc(t.active_days) + '</th><th class="num">' + esc(t.tests_short) +
         '</th><th class="num">' + esc(t.words_short) + '</th></tr></thead><tbody>' + rws2.join('') + '</tbody></table></div>\n');
     }
-    if (R.sessions.length) {
-      var rws3 = R.sessions.map(function (x) {
-        return '<tr><td class="num">' + esc(H.fmtDate(dinfo(x.dk))) + ' · ' + H.dg(pad2(x.start.getHours()) + ':' + pad2(x.start.getMinutes())) + '</td><td>' + esc(x.subject || t.none) + '</td><td class="num">' + esc(H.fmtDur(x.planned_min * 60)) + '</td>' +
-          '<td class="num">' + esc(H.fmtDur(x.focus_sec)) + '</td><td>' + esc(H.status(x.status)) + '</td><td class="num">' + H.dg(x.blocked) + '</td></tr>';
-      });
-      out.push('<div class="card tall"><h2>' + esc(t.sessions_title) + '</h2><table><thead><tr><th>' + esc(t.when) + '</th><th>' + esc(t.subject) + '</th><th class="num">' + esc(t.planned) + '</th><th class="num">' + esc(t.focused) + '</th><th>' + esc(t.status) +
-        '</th><th class="num">' + esc(t.blocked) + '</th></tr></thead><tbody>' + rws3.join('') + '</tbody></table></div>\n');
-    }
     if (R.exams.length) out.push('<div class="card"><h2>' + esc(t.exams) + '</h2><table><tbody>' + R.exams.map(function (e) { return '<tr><td class="num">' + esc(H.fmtDate(e, true)) + '</td><td>' + esc(e.name) + '</td></tr>'; }).join('') + '</tbody></table></div>\n');
     out.push('<div class="foot">' + esc(t.app) + ' · v' + esc(R.version) + '</div>\n</div>\n</body>\n</html>\n');
     return out.join('').split('<table>').join('<div class="tw"><table>').split('</table>').join('</table></div>');
@@ -407,8 +440,6 @@
       w([t.monthly]); w([t.month, t.total_min, t.active_days, t.days, t.tests, t.words]);
       R.monthly.forEach(function (m) { w([H.monthLabel(m.key), mins(m.sec), m.active, m.days, m.tests, m.words]); });
     }
-    w([]); w([t.sessions_title]); w([t.gdate, 'HH:MM', t.subject, t.planned_min, t.focus_min, t.status, t.blocked]);
-    R.sessions.forEach(function (x) { w([x.dk, pad2(x.start.getHours()) + ':' + pad2(x.start.getMinutes()), x.subject, x.planned_min, mins(x.focus_sec), H.status(x.status), x.blocked]); });
     if (R.exams.length) { w([]); w([t.exams]); R.exams.forEach(function (e) { w([e.dk, H.jdateNumeric(e), e.name]); }); }
     var sch = R.schedule;
     if (sch && sch.has) {

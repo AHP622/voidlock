@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.69
+* HTML reports (computer and phone) have a "Daily plans" button. It opens the student's daily to-do lists for the report period, each task marked done or not done with a done/total count and percentage. A one-day report shows that day; a longer period has a day picker with "All days". CSV and PDF reports are unchanged.
+* Reports (Windows and Android; HTML, CSV and PDF) no longer contain the "Focus sessions" table. The summary tiles with the number and time of focus sessions stay.
+
 ## 1.14.68
 * Settings > Updates shows a progress bar and the percentage (with MB) while an update downloads; the bar is full when the file is ready.
 * A downloaded update is no longer installed silently. VOIDLOCK asks "Install now" or "Later"; "Later" asks again every 6 hours (a notice when the window is hidden or not in front, a dialog when you are looking at it, never during a session).

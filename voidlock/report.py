@@ -22,9 +22,14 @@ STR = {
         "sessions": "جلسه‌های تمرکز", "sessions_time": "زمان جلسه‌های تمرکز",
         "subjects": "جمع هر درس", "subject": "درس", "time": "زمان", "share": "سهم", "deleted": "حذف‌شده",
         "daily": "جدول روزانه", "monthly": "جدول ماهانه", "date": "تاریخ", "weekday": "روز", "month": "ماه", "days": "روزها",
+        "plans_btn": "برنامه‌ی روزانه", "plans_title": "برنامه‌ی روزانه‌ی دانش‌آموز", "plans_pick": "روز", "plans_all": "همه‌ی روزها",
+        "plans_done_of": "{d} از {n} انجام شد", "plans_done": "انجام شد", "plans_open": "انجام نشد",
+        "plans_none": "برای این بازه برنامه‌ای ثبت نشده است.",
+        "plans_js_open": "var p=document.getElementById('plans');p.style.display=p.style.display==='block'?'none':'block';if(p.style.display==='block'){p.scrollIntoView({behavior:'smooth'})}",
+        "plans_js_pick": "var v=this.value,P=document.getElementById('plans');Array.prototype.forEach.call(P.querySelectorAll('.pday'),function(e){e.style.display=(v==='all'||e.getAttribute('data-d')===v)?'block':'none'});P.querySelector('.psum').textContent=this.options[this.selectedIndex].getAttribute('data-sum')",
         "sessions_title": "جدول جلسه‌های تمرکز", "when": "زمان شروع", "planned": "برنامه‌ریزی‌شده", "focused": "تمرکز واقعی",
         "status": "وضعیت", "blocked": "برنامه‌ی بسته‌شده", "exams": "آزمون‌ها", "exam": "آزمون", "no_data": "در این بازه داده‌ای ثبت نشده است.",
-        "note": "زمان مطالعه = تایمر درس‌ها + زمان ثبت‌شده‌ی دستی. جلسه‌های تمرکز جدا فهرست شده‌اند و به مجموع اضافه نشده‌اند.",
+        "note": "زمان مطالعه = تایمر درس‌ها + زمان ثبت‌شده‌ی دستی. جلسه‌های تمرکز جدا شمرده می‌شوند و به مجموع اضافه نمی‌شوند.",
         "print": "چاپ", "chart_daily": "مطالعه‌ی روزانه", "chart_monthly": "مطالعه‌ی ماهانه", "chart_subjects": "سهم درس‌ها", "goal": "هدف روزانه",
         "none": "—", "h": "ساعت", "m": "دقیقه", "and": "و", "of": "از", "legend_goal": "رسیدن به هدف", "legend_below": "کمتر از هدف", "legend_exam": "روز آزمون", "goal_line": "خط چین: هدف روزانه",
  "avg_line": "میانگین روزهای مطالعه", "ma7": "میانگین ۷ روزه", "weekday_chart": "میانگین مطالعه در هر روز هفته",
@@ -50,9 +55,14 @@ STR = {
         "sessions": "Focus sessions", "sessions_time": "Focus-session time",
         "subjects": "Time per subject", "subject": "Subject", "time": "Time", "share": "Share", "deleted": "deleted",
         "daily": "Daily table", "monthly": "Monthly table", "date": "Date", "weekday": "Day", "month": "Month", "days": "Days",
+        "plans_btn": "Daily plans", "plans_title": "Daily plans", "plans_pick": "Day", "plans_all": "All days",
+        "plans_done_of": "{d} of {n} done", "plans_done": "Done", "plans_open": "Not done",
+        "plans_none": "No plans were recorded for this period.",
+        "plans_js_open": "var p=document.getElementById('plans');p.style.display=p.style.display==='block'?'none':'block';if(p.style.display==='block'){p.scrollIntoView({behavior:'smooth'})}",
+        "plans_js_pick": "var v=this.value,P=document.getElementById('plans');Array.prototype.forEach.call(P.querySelectorAll('.pday'),function(e){e.style.display=(v==='all'||e.getAttribute('data-d')===v)?'block':'none'});P.querySelector('.psum').textContent=this.options[this.selectedIndex].getAttribute('data-sum')",
         "sessions_title": "Focus sessions", "when": "Started", "planned": "Planned", "focused": "Focused",
         "status": "Status", "blocked": "Programs closed", "exams": "Exams", "exam": "Exam", "no_data": "Nothing was recorded in this period.",
-        "note": "Study time = subject timer + manually added time. Focus sessions are listed separately and are not added to the total.",
+        "note": "Study time = subject timer + manually added time. Focus sessions are counted separately and are not added to the total.",
         "print": "Print", "chart_daily": "Study per day", "chart_monthly": "Study per month", "chart_subjects": "Share of subjects", "goal": "Daily goal",
         "none": "-", "h": "h", "m": "min", "and": "", "of": "of", "legend_goal": "goal reached", "legend_below": "below goal", "legend_exam": "exam day", "goal_line": "dashed line: daily goal",
  "avg_line": "average of study days", "ma7": "7-day average", "weekday_chart": "Average study per weekday",
@@ -272,10 +282,23 @@ def collect(store, study, start, end, name="", lang="fa", goal_min=None, now=Non
             "streak": streak, "goal_days": sum(1 for x in days if goal and x["sec"] >= goal),
             "sessions": len(sessions), "sessions_sec": sum(s["focus_sec"] for s in sessions),
         },
+        "plans": plans_data(sl, start, end),
         "version": __version__, "week_start": int(store.settings.get("week_start", 5)),
         "schedule": schedule_data(store, lang) if include_schedule else None,
         "results": results_data(study, end, lang) if include_exams else None,
     }
+
+
+def plans_data(study, start, end):
+    """The day-by-day to-do lists (the PLAN box of the Study Timer) that fall inside the whole period asked for (future days
+    included, they simply show as not done). Only days that have tasks are listed."""
+    a, b = start.isoformat(), end.isoformat()
+    by = {}
+    for t in study.d.get("todos", []):
+        k = str(t.get("date", ""))
+        if a <= k <= b and str(t.get("text", "")).strip():
+            by.setdefault(k, []).append({"text": str(t["text"]), "done": bool(t.get("done"))})
+    return {"days": [{"date": date.fromisoformat(k), "tasks": by[k]} for k in sorted(by)]}
 
 
 def schedule_data(store, lang):
@@ -472,6 +495,23 @@ td.num,th.num,td.name{white-space:nowrap}
 .foot{text-align:center;color:#64748b;font-size:12px;margin-top:18px}
 svg{width:100%;height:auto;display:block}
 button.noprint{font:inherit;background:#0e7490;color:#fff;border:0;border-radius:10px;padding:8px 18px;cursor:pointer;margin:0 0 12px}
+.pbar{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;margin-bottom:10px}
+.pbar select{font:inherit;padding:6px 10px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1d2433;max-width:100%}
+.psum{font-weight:700;color:#0e5a72}
+.pday{margin:0 0 12px;border:1px solid #e3e9f3;border-radius:12px;overflow:hidden}
+.ph{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#f1f5fb;padding:8px 12px;font-size:13px}
+.ph span{color:#475569}
+.pl{list-style:none;margin:0;padding:4px 12px}
+.pl li{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #eef2f8}
+.pl li:last-child{border-bottom:0}
+.ck{flex:none;width:20px;height:20px;border-radius:6px;border:2px solid #94a3b8;display:inline-flex;align-items:center;justify-content:center;font-style:normal;font-size:13px;line-height:1;color:#fff}
+li.done .ck{background:#15803d;border-color:#15803d}
+.tx{flex:1;min-width:0;overflow-wrap:anywhere}
+li.done .tx{color:#64748b;text-decoration:line-through}
+.pl em{flex:none;font-style:normal;font-size:12px;font-weight:700;padding:1px 9px;border-radius:999px}
+li.done em{background:#dcfce7;color:#15803d}
+li.open em{background:#fee2e2;color:#b91c1c}
+button.noprint+button.noprint{margin-inline-start:8px}
 @page{size:A4;margin:12mm}
 @media print{
  .tw{overflow:visible}
@@ -480,7 +520,7 @@ button.noprint{font:inherit;background:#0e7490;color:#fff;border:0;border-radius
  body{background:#fff}
  .page{max-width:none;padding:0}
  .noprint{display:none!important}
- .card,.head,.stat{break-inside:avoid}
+ .card,.head,.stat,.pday{break-inside:avoid}
  .card.tall{break-inside:auto}
  h2{break-after:avoid}
  table{page-break-inside:auto}
@@ -620,6 +660,44 @@ def _schedule_html(R):
             f'<div class="grid" style="margin-top:10px">{"".join(stats)}</div></div>\n')
 
 
+def _plans_html(R):
+    """The advisor's view of the daily plans: hidden until the button at the top is pressed. One day in the report: that day's
+    list. A longer period: a day picker with 'all days'. Each task shows whether it was done."""
+    lang, t = R["lang"], STR[R["lang"]]
+    days = R["plans"]["days"]
+    one_day = R["start"] == R["end"]
+
+    def line(d, n):
+        return _digits(t["plans_done_of"].format(d=d, n=n), lang) + " (" + _digits(f"{(d * 100 // n) if n else 0}%", lang) + ")"
+
+    def counts(day):
+        return sum(1 for x in day["tasks"] if x["done"]), len(day["tasks"])
+
+    out = ['<div class="card" id="plans" style="display:none">', f'<h2>{esc(t["plans_title"])}</h2>']
+    if not days:
+        out.append(f'<div class="empty">{esc(t["plans_none"])}</div></div>\n')
+        return "".join(out)
+    td = sum(counts(x)[0] for x in days)
+    tn = sum(counts(x)[1] for x in days)
+    if one_day:
+        out.append(f'<div class="pbar"><span class="psum">{esc(line(td, tn))}</span></div>')
+    else:
+        opts = [f'<option value="all" data-sum="{esc(line(td, tn))}">{esc(t["plans_all"])} - {esc(line(td, tn))}</option>']
+        for x in days:
+            d, n = counts(x)
+            opts.append(f'<option value="{x["date"].isoformat()}" data-sum="{esc(line(d, n))}">{esc(fmt_date(x["date"], lang, weekday=True))} - {esc(line(d, n))}</option>')
+        out.append(f'<div class="pbar noprint"><label>{esc(t["plans_pick"])}: <select onchange="{t["plans_js_pick"]}">' + "".join(opts) + '</select></label>'
+                   f'<span class="psum">{esc(line(td, tn))}</span></div>')
+    for x in days:
+        d, n = counts(x)
+        items = "".join(f'<li class="{"done" if k["done"] else "open"}"><i class="ck">{"&#10003;" if k["done"] else ""}</i><span class="tx">{esc(k["text"])}</span>'
+                        f'<em>{esc(t["plans_done"] if k["done"] else t["plans_open"])}</em></li>' for k in x["tasks"])
+        out.append(f'<div class="pday" data-d="{x["date"].isoformat()}"><div class="ph"><b>{esc(fmt_date(x["date"], lang, weekday=True))}</b>'
+                   f'<span>{esc(_digits(t["plans_done_of"].format(d=d, n=n), lang))}</span></div><ul class="pl">{items}</ul></div>')
+    out.append("</div>\n")
+    return "".join(out)
+
+
 def render_html(R, interactive=True):
     lang = R["lang"]
     t = STR[lang]
@@ -630,13 +708,16 @@ def render_html(R, interactive=True):
            f'<meta name="viewport" content="width=device-width,initial-scale=1">\n<title>{esc(t["title"])}'
            f'{" - " + esc(R["name"]) if R["name"] else ""}</title>\n<style>{_CSS}</style>\n</head>\n<body>\n<div class="page">\n']
     if interactive:
-        out.append(f'<button class="noprint" onclick="window.print()">{esc(t["print"])}</button>\n')
+        out.append(f'<button class="noprint" onclick="window.print()">{esc(t["print"])}</button>'
+                   f'<button class="noprint" onclick="{t["plans_js_open"]}">{esc(t["plans_btn"])}</button>\n')
     # header
     meta = [f'{esc(t["period"])}: <b>{esc(period_title(R))}</b>']
     if R["name"]:
         meta.insert(0, f'{esc(t["student"])}: <b>{esc(R["name"])}</b>')
     meta.append(f'{esc(t["generated"])}: {esc(fmt_date(R["generated"].date(), lang))}')
     out.append(f'<div class="head"><h1>{esc(t["title"])}</h1><div class="meta">' + "".join(f"<span>{m}</span>" for m in meta) + "</div></div>\n")
+    if interactive:
+        out.append(_plans_html(R))                 # (hidden until the "Daily plans" button is pressed)
 
     if not R["days"] or (not total and not R["sessions"] and not R["subjects"]):
         out.append(f'<div class="card"><div class="empty">{esc(t["no_data"])}</div></div>\n')
@@ -710,17 +791,6 @@ def render_html(R, interactive=True):
         out.append(f'<div class="card tall"><h2>{esc(t["monthly"])}</h2><table><thead><tr><th>{esc(t["month"])}</th><th class="num">{esc(t["time"])}</th><th></th>'
                    f'<th class="num">{esc(t["active_days"])}</th><th class="num">{esc(t["tests_short"])}</th><th class="num">{esc(t["words_short"])}</th></tr></thead><tbody>'
                    + "".join(rows) + "</tbody></table></div>\n")
-    # sessions
-    if R["sessions"]:
-        rows = []
-        for x in R["sessions"]:
-            rows.append(f'<tr><td class="num">{esc(fmt_date(x["start"].date(), lang))} · {_digits(x["start"].strftime("%H:%M"), lang)}</td>'
-                        f'<td>{esc(x["subject"] or t["none"])}</td><td class="num">{esc(fmt_dur(x["planned_min"] * 60, lang))}</td>'
-                        f'<td class="num">{esc(fmt_dur(x["focus_sec"], lang))}</td><td>{esc(_status(x["status"], lang))}</td>'
-                        f'<td class="num">{_digits(x["blocked"], lang)}</td></tr>')
-        out.append(f'<div class="card tall"><h2>{esc(t["sessions_title"])}</h2><table><thead><tr><th>{esc(t["when"])}</th><th>{esc(t["subject"])}</th>'
-                   f'<th class="num">{esc(t["planned"])}</th><th class="num">{esc(t["focused"])}</th><th>{esc(t["status"])}</th>'
-                   f'<th class="num">{esc(t["blocked"])}</th></tr></thead><tbody>' + "".join(rows) + "</tbody></table></div>\n")
     # exams
     if R["exams"]:
         out.append(f'<div class="card"><h2>{esc(t["exams"])}</h2><table><tbody>'
@@ -780,12 +850,6 @@ def render_csv(R):
         w.writerow([t["month"], t["total_min"], t["active_days"], t["days"], t["tests"], t["words"]])
         for m in R["monthly"]:
             w.writerow([month_label(m["key"], lang), mins(m["sec"]), m["active"], m["days"], m["tests"], m["words"]])
-    w.writerow([])
-    w.writerow([t["sessions_title"]])
-    w.writerow([t["gdate"], "HH:MM", t["subject"], t["planned_min"], t["focus_min"], t["status"], t["blocked"]])
-    for x in R["sessions"]:
-        w.writerow([x["start"].date().isoformat(), x["start"].strftime("%H:%M"), x["subject"], x["planned_min"], mins(x["focus_sec"]),
-                    _status(x["status"], lang), x["blocked"]])
     if R["exams"]:
         w.writerow([])
         w.writerow([t["exams"]])
@@ -1046,13 +1110,6 @@ def render_pdf_html(R):
                 for i, m in enumerate(R["monthly"])]
         parts.append(h(t["monthly"]))
         parts.append(table(rows, head=[t["month"], t["time"], t["active_days"], t["tests_short"], t["words_short"]]))
-    # sessions
-    if R["sessions"]:
-        rows = [row([f'{esc(fmt_date(x["start"].date(), lang))} {_digits(x["start"].strftime("%H:%M"), lang)}', esc(x["subject"] or t["none"]),
-                     esc(fmt_dur(x["planned_min"] * 60, lang)), esc(fmt_dur(x["focus_sec"], lang)), esc(_status(x["status"], lang)),
-                     _digits(x["blocked"], lang)], bg="#fafcff" if i % 2 else None) for i, x in enumerate(R["sessions"])]
-        parts.append(h(t["sessions_title"]))
-        parts.append(table(rows, head=[t["when"], t["subject"], t["planned"], t["focused"], t["status"], t["blocked"]]))
     if R["exams"]:
         parts.append(h(t["exams"]))
         parts.append(table([row([esc(fmt_date(e["date"], lang, weekday=True)), esc(e["name"])]) for e in R["exams"]]))

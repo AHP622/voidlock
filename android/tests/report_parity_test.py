@@ -54,6 +54,13 @@ def make_data():
         sl.set_exam_result(e["id"], taraz=6000 + i * 150 + rnd.randint(-80, 80), rank=9000 - i * 700 + rnd.randint(-200, 200),
                            rank_region=420 - i * 40 + rnd.randint(-15, 15), subjects=rows, note="note %d" % i if i % 2 else "")
     sl.add_exam("Future exam", today + timedelta(days=5))
+    # daily plans: several days, some done, one with a "tricky" text, a future day, and one outside every tested range
+    for off, items in ((1, ["2730 تا 2750 اسید و باز", "1460 تا 1520 مثلثات"]), (2, ["Math <b>ch.3</b> & \"quotes\""]), (5, ["a", "b", "c", "d"]),
+                       (9, ["old one"]), (-1, ["tomorrow's task"]), (120, ["very old"])):
+        for k, txt in enumerate(items):
+            t = sl.add_todo(today - timedelta(days=off), txt)
+            if (off + k) % 2 == 0:
+                sl.toggle_todo(t["id"])
     st.classes = S.clean_classes([{"id": f"k{i}", "name": n, "day": d, "time": tm, "minutes": mn, "remind": 15, "place": pl, "enabled": en}
                                   for i, (n, d, tm, mn, pl, en) in enumerate([("Calculus", 0, "17:00", 90, "Room 3", True), ("Physics", 0, "09:30", 60, "", True),
                                                                               ("Chem", 2, "16:15", 120, "Online", True), ("Bio", 5, "08:00", 45, "Hall B", True),
@@ -149,6 +156,8 @@ def compare(lang, frm_off, to_off, name):
 if __name__ == "__main__":
     for lang in ("en", "fa"):
         compare(lang, 13, 0, "Sara")
+        compare(lang, 1, 1, "OneDay")      # a single day: that day's plan is shown without a picker
+        compare(lang, 3, 3, "")            # a single day without any plan
         compare(lang, 39, 0, "")
         compare(lang, 100, 3, "Ali")       # longer than 62 days: monthly table
     print("\n%d failed" % len(FAILS) if FAILS else "\nall passed")

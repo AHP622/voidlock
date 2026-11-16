@@ -68,7 +68,7 @@
   "no_results": "No results recorded yet.",
   "no_schedule": "Nothing is scheduled yet.",
   "none": "-",
-  "note": "Study time = subject timer + manually added time. Focus sessions are listed separately and are not added to the total.",
+  "note": "Study time = subject timer + manually added time. Focus sessions are counted separately and are not added to the total.",
   "note_l": "Note",
   "of": "of",
   "of_days": "of {n} days",
@@ -79,6 +79,16 @@
   "place": "Place / teacher",
   "planned": "Planned",
   "planned_min": "Planned (min)",
+  "plans_all": "All days",
+  "plans_btn": "Daily plans",
+  "plans_done": "Done",
+  "plans_done_of": "{d} of {n} done",
+  "plans_js_open": "var p=document.getElementById('plans');p.style.display=p.style.display==='block'?'none':'block';if(p.style.display==='block'){p.scrollIntoView({behavior:'smooth'})}",
+  "plans_js_pick": "var v=this.value,P=document.getElementById('plans');Array.prototype.forEach.call(P.querySelectorAll('.pday'),function(e){e.style.display=(v==='all'||e.getAttribute('data-d')===v)?'block':'none'});P.querySelector('.psum').textContent=this.options[this.selectedIndex].getAttribute('data-sum')",
+  "plans_none": "No plans were recorded for this period.",
+  "plans_open": "Not done",
+  "plans_pick": "Day",
+  "plans_title": "Daily plans",
   "print": "Print",
   "rank": "Overall rank",
   "rank_region": "Region rank",
@@ -189,7 +199,7 @@
   "no_results": "هنوز نتیجه‌ای ثبت نشده است.",
   "no_schedule": "هنوز برنامه‌ای ثبت نشده است.",
   "none": "—",
-  "note": "زمان مطالعه = تایمر درس‌ها + زمان ثبت‌شده‌ی دستی. جلسه‌های تمرکز جدا فهرست شده‌اند و به مجموع اضافه نشده‌اند.",
+  "note": "زمان مطالعه = تایمر درس‌ها + زمان ثبت‌شده‌ی دستی. جلسه‌های تمرکز جدا شمرده می‌شوند و به مجموع اضافه نمی‌شوند.",
   "note_l": "یادداشت",
   "of": "از",
   "of_days": "از {n} روز",
@@ -200,6 +210,16 @@
   "place": "مکان / معلم",
   "planned": "برنامه‌ریزی‌شده",
   "planned_min": "برنامه‌ریزی (دقیقه)",
+  "plans_all": "همه‌ی روزها",
+  "plans_btn": "برنامه‌ی روزانه",
+  "plans_done": "انجام شد",
+  "plans_done_of": "{d} از {n} انجام شد",
+  "plans_js_open": "var p=document.getElementById('plans');p.style.display=p.style.display==='block'?'none':'block';if(p.style.display==='block'){p.scrollIntoView({behavior:'smooth'})}",
+  "plans_js_pick": "var v=this.value,P=document.getElementById('plans');Array.prototype.forEach.call(P.querySelectorAll('.pday'),function(e){e.style.display=(v==='all'||e.getAttribute('data-d')===v)?'block':'none'});P.querySelector('.psum').textContent=this.options[this.selectedIndex].getAttribute('data-sum')",
+  "plans_none": "برای این بازه برنامه‌ای ثبت نشده است.",
+  "plans_open": "انجام نشد",
+  "plans_pick": "روز",
+  "plans_title": "برنامه‌ی روزانه‌ی دانش‌آموز",
   "print": "چاپ",
   "rank": "رتبه کل",
   "rank_region": "رتبه در منطقه",
@@ -245,6 +265,6 @@
   "words_short": "لغت"
  }
 };
-  var CSS = "\n.tw{overflow-x:auto}\n.sched{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}\n.sd{background:#f8fafc;border:1px solid #e3e9f3;border-radius:10px;padding:8px;min-height:70px}\n.sd h4{margin:0 0 6px;font-size:12.5px;color:#334155;text-align:center}\n.it{border-radius:8px;padding:5px 7px;margin-bottom:5px;font-size:12px;line-height:1.5;border-inline-start:4px solid}\n.it.class{background:#f3e8ff;border-color:#7e22ce}\n.it.session{background:#e0f2fe;border-color:#0369a1}\n.it b{display:block;font-size:12.5px}\n.it span{color:#64748b}\n.chart{margin-top:4px}\n.two{display:flex;flex-wrap:wrap;gap:12px}\n.two>div{flex:1 1 320px;min-width:0}\n.pos{color:#15803d;font-weight:700}.neg{color:#b91c1c;font-weight:700}\n.ins{margin:8px 0 0;padding:0;list-style:none;font-size:13px}\n.ins li{padding:3px 0}\n@media (max-width:720px){.sched{grid-template-columns:repeat(2,minmax(0,1fr))}}\n*{box-sizing:border-box}\nhtml{-webkit-print-color-adjust:exact;print-color-adjust:exact}\nbody{margin:0;background:#eef1f6;color:#1d2433;font:14px/1.7 \"Vazirmatn\",\"Vazir\",\"Segoe UI\",Tahoma,\"Noto Sans Arabic\",system-ui,sans-serif}\n.page{max-width:900px;margin:0 auto;padding:24px 16px 40px}\n.head{background:linear-gradient(135deg,#0e7490,#6d28d9);color:#fff;border-radius:16px;padding:22px 26px;margin-bottom:16px}\n.head h1{margin:0 0 6px;font-size:26px}\n.head .meta{display:flex;flex-wrap:wrap;gap:6px 22px;opacity:.95;font-size:14px}\n.card{background:#fff;border:1px solid #dde3ee;border-radius:14px;padding:18px 20px;margin-bottom:14px}\n.card h2{margin:0 0 12px;font-size:17px;color:#0e5a72}\n.grid{display:flex;flex-wrap:wrap;gap:10px}\n.stat{flex:1 1 170px;background:#f5f8fc;border:1px solid #e3e9f3;border-radius:12px;padding:10px 14px;min-width:150px;max-width:100%;overflow-wrap:anywhere}\n.stat b{display:block;font-size:19px;color:#0f172a}\n.stat span{font-size:12px;color:#5b6577}\ntable{width:100%;border-collapse:collapse;font-size:13.5px}\nth,td{padding:7px 9px;border-bottom:1px solid #e6ebf3;text-align:start;vertical-align:middle}\nth{background:#f1f5fb;color:#334155;font-weight:700;font-size:12.5px}\ntbody tr:nth-child(even){background:#fafcff}\ntd.num,th.num,td.name{white-space:nowrap}\n.dot{display:inline-block;width:11px;height:11px;border-radius:50%;margin-inline-end:7px;vertical-align:middle}\n.bar{background:#e8edf5;border-radius:6px;height:10px;min-width:70px;overflow:hidden}\n.bar i{display:block;height:100%;border-radius:6px}\n.muted{color:#64748b}\n.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12px;color:#475569;margin-top:6px}\n.exam{color:#b45309;font-weight:700}\n.note{font-size:12.5px;color:#64748b;margin:8px 2px}\n.empty{padding:22px;text-align:center;color:#64748b}\n.foot{text-align:center;color:#64748b;font-size:12px;margin-top:18px}\nsvg{width:100%;height:auto;display:block}\nbutton.noprint{font:inherit;background:#0e7490;color:#fff;border:0;border-radius:10px;padding:8px 18px;cursor:pointer;margin:0 0 12px}\n@page{size:A4;margin:12mm}\n@media print{\n .tw{overflow:visible}\n .sched{grid-template-columns:repeat(7,minmax(0,1fr))}\n .it{font-size:10.5px}\n body{background:#fff}\n .page{max-width:none;padding:0}\n .noprint{display:none!important}\n .card,.head,.stat{break-inside:avoid}\n .card.tall{break-inside:auto}\n h2{break-after:avoid}\n table{page-break-inside:auto}\n tr{break-inside:avoid}\n thead{display:table-header-group}\n}\n";
+  var CSS = "\n.tw{overflow-x:auto}\n.sched{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}\n.sd{background:#f8fafc;border:1px solid #e3e9f3;border-radius:10px;padding:8px;min-height:70px}\n.sd h4{margin:0 0 6px;font-size:12.5px;color:#334155;text-align:center}\n.it{border-radius:8px;padding:5px 7px;margin-bottom:5px;font-size:12px;line-height:1.5;border-inline-start:4px solid}\n.it.class{background:#f3e8ff;border-color:#7e22ce}\n.it.session{background:#e0f2fe;border-color:#0369a1}\n.it b{display:block;font-size:12.5px}\n.it span{color:#64748b}\n.chart{margin-top:4px}\n.two{display:flex;flex-wrap:wrap;gap:12px}\n.two>div{flex:1 1 320px;min-width:0}\n.pos{color:#15803d;font-weight:700}.neg{color:#b91c1c;font-weight:700}\n.ins{margin:8px 0 0;padding:0;list-style:none;font-size:13px}\n.ins li{padding:3px 0}\n@media (max-width:720px){.sched{grid-template-columns:repeat(2,minmax(0,1fr))}}\n*{box-sizing:border-box}\nhtml{-webkit-print-color-adjust:exact;print-color-adjust:exact}\nbody{margin:0;background:#eef1f6;color:#1d2433;font:14px/1.7 \"Vazirmatn\",\"Vazir\",\"Segoe UI\",Tahoma,\"Noto Sans Arabic\",system-ui,sans-serif}\n.page{max-width:900px;margin:0 auto;padding:24px 16px 40px}\n.head{background:linear-gradient(135deg,#0e7490,#6d28d9);color:#fff;border-radius:16px;padding:22px 26px;margin-bottom:16px}\n.head h1{margin:0 0 6px;font-size:26px}\n.head .meta{display:flex;flex-wrap:wrap;gap:6px 22px;opacity:.95;font-size:14px}\n.card{background:#fff;border:1px solid #dde3ee;border-radius:14px;padding:18px 20px;margin-bottom:14px}\n.card h2{margin:0 0 12px;font-size:17px;color:#0e5a72}\n.grid{display:flex;flex-wrap:wrap;gap:10px}\n.stat{flex:1 1 170px;background:#f5f8fc;border:1px solid #e3e9f3;border-radius:12px;padding:10px 14px;min-width:150px;max-width:100%;overflow-wrap:anywhere}\n.stat b{display:block;font-size:19px;color:#0f172a}\n.stat span{font-size:12px;color:#5b6577}\ntable{width:100%;border-collapse:collapse;font-size:13.5px}\nth,td{padding:7px 9px;border-bottom:1px solid #e6ebf3;text-align:start;vertical-align:middle}\nth{background:#f1f5fb;color:#334155;font-weight:700;font-size:12.5px}\ntbody tr:nth-child(even){background:#fafcff}\ntd.num,th.num,td.name{white-space:nowrap}\n.dot{display:inline-block;width:11px;height:11px;border-radius:50%;margin-inline-end:7px;vertical-align:middle}\n.bar{background:#e8edf5;border-radius:6px;height:10px;min-width:70px;overflow:hidden}\n.bar i{display:block;height:100%;border-radius:6px}\n.muted{color:#64748b}\n.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12px;color:#475569;margin-top:6px}\n.exam{color:#b45309;font-weight:700}\n.note{font-size:12.5px;color:#64748b;margin:8px 2px}\n.empty{padding:22px;text-align:center;color:#64748b}\n.foot{text-align:center;color:#64748b;font-size:12px;margin-top:18px}\nsvg{width:100%;height:auto;display:block}\nbutton.noprint{font:inherit;background:#0e7490;color:#fff;border:0;border-radius:10px;padding:8px 18px;cursor:pointer;margin:0 0 12px}\n.pbar{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;margin-bottom:10px}\n.pbar select{font:inherit;padding:6px 10px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1d2433;max-width:100%}\n.psum{font-weight:700;color:#0e5a72}\n.pday{margin:0 0 12px;border:1px solid #e3e9f3;border-radius:12px;overflow:hidden}\n.ph{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#f1f5fb;padding:8px 12px;font-size:13px}\n.ph span{color:#475569}\n.pl{list-style:none;margin:0;padding:4px 12px}\n.pl li{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #eef2f8}\n.pl li:last-child{border-bottom:0}\n.ck{flex:none;width:20px;height:20px;border-radius:6px;border:2px solid #94a3b8;display:inline-flex;align-items:center;justify-content:center;font-style:normal;font-size:13px;line-height:1;color:#fff}\nli.done .ck{background:#15803d;border-color:#15803d}\n.tx{flex:1;min-width:0;overflow-wrap:anywhere}\nli.done .tx{color:#64748b;text-decoration:line-through}\n.pl em{flex:none;font-style:normal;font-size:12px;font-weight:700;padding:1px 9px;border-radius:999px}\nli.done em{background:#dcfce7;color:#15803d}\nli.open em{background:#fee2e2;color:#b91c1c}\nbutton.noprint+button.noprint{margin-inline-start:8px}\n@page{size:A4;margin:12mm}\n@media print{\n .tw{overflow:visible}\n .sched{grid-template-columns:repeat(7,minmax(0,1fr))}\n .it{font-size:10.5px}\n body{background:#fff}\n .page{max-width:none;padding:0}\n .noprint{display:none!important}\n .card,.head,.stat,.pday{break-inside:avoid}\n .card.tall{break-inside:auto}\n h2{break-after:avoid}\n table{page-break-inside:auto}\n tr{break-inside:avoid}\n thead{display:table-header-group}\n}\n";
   if (typeof module !== 'undefined' && module.exports) module.exports = { STR: STR, CSS: CSS }; else { root.REPORT_STR = STR; root.REPORT_CSS = CSS; }
 })(typeof window !== 'undefined' ? window : globalThis);

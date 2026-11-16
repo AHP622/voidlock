@@ -111,6 +111,9 @@ TABS = {
 }
 
 NEWS = {
+    "1.14.69": (
+        ["The HTML report has a new \"Daily plans\" button: it shows the student's daily to-do lists for the report period, marked done or not done. For a longer period you can pick one day or all days. The sessions table was removed from reports."],
+        ["گزارش HTML دکمه‌ی تازه‌ی «برنامه‌ی روزانه» دارد: برنامه‌های روزانه‌ی دانش‌آموز در بازه‌ی گزارش را با وضعیت انجام‌شده یا انجام‌نشده نشان می‌دهد. برای بازه‌ی چندروزه می‌شود یک روز یا همه‌ی روزها را انتخاب کرد. جدول جلسه‌های تمرکز هم از گزارش‌ها حذف شد."]),
     "1.14.68": (
         ["Updates now show a download progress bar with the percentage, then ask whether to install now or later. If you choose later, VOIDLOCK reminds you every 6 hours."],
         ["به‌روزرسانی‌ها حالا نوار پیشرفت و درصد دانلود نشان می‌دهند و بعد می‌پرسند همین حالا نصب شود یا بعداً. اگر «بعداً» را بزنید، هر ۶ ساعت یادآوری می‌شود."]),
