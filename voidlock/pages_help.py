@@ -203,7 +203,7 @@ class HelpPage(Page):
         for tab, title, text in topics:
             card = Card(pad=16)
             align = (Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter) if i18n.is_fa() else (Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-            card.lay.addWidget(label(f"{i18n.tr(tab)}  ·  {title}", 13, color=T.cyan, align=align))
+            card.lay.addWidget(label(f"{i18n.tr(tab)}  ·  {title}", 13, color=T.cyan))
             card.lay.addWidget(label(text, 12, color=T.text2, wrap=True, align=align))
             self.list_box.addWidget(card)
 

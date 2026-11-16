@@ -35,7 +35,7 @@ def setting_row(title, desc, control):
     r.setSpacing(16)
     col = QVBoxLayout()
     col.setSpacing(2)
-    col.addWidget(label(title, 14, QFont.Weight.DemiBold, align=text_align))
+    col.addWidget(label(title, 14, QFont.Weight.DemiBold))
     if desc:
         col.addWidget(label(desc, 12, color=T.text3, wrap=True, align=text_align))
     r.addLayout(col, 1)
@@ -49,7 +49,7 @@ def setting_block(title, desc, control):
     col.setSpacing(6)
     fa = i18n.is_fa()
     text_align = (Qt.AlignmentFlag.AlignRight if fa else Qt.AlignmentFlag.AlignLeft) | Qt.AlignmentFlag.AlignVCenter
-    col.addWidget(label(title, 14, QFont.Weight.DemiBold, align=text_align))
+    col.addWidget(label(title, 14, QFont.Weight.DemiBold))
     if desc:
         col.addWidget(label(desc, 12, color=T.text3, wrap=True, align=text_align))
     col.addWidget(control)

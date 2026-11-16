@@ -111,6 +111,9 @@ TABS = {
 }
 
 NEWS = {
+    "1.14.65": (
+        ["Restored the Settings and Help layout alignment; Persian descriptions remain right-aligned."],
+        ["چیدمان قبلی تنظیمات و راهنما بازگردانده شد و توضیحات فارسی همچنان راست‌چین هستند."]),
     "1.14.64": (
         ["Fixed a startup error in Help and added live download percentage for Windows updates."],
         ["خطای اجرا در بخش راهنما برطرف شد و درصد دانلود زنده برای آپدیت ویندوز اضافه شد."]),

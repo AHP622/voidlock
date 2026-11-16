@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.14.65
+* Restored the existing Settings and Help layout alignment while keeping Persian descriptions right-aligned.
+
 ## 1.14.64
 * Fixed startup failure in the Help page caused by a missing Qt import.
 * Windows fallback downloads now report live percentage progress while curl is downloading.
