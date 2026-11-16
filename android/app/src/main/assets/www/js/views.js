@@ -60,7 +60,7 @@
 
   // ------------------------------------------------------------------ Today
   Views.today = function (host, App) {
-    var db = App.db, today = Core.dkey(), goal = (db.settings.goal_min || 120) * 60;
+    var db = App.db, today = Core.dkey(), goal = (db.settings.goal_min || 600) * 60;
     var sel = db.settings.last_subject; if (!Core.subject(db, sel)) sel = db.subjects[0] ? db.subjects[0].id : null;
     var running = db.active && Core.subject(db, db.active.subject) ? db.active : null;
     if (running) sel = running.subject;
@@ -141,7 +141,7 @@
     }
     // a month label only on the first bar of a month (the first bar always carries one)
     var W = Math.min(host.clientWidth || 340, 720) - 34;
-    var ch = Charts.studyChart({ t: t, fa: fa, days: days, goalSec: (db.settings.goal_min || 120) * 60, width: Math.max(300, W) });
+    var ch = Charts.studyChart({ t: t, fa: fa, days: days, goalSec: (db.settings.goal_min || 600) * 60, width: Math.max(300, W) });
     host.appendChild(card(t('daily_study'), [h('div', { html: ch.svg }), h('div', { class: 'row', style: { flexWrap: 'wrap', gap: '8px 14px', marginTop: '8px' } }, ch.legend.map(function (l) {
       return h('span', { class: 'row small muted', style: { gap: '6px' } }, l.dashed ? h('span', { style: { width: '16px', borderTop: '2px dashed ' + l.color, display: 'inline-block' } }) : subjectDot(l.color), l.name); }).concat(examDaysAny(days) ? [h('span', { class: 'row small muted', style: { gap: '6px' } },
       h('span', { style: { color: 'var(--amber)' } }, '▼'), t('exam_day'))] : []))]));

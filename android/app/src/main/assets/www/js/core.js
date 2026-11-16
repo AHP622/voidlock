@@ -76,7 +76,7 @@
     return {
       v: 1, subjects: [], entries: [], tests: {}, words: {}, gone: {}, exams: [], exam_subjects: [], todos: [], sessions: [], classes: [],
       active: null,
-      settings: { lang: 'fa', goal_min: 120 },
+      settings: { lang: 'fa', goal_min: 600, goal_min_default_v: 2 },
       sync: { device_id: uid(), device_name: '', dg: {}, mt: {}, tomb: {}, peers: {}, laptop: null }
     };
   }
@@ -86,7 +86,11 @@
     ['tests', 'words', 'gone'].forEach(function (k) { if (!isObj(db[k])) db[k] = {}; });
     if (!isObj(db.settings)) db.settings = {};
     if (!db.settings.lang) db.settings.lang = 'fa';
-    if (typeof db.settings.goal_min !== 'number') db.settings.goal_min = 120;
+    if (typeof db.settings.goal_min !== 'number' || !isFinite(db.settings.goal_min) || db.settings.goal_min < 10 || db.settings.goal_min > 1440) db.settings.goal_min = 600;
+    // 120 minutes was the app's old default. Move that legacy value once; other stored goals stay as chosen.
+    // This version marks later manual choices so a chosen 120-minute goal also stays put.
+    if ((db.settings.goal_min_default_v || 0) < 2 && db.settings.goal_min === 120 && db.settings.goal_min_user_set !== true) db.settings.goal_min = 600;
+    db.settings.goal_min_default_v = 2;
     if (!isObj(db.sync)) db.sync = {};
     var s = db.sync;
     if (!s.device_id) s.device_id = uid();

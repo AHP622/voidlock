@@ -180,8 +180,8 @@
   }
 
   function settingsCard(App) {
-    var db = App.db, goal = h('input', { type: 'text', inputmode: 'numeric', value: I18n.digits(db.settings.goal_min || 120), style: { textAlign: 'center' } });
-    goal.addEventListener('change', function () { var v = Views.parseNum(goal.value); if (v && v >= 10 && v <= 1440) { db.settings.goal_min = Math.round(v); App.save(); App.render(); } else goal.value = I18n.digits(db.settings.goal_min); });
+    var db = App.db, goal = h('input', { type: 'text', inputmode: 'numeric', value: I18n.digits(db.settings.goal_min || 600), style: { textAlign: 'center' } });
+    goal.addEventListener('change', function () { var v = Views.parseNum(goal.value); if (v && v >= 10 && v <= 1440) { db.settings.goal_min = Math.round(v); db.settings.goal_min_user_set = true; App.save(); App.render(); } else goal.value = I18n.digits(db.settings.goal_min); });
     return card(t('settings'), [
       h('label', { class: 'field', style: { marginTop: 0 } }, t('language')),
       seg([['fa', t('persian')], ['en', t('english')]], db.settings.lang, function (l) { db.settings.lang = l; I18n.setLang(l); App.save(); App.render(); }),

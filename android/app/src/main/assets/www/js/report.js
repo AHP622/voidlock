@@ -69,7 +69,7 @@
   function collect(db, fromDk, toDk, opts) {
     opts = opts || {};
     var lang = opts.lang || (root.I18n ? root.I18n.lang : 'en'), H = helpers(lang), today = dkeyOf(new Date()), effEnd = toDk < today ? toDk : today;
-    var goalMin = opts.goalMin !== undefined && opts.goalMin !== null ? opts.goalMin : (db.settings.goal_min || 120);
+    var goalMin = opts.goalMin !== undefined && opts.goalMin !== null ? opts.goalMin : (db.settings.goal_min || 600);
     var known = {}; db.subjects.forEach(function (s) { known[s.id] = s; });
     var subj = {}, days = [];
     function ghostOf(sid) { return CoreRef.subjectOrGhost(db, sid) || {}; }

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.14.62
+* Android launcher icons now follow the selected app palette (Ocean, Paper, Dark or Midnight), including Android themed monochrome icons.
+* Changed the untouched daily study goal from 2 hours to 10 hours (600 minutes); old 120-minute defaults migrate once, and other saved goals are preserved. Clarified the units in Settings.
+* Fixed the Android Exams add button jumping during page transitions by placing it outside the animated scroll view.
+* Windows updater now falls back to the Windows curl TLS stack when Python's TLS connection to GitHub's asset CDN is reset; the final host, file size and SHA-256 are still checked before install.
+
 ## 1.14.61
 * Redesigned the Android interface with a calmer study-focused layout, clearer timer hierarchy, simpler cards and navigation, and coordinated light and dark themes.
 * Updated Android system bars to match the new default light palette.

@@ -18,7 +18,7 @@
   };
   App.saveNow = function () { clearTimeout(saveTimer); saveTimer = null; try { lastRaw = JSON.stringify(App.db); localStorage.setItem(KEY, lastRaw); } catch (e) { UI.toast('Storage error: ' + e, 'error'); } };
   App.save = function () { if (saveTimer) return; saveTimer = setTimeout(App.saveNow, 250); };
-  App.applyTheme = function () { document.documentElement.setAttribute('data-theme', App.db.settings.theme || 'ocean'); };
+  App.applyTheme = function () { var theme = App.db.settings.theme || 'ocean'; document.documentElement.setAttribute('data-theme', theme); Native.setLauncherTheme(theme); };
 
   // ------------------------------------------------------------------ changes and rendering
   var planTimer = null;
@@ -58,11 +58,12 @@
     if (sig !== lastTitle) { lastTitle = sig; title.innerHTML = ''; title.appendChild(document.createTextNode(txt)); title.appendChild(h('small', null, sub)); }
   }
   App.render = function (o) {
-    o = o || {}; var t0 = now(), host = document.getElementById('view'), sc = host.scrollTop;
+    o = o || {}; var t0 = now(), host = document.getElementById('view'), floating = document.getElementById('floating'), sc = host.scrollTop;
     App.perf.renders++;
-    host.innerHTML = ''; App.tick = null;
+    if (floating) floating.innerHTML = ''; host.innerHTML = ''; App.tick = null;
     try { Views[App.view](host, App); }
     catch (e) { host.appendChild(h('section', { class: 'card' }, h('b', null, 'Error'), h('pre', { style: { whiteSpace: 'pre-wrap', fontSize: '12px', direction: 'ltr' } }, String(e && e.stack || e)))); if (root.console) console.error(e); }
+    var fab = host.querySelector('.fab'); if (fab && floating) floating.appendChild(fab);
     if (root.Intro) { try { Intro.attachTip(host, App); } catch (e) { if (root.console) console.error(e); } }
     host.scrollTop = o.scrollTo !== undefined ? o.scrollTo : sc;
     if (root.Motion) {

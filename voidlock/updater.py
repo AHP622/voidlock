@@ -11,6 +11,7 @@ import os
 import re
 import shutil
 import sys
+import subprocess
 import threading
 import time
 import urllib.error
@@ -122,6 +123,50 @@ def _sha256_file(path):
     return h.hexdigest()
 
 
+def _curl_fetch(url, part, expected, progress, timeout):
+    """Windows fallback for release CDNs that reset Python/OpenSSL TLS handshakes.
+
+    Resolve and validate the final HTTPS host before downloading. Windows' bundled curl uses the
+    native TLS stack on supported systems, which can reach the same GitHub asset when urllib cannot.
+    """
+    curl = shutil.which("curl.exe") or shutil.which("curl")
+    if not curl:
+        raise OSError("curl.exe is unavailable")
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    resolve = subprocess.run(
+        [curl, "--silent", "--show-error", "--location", "--head", "--proto-redir", "=https",
+         "--max-redirs", "8", "--max-time", str(timeout), "--output", os.devnull,
+         "--write-out", "%{url_effective}", "--", _safe_url(url)],
+        capture_output=True, text=True, creationflags=flags,
+    )
+    if resolve.returncode:
+        raise OSError("curl could not reach the update host: " + (resolve.stderr.strip() or str(resolve.returncode)))
+    final_url = _safe_url(resolve.stdout.strip())
+    temp = part.with_name(part.name + ".curl")
+    _fail_cleanup(temp)
+    try:
+        result = subprocess.run(
+            [curl, "--fail", "--silent", "--show-error", "--proto", "=https", "--max-time", str(timeout),
+             "--retry", "2", "--retry-all-errors", "--retry-delay", "1", "--continue-at", "-",
+             "--max-filesize", str(MAX_DOWNLOAD), "--user-agent", HEADERS["User-Agent"],
+             "--output", str(temp), "--", final_url],
+            capture_output=True, text=True, creationflags=flags,
+        )
+        if result.returncode:
+            raise OSError("curl download failed: " + (result.stderr.strip() or str(result.returncode)))
+        got = temp.stat().st_size
+        if got > MAX_DOWNLOAD:
+            raise UpdateError("The update file is unreasonably large - update cancelled.")
+        if expected and got != expected:
+            raise OSError(f"curl downloaded {got} of {expected} bytes")
+        _retry(lambda: os.replace(temp, part))
+        if progress and expected:
+            progress(min(99, int(got * 100 / expected)))
+        return got
+    finally:
+        _fail_cleanup(temp)
+
+
 def _fetch(url, part, expected, progress, timeout):
     """Append to `part` (resuming after a cut connection when the server allows it). Returns the bytes now on disk."""
     have = part.stat().st_size if part.exists() else 0
@@ -131,25 +176,35 @@ def _fetch(url, part, expected, progress, timeout):
     headers = dict(HEADERS)
     if have:
         headers["Range"] = f"bytes={have}-"
-    with urlopen(urllib.request.Request(url, headers=headers), timeout=timeout) as r:
-        status = getattr(r, "status", None) or r.getcode()
-        if have and status != 206:               # the server ignored the range: start again from zero
-            have = 0
-        total = expected or (int(r.headers.get("Content-Length", 0) or 0) + have)
-        if total > MAX_DOWNLOAD:
-            raise UpdateError("The update file is unreasonably large - update cancelled.")
-        with open(part, "ab" if have else "wb") as f:
-            while True:
-                chunk = r.read(1 << 16)
-                if not chunk:
-                    break
-                have += len(chunk)
-                if have > MAX_DOWNLOAD:
-                    raise UpdateError("The update file is unreasonably large - update cancelled.")
-                f.write(chunk)
-                if progress and total:
-                    progress(min(99, int(have * 100 / total)))
-    return have
+    try:
+        with urlopen(urllib.request.Request(url, headers=headers), timeout=timeout) as r:
+            status = getattr(r, "status", None) or r.getcode()
+            if have and status != 206:               # the server ignored the range: start again from zero
+                have = 0
+            total = expected or (int(r.headers.get("Content-Length", 0) or 0) + have)
+            if total > MAX_DOWNLOAD:
+                raise UpdateError("The update file is unreasonably large - update cancelled.")
+            with open(part, "ab" if have else "wb") as f:
+                while True:
+                    chunk = r.read(1 << 16)
+                    if not chunk:
+                        break
+                    have += len(chunk)
+                    if have > MAX_DOWNLOAD:
+                        raise UpdateError("The update file is unreasonably large - update cancelled.")
+                    f.write(chunk)
+                    if progress and total:
+                        progress(min(99, int(have * 100 / total)))
+        return have
+    except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as python_error:
+        if os.name != "nt":
+            raise
+        try:
+            return _curl_fetch(url, part, expected, progress, timeout)
+        except UpdateError:
+            raise
+        except (OSError, ValueError, urllib.error.URLError) as curl_error:
+            raise urllib.error.URLError(f"{python_error}; Windows curl fallback: {curl_error}") from curl_error
 
 
 def _read_checksum(url, timeout, tries=5):

@@ -105,6 +105,35 @@ class Bridge(private val ctx: Context, private val web: WebView, private val act
         }
     }
 
+    /** Switch the launcher alias to the icon palette selected inside the app. */
+    @JavascriptInterface
+    fun setLauncherTheme(theme: String) {
+        if (activity == null) return
+        val aliases = linkedMapOf(
+            "ocean" to "app.voidlock.LauncherOcean",
+            "paper" to "app.voidlock.LauncherPaper",
+            "void" to "app.voidlock.LauncherVoid",
+            "midnight" to "app.voidlock.LauncherMidnight"
+        )
+        val selected = aliases[theme] ?: aliases.getValue("ocean")
+        main.post {
+            try {
+                val prefs = ctx.getSharedPreferences("launcher_icon", Context.MODE_PRIVATE)
+                if (prefs.getString("active", null) == selected) return@post
+                val pm = ctx.packageManager
+                pm.setComponentEnabledSetting(android.content.ComponentName(ctx, selected),
+                    android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                    android.content.pm.PackageManager.DONT_KILL_APP)
+                aliases.values.filter { it != selected }.forEach { alias ->
+                    pm.setComponentEnabledSetting(android.content.ComponentName(ctx, alias),
+                        android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                        android.content.pm.PackageManager.DONT_KILL_APP)
+                }
+                prefs.edit().putString("active", selected).apply()
+            } catch (_: Exception) { }
+        }
+    }
+
     /** Private IPv4 addresses of Wi-Fi / hotspot interfaces: the page scans these networks for the computer. */
     @JavascriptInterface
     fun localIps(): String {

@@ -111,6 +111,11 @@ TABS = {
 }
 
 NEWS = {
+    "1.14.62": (
+        ["Android app icons now match the selected theme. The default daily goal is 10 hours, and a small Exams button jump is fixed.",
+         "Windows updates can fall back to the Windows download client if Python's connection to GitHub's file host is reset."],
+        ["آیکون اندروید حالا با تم انتخابی برنامه هماهنگ می‌شود. هدف روزانه‌ی پیش‌فرض ۱۰ ساعت شد و پرش دکمه‌ی افزودن آزمون برطرف شد.",
+         "اگر اتصال پایتون به میزبان فایل‌های گیت‌هاب قطع شود، به‌روزرسانی ویندوز از دانلودکننده‌ی خود ویندوز کمک می‌گیرد."]),
     "1.14.61": (
         ["Android: a complete visual refresh with a calmer study-focused layout, clearer timer, simpler cards and navigation, and coordinated themes."],
         ["اندروید: بازطراحی کامل رابط با چیدمانی آرام‌تر برای مطالعه، تایمر خواناتر، کارت‌ها و ناوبری ساده‌تر و تم‌های هماهنگ."]),

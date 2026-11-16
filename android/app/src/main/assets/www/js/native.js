@@ -43,6 +43,7 @@
     http: http, json: json,
     deviceName: function () { try { if (A && A.deviceName) return String(A.deviceName()); } catch (e) {} return 'Phone'; },
     appVersion: function () { try { if (A && A.appVersion) return String(A.appVersion()); } catch (e) {} return (root.VOIDLOCK_CONFIG || {}).version || '0'; },
+    setLauncherTheme: function (theme) { try { if (A && A.setLauncherTheme) A.setLauncherTheme(String(theme || 'ocean')); } catch (e) {} },
     localIps: function () { try { if (A && A.localIps) return JSON.parse(A.localIps()); } catch (e) {} return []; },
     keepAwake: function (on) { try { if (A && A.keepAwake) A.keepAwake(!!on); } catch (e) {} },
     setBackgroundSync: function (on) { try { if (A && A.setBackgroundSync) A.setBackgroundSync(!!on); } catch (e) {} },
