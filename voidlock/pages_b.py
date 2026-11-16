@@ -1120,13 +1120,24 @@ class SettingsPage(Page):
         cu.lay.addLayout(setting_row("Check automatically", "Looks for a new version when VOIDLOCK starts and every few "
                                      "hours while it is open, and tells you when one is out.", self.up_check))
         cu.lay.addWidget(Divider())
-        cu.lay.addLayout(setting_row("Install automatically", "Downloads, verifies (SHA-256) and installs updates when "
-                                     "no session is running, then restarts.", self.up_auto))
+        cu.lay.addLayout(setting_row("Download automatically", "Downloads and verifies (SHA-256) new versions in the background. "
+                                     "When one is ready, VOIDLOCK asks whether to install it now or later, and reminds you "
+                                     "every 6 hours.", self.up_auto))
         self.up_status = label("", 12, color=T.text2, wrap=True)
         cu.lay.addWidget(self.up_status)
+        self.up_prog = QWidget()                         # download progress: a bar that fills up, plus the percentage
+        pr = QHBoxLayout(self.up_prog)
+        pr.setContentsMargins(0, 2, 0, 2)
+        pr.setSpacing(12)
+        self.up_bar = ProgressBar(height=8)
+        self.up_pct = label("", 12, QFont.Weight.DemiBold, T.text2)
+        pr.addWidget(self.up_bar, 1, Qt.AlignmentFlag.AlignVCenter)
+        pr.addWidget(self.up_pct, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.up_prog.setVisible(False)
+        cu.lay.addWidget(self.up_prog)
         ur = QHBoxLayout()
         self.b_up_check = Button("Check now", "soft", "refresh", height=38)
-        self.b_up_install = Button("Install update", "primary", "download", height=38)
+        self.b_up_install = Button("Download update", "primary", "download", height=38)
         ur.addWidget(self.b_up_check)
         ur.addWidget(self.b_up_install)
         ur.addStretch(1)
@@ -1312,9 +1323,7 @@ class SettingsPage(Page):
         self.b_adm_off.setVisible(flag)
         self._exam_label()
         from . import __version__
-        info = self.ctx.update_info
-        self.up_status.setText(f"Current version {__version__}" + (f"  ·  {self.ctx.update_status}" if self.ctx.update_status else ""))
-        self.b_up_install.setVisible(bool(info))
+        self.refresh_update_box()
         bks = s.list_backups()
         last = i18n.fmt_when(datetime.fromtimestamp(bks[0]["mtime"])) if bks else "-"
         self.bk_info.setText(f"{len(bks)} automatic backups · last: {last}\nYour data lives outside the program folder, "
@@ -1327,6 +1336,33 @@ class SettingsPage(Page):
 
     def _check_now(self):
         self.ctx.check_updates(manual=True)
+
+    def refresh_update_box(self):
+        """The Updates card: status line, download progress bar + percentage, and the Download / Install button.
+        Cheap enough to be called for every new percentage while a file is downloading."""
+        from . import __version__
+        c = self.ctx
+        info = c.update_info
+        self.up_status.setText(f"Current version {__version__}" + (f"  ·  {c.update_status}" if c.update_status else ""))
+        downloading, ready = bool(c._downloading), bool(c.update_ready)
+        self.up_prog.setVisible(downloading or ready)
+        pct = 100 if ready else (c.update_progress or 0)
+        self.up_bar.set_value(pct / 100)
+        fa = i18n.is_fa()
+        size = int((info or {}).get("size") or 0)
+        mb = lambda n: i18n.digits(f"{n / 1048576:.1f}".replace(".", "٫" if fa else "."))
+        head = i18n.digits(str(pct)) + ("٪" if fa else "%")
+        if ready:
+            tail = i18n.tr("Download complete")
+        elif size:
+            tail = (f"{mb(size * pct / 100)} از {mb(size)} مگابایت" if fa else f"{mb(size * pct / 100)} of {mb(size)} MB")
+        else:
+            tail = ""
+        self.up_pct.setText(head + (f"  ·  {tail}" if tail else ""))
+        self.b_up_install.setVisible(bool(info))
+        self.b_up_install.setText("Downloading…" if downloading else ("Install update" if ready else "Download update"))
+        self.b_up_install.setEnabled(not downloading)
+        self.b_up_check.setEnabled(not downloading)
 
     def _theme(self, i):
         code = THEME_ORDER[i]

@@ -320,6 +320,7 @@ class UpdateWorker(QThread):
     checked = Signal(object)
     progress = Signal(int)
     downloaded = Signal(str)
+    verified = Signal(object)            # path of a complete earlier download, or None
     failed = Signal(str)
 
     def __init__(self, mode, repo=None, info=None, dest=None):
@@ -330,6 +331,9 @@ class UpdateWorker(QThread):
         try:
             if self.mode == "check":
                 self.checked.emit(updater.check(self.repo))
+            elif self.mode == "verify":
+                found = updater.verify_ready(self.info, self.dest)
+                self.verified.emit(str(found) if found else None)
             else:
                 self.downloaded.emit(str(updater.download(self.info, self.dest, self.progress.emit)))
         except updater.UpdateError as e:

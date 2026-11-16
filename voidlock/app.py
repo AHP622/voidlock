@@ -3,6 +3,7 @@
 import ctypes
 import sys
 import time
+from pathlib import Path
 from datetime import date, datetime, timedelta
 
 from PySide6.QtCore import QPoint, QPointF, QRectF, QSize, Qt, QTimer
@@ -444,6 +445,11 @@ class MainWindow(QMainWindow):
         self._touring = self._intro_busy = self._tip_open = False
         self._first = True
         self.update_info, self._upd_worker, self.update_status = None, None, ""
+        self._dl_worker, self._retired = None, []          # (finished threads are kept: see _launch)
+        self.update_progress = None                        # 0-100 while downloading, 100 when a verified file waits
+        self.update_ready = None                           # path of the verified download waiting to be installed
+        self._downloading = self._asking_update = self._ask_on_show = self._upd_applying = False
+        self._auto_retries = 0
 
         self.root = Root()
         self.setCentralWidget(self.root)
@@ -512,6 +518,9 @@ class MainWindow(QMainWindow):
         self._upd_timer = QTimer(self)                # then again every few hours while the program stays open
         self._upd_timer.timeout.connect(lambda: self.check_updates(False))
         self._upd_timer.start(30 * 60 * 1000)
+        self._ready_timer = QTimer(self)              # "an update is downloaded: install now or later?" reminders
+        self._ready_timer.timeout.connect(self._update_tick)
+        self._ready_timer.start(60 * 1000)
         QTimer.singleShot(9000, self._check_admin_task)
         if (self.store.active_locks() or self.store.windows or self.store.settings.get("play_tracking", True)
                 or any(c.get("enabled", True) for c in self.store.classes)):
@@ -641,6 +650,7 @@ class MainWindow(QMainWindow):
         self.showNormal()
         self.raise_()
         self.activateWindow()
+        QTimer.singleShot(900, self._update_tick)       # a downloaded update may be waiting for an answer
 
     def quit_app(self):
         self._quitting = True
@@ -709,6 +719,8 @@ class MainWindow(QMainWindow):
         return any(isinstance(c, Modal) and c.isVisible() for c in self.root.children())
 
     def _intro_start(self):
+        if self._asking_update:                          # the update question is open: show the news / tour a bit later
+            return QTimer.singleShot(5000, self._intro_start)
         s = self.store.settings
         try:
             if intro.is_new_user(self.store, self.study):
@@ -1213,12 +1225,28 @@ class MainWindow(QMainWindow):
                 pass
 
     # ------------------------------------------------------------ updates (GitHub releases)
+    # Flow: check -> (auto) download in the background with a live percentage -> verified file waits on disk ->
+    # the person is asked "install now or later?" -> "later" asks again every UPDATE_REMIND seconds.
+    UPDATE_EVERY = 3 * 3600          # automatic check interval while the program is open
+    UPDATE_REMIND = 6 * 3600         # a downloaded update that was not installed is offered again this often
+
     def _set_update_status(self, text):
         self.update_status = text
-        if self.current_key() == "settings":
-            self.pages["settings"].refresh()
+        pg = self.pages.get("settings")
+        if pg is not None and self.current_key() == "settings":
+            pg.refresh_update_box()
 
-    UPDATE_EVERY = 3 * 3600          # automatic check interval while the program is open
+    def _launch(self, attr, worker):
+        """Start a worker thread. The previous one is kept alive (never dropped while it may still be finishing,
+        which would abort the whole program with 'QThread: Destroyed while thread is still running')."""
+        old = getattr(self, attr, None)
+        if old is not None:
+            self._retired.append(old)
+        setattr(self, attr, worker)
+        worker.start()
+
+    def _upd_dir(self):
+        return self.store.home / "updates"
 
     def check_updates(self, manual=False, startup=False):
         s = self.store.settings
@@ -1229,15 +1257,14 @@ class MainWindow(QMainWindow):
             if age < (10 * 60 if startup else self.UPDATE_EVERY):
                 return                              # (at start-up: unless we looked very recently)
             if self.update_info and not startup:
-                return                              # already known; the install / reminder logic handles it
+                return                              # already known; the download / reminder logic handles it
         if self._upd_worker and self._upd_worker.isRunning():
             return
         w = UpdateWorker("check")
         w.checked.connect(lambda i: self._on_checked(i, manual))
         w.failed.connect(lambda m: self._on_update_failed(m, manual))
-        self._upd_worker = w
         self._set_update_status("Checking for updates…")
-        w.start()
+        self._launch("_upd_worker", w)
 
     def _on_checked(self, info, manual):
         s = self.store.settings
@@ -1249,63 +1276,167 @@ class MainWindow(QMainWindow):
             return
         self.update_info = info
         if info is None:
+            self.update_ready = None
             self._set_update_status("You are up to date.")
             if manual:
                 self.toast("You are up to date.", "success")
             return
-        self._set_update_status(f"Version {info['version']} is available.")
+        if self.update_ready and s.get("update_ready_tag") != info["tag"]:
+            self.update_ready = None                     # an even newer release came out: the waiting file is outdated
+            self.update_progress = None
+        if self.update_ready or self._downloading:
+            return self._set_update_status(f"Version {info['version']} is available.")
+        if s.get("update_ready_tag") == info["tag"]:    # a finished download from an earlier run may still be on disk
+            w = UpdateWorker("verify", info=info, dest=str(self._upd_dir()))
+            w.verified.connect(lambda p, i=info: self._on_verified(p, i, manual))
+            return self._launch("_dl_worker", w)
+        self._offer_update(info, manual)
+
+    def _on_verified(self, path, info, manual):
+        if path:
+            return self._mark_ready(path, info, ask_now=False)
+        self.store.settings.pop("update_ready_tag", None)
+        self.store.save_settings()
+        self._offer_update(info, manual)
+
+    def _offer_update(self, info, manual):
+        s = self.store.settings
+        v = info["version"]
+        self._set_update_status(f"Version {v} is available.")
         auto = bool(s.get("update_auto_install")) and not manual
         if s.get("update_notified") != info["tag"]:     # tell the person once per new version
             s["update_notified"] = info["tag"]
             self.store.save_settings()
             self.notify_popup("UPDATE AVAILABLE",
-                              (f"Version {info['version']} is out. Installing it now - VOIDLOCK will restart."
-                               if auto else f"Version {info['version']} is out. Open Settings to install it."))
+                              (f"Version {v} is out. Downloading it now - you will be asked before it is installed."
+                               if auto else f"Version {v} is out. Open Settings to download it."))
             self.play_sound("done")
         if auto:
-            self.install_update(auto=True)
+            self.download_update(auto=True)
         elif manual:
-            self.toast(f"Update {info['version']} is available. Open Settings to install it.", "info")
+            self.toast(f"Update {v} is available. Open Settings to download it.", "info")
 
     def _on_update_failed(self, msg, manual):
+        self._upd_applying = False
         self._set_update_status(msg)
         if manual:
             self.toast(msg, "error")
 
-    def install_update(self, auto=False):
+    # ---- downloading
+    def download_update(self, auto=False):
         info = self.update_info
-        if not info:
+        if not info or self.update_ready or self._downloading:
             return
         if not getattr(sys, "frozen", False):
             return self._set_update_status("Updates install into the built VoidLock.exe. When running from source, use git pull.")
-        if self.session.active or self.root.findChildren(Modal):
-            if auto:
-                QTimer.singleShot(60_000, lambda: self.install_update(True))   # try again later, never mid-session
-            else:
-                self.toast("Finish the current session first.", "warn")
-            return
-        prev = getattr(self, "_upd_worker", None)
-        if prev is not None and prev.isRunning():                  # already downloading (auto-update or an earlier click)
-            if not auto:
-                self.toast("The update is already downloading.", "info")
-            return
-        if not auto and not self.confirm("Install update?", f"Version {info['version']} will be downloaded and installed. "
-                                         f"VOIDLOCK restarts; sessions and locks keep going.", "Install", False, "download"):
-            return
-        w = UpdateWorker("download", info=info, dest=str(self.store.home / "updates"))
-        w.progress.connect(lambda p: self._set_update_status(f"Downloading update… {p}%"))
-        w.downloaded.connect(self._apply_downloaded)
-        w.failed.connect(lambda m: self._on_update_failed(m, True))
-        self._upd_worker = w
+        self._downloading = True
+        self.update_progress = 0
+        w = UpdateWorker("download", info=info, dest=str(self._upd_dir()))
+        w.progress.connect(self._on_update_progress)
+        w.downloaded.connect(lambda path, i=info: self._mark_ready(path, i, ask_now=True))
+        w.failed.connect(lambda m: self._on_download_failed(m, auto))
         self._set_update_status("Downloading update…")
-        w.start()
+        self._launch("_dl_worker", w)
+
+    def _on_update_progress(self, p):
+        if not self._downloading or p == self.update_progress:
+            return                                       # the worker reports every chunk; only a new percentage matters
+        self.update_progress = p
+        self._set_update_status("Verifying update…" if p >= 99 else f"Downloading update… {p}%")
+
+    def _on_download_failed(self, msg, auto):
+        self._downloading = False
+        self.update_progress = None
+        self._on_update_failed(msg, True)
+        if auto and self._auto_retries < 3:              # a flaky connection / VPN: try again later without being asked
+            self._auto_retries += 1
+            QTimer.singleShot(30 * 60 * 1000, lambda: self.download_update(auto=True))
+
+    def _mark_ready(self, path, info, ask_now):
+        """A verified VoidLock.exe is waiting in the updates folder."""
+        s = self.store.settings
+        self._downloading = False
+        self.update_ready = str(path)
+        self.update_progress = 100
+        s["update_ready_tag"] = info["tag"]
+        s["update_ready_version"] = info["version"]
+        if ask_now:
+            s["update_remind_at"] = 0
+        self.store.save_settings()
+        self._set_update_status(f"Version {info['version']} is downloaded and ready to install.")
+        self._update_tick()
+
+    # ---- asking: install now or later
+    def _update_tick(self):
+        """Once a minute: if a downloaded update is waiting and its reminder is due, ask - but only when the person is
+        really looking at the program, never during a session, and never on top of another dialog."""
+        if not self.update_ready or self._asking_update or self._upd_applying:
+            return
+        if self.session.active or self.root.findChildren(Modal) or self._touring or self._intro_busy:
+            return
+        s = self.store.settings
+        due = time.time() >= float(s.get("update_remind_at", 0) or 0)
+        looking = self.isVisible() and not self.isMinimized() and self.isActiveWindow()
+        if looking and (due or self._ask_on_show):
+            self._ask_install()
+        elif due and not looking:
+            s["update_remind_at"] = time.time() + self.UPDATE_REMIND
+            self.store.save_settings()
+            self._ask_on_show = True                     # ask as soon as the window is in front again
+            v = s.get("update_ready_version", "")
+            self.notify_popup("UPDATE READY", f"Version {v} is downloaded and ready to install. "
+                                              f"Open VOIDLOCK to install it now or later.")
+
+    def _ask_install(self):
+        s = self.store.settings
+        v = s.get("update_ready_version", "")
+        self._asking_update = True
+        try:
+            m = self.new_modal().build(
+                "Update ready",
+                f"Version {v} is downloaded and verified. Install it now? VOIDLOCK restarts; sessions and locks keep going.\n"
+                f"Choose Later and VOIDLOCK asks again in 6 hours.",
+                None, "Install now", "Later", False, icon="download")
+            ok = m.exec_modal()
+        finally:
+            self._asking_update = False
+        self._ask_on_show = False
+        if ok:
+            return self._apply_ready()
+        s["update_remind_at"] = time.time() + self.UPDATE_REMIND
+        self.store.save_settings()
+        self.toast("Okay. I will remind you again in 6 hours.", "info")
+
+    def install_update(self, auto=False):
+        """The Settings button: downloads when nothing is downloaded yet, otherwise asks the same question."""
+        if self.update_ready:
+            return self._ask_install()
+        if self._downloading:
+            return self.toast("The update is already downloading.", "info")
+        self.download_update(auto=False)
+
+    def _apply_ready(self):
+        path = self.update_ready
+        if self.session.active:
+            return self.toast("Finish the current session first.", "warn")
+        if not path or not Path(path).is_file():
+            self.update_ready = None
+            self.update_progress = None
+            self.store.settings.pop("update_ready_tag", None)
+            self.store.save_settings()
+            return self._set_update_status("The downloaded update is no longer there. Download it again.")
+        self._upd_applying = True
+        self._apply_downloaded(path)
 
     def _apply_downloaded(self, path):
+        s = self.store.settings
         try:
             updater.apply(path)
         except updater.UpdateError as e:
             return self._on_update_failed(str(e), True)
-        self.store.settings["update_last_tag"] = self.update_info["tag"]
+        s["update_last_tag"] = (self.update_info or {}).get("tag") or s.get("update_ready_tag", "")
+        for k in ("update_ready_tag", "update_ready_version", "update_remind_at"):
+            s.pop(k, None)
         self.store.save_settings()
         if not (self.session.active or self.store.active_locks()):
             self.guard.stop()          # nothing enforced right now: let the new guard code take over

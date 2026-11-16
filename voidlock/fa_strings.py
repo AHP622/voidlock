@@ -424,6 +424,26 @@ FA.update({
     "{x} is starting now": "{x} همین حالا شروع می‌شود",
     "SESSION STARTING": "شروع جلسه", "{x} · {num} min starts now.": "{x} · {num} دقیقه همین حالا شروع می‌شود.",
     "{x} · {num} min was due {num2} minutes ago. Start it now?": "{x} · {num} دقیقه، {num2} دقیقه پیش موعدش بود. الان شروع شود؟",
+    # updates: download progress and "install now or later?"
+    "Download automatically": "دانلود خودکار",
+    "Downloads and verifies (SHA-256) new versions in the background. When one is ready, VOIDLOCK asks whether to install it now or later, and reminds you every 6 hours.":
+        "نسخه‌ی جدید را پس‌زمینه دانلود و با SHA-256 تأیید می‌کند. وقتی آماده شد، VOIDLOCK می‌پرسد همین حالا نصب شود یا بعداً و هر ۶ ساعت دوباره یادآوری می‌کند.",
+    "Download update": "دانلود به‌روزرسانی", "Downloading…": "در حال دانلود…",
+    "Verifying update…": "در حال بررسی صحت فایل…", "Download complete": "دانلود کامل شد",
+    "Version {x} is downloaded and ready to install.": "نسخه‌ی {x} دانلود شد و آماده‌ی نصب است.",
+    "Update ready": "به‌روزرسانی آماده است", "UPDATE READY": "به‌روزرسانی آماده است",
+    "Version {x} is downloaded and verified. Install it now? VOIDLOCK restarts; sessions and locks keep going.":
+        "نسخه‌ی {x} دانلود و تأیید شد. همین حالا نصب شود؟ VOIDLOCK دوباره راه‌اندازی می‌شود؛ جلسه‌ها و قفل‌ها ادامه می‌یابند.",
+    "Choose Later and VOIDLOCK asks again in 6 hours.": "اگر «بعداً» را بزنید، ۶ ساعت دیگر دوباره می‌پرسد.",
+    "Install now": "همین حالا نصب کن", "Later": "بعداً",
+    "Okay. I will remind you again in 6 hours.": "باشه، ۶ ساعت دیگر دوباره یادآوری می‌کنم.",
+    "Version {x} is downloaded and ready to install. Open VOIDLOCK to install it now or later.":
+        "نسخه‌ی {x} دانلود شده و آماده‌ی نصب است. VOIDLOCK را باز کنید تا همین حالا یا بعداً نصبش کنید.",
+    "Version {x} is out. Downloading it now - you will be asked before it is installed.":
+        "نسخه‌ی {x} منتشر شد. همین حالا دانلود می‌شود و پیش از نصب از شما اجازه می‌گیرد.",
+    "Version {x} is out. Open Settings to download it.": "نسخه‌ی {x} منتشر شد. برای دانلود، تنظیمات را باز کنید.",
+    "Update {x} is available. Open Settings to download it.": "به‌روزرسانی {x} در دسترس است. برای دانلود، تنظیمات را باز کنید.",
+    "The downloaded update is no longer there. Download it again.": "فایل دانلودشده دیگر وجود ندارد. دوباره دانلود کنید.",
     # updates
     "UPDATE AVAILABLE": "به‌روزرسانی موجود است",
     "Version {x} is out. Installing it now - VOIDLOCK will restart.": "نسخه‌ی {x} منتشر شد. همین حالا نصب می‌شود و VOIDLOCK دوباره راه می‌افتد.",

@@ -303,6 +303,28 @@ def _download_locked(info, dest_dir, progress, timeout, attempts, want, expected
     return final
 
 
+def verify_ready(info, dest_dir):
+    """A download that an earlier run finished and nobody installed yet. Returns its path only when it is complete and
+    matches the release's SHA-256 (so a restart of the program does not download the same file again), else None."""
+    path = Path(dest_dir) / ASSET
+    try:
+        if not path.is_file():
+            return None
+        if info.get("size") and path.stat().st_size != int(info["size"]):
+            return None
+        want = (info.get("sha") or "").lower()
+        if not want and info.get("sha_url"):
+            want = _read_checksum(info["sha_url"], 10, tries=1)
+        if not re.fullmatch(r"[0-9a-f]{64}", want or ""):
+            return None
+        with open(path, "rb") as f:
+            if f.read(2) != b"MZ":
+                return None
+        return path if _sha256_file(path) == want else None
+    except (OSError, UpdateError):
+        return None
+
+
 def clean_stale(dest_dir):
     """Half-downloaded files of earlier runs (the name changes when the old one could not be removed)."""
     try:

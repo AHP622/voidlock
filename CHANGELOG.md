@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.14.68
+* Settings > Updates shows a progress bar and the percentage (with MB) while an update downloads; the bar is full when the file is ready.
+* A downloaded update is no longer installed silently. VOIDLOCK asks "Install now" or "Later"; "Later" asks again every 6 hours (a notice when the window is hidden or not in front, a dialog when you are looking at it, never during a session).
+* "Install automatically" is now "Download automatically": the file is downloaded and SHA-256 verified in the background, installing always needs your answer.
+* A finished download is kept and re-checked after a restart instead of being downloaded again; a failed automatic download is retried up to 3 times (every 30 min).
+
 ## 1.14.67
 * Fixed sidebar tabs staying highlighted after the mouse moved quickly over them: a new hover animation now cancels the previous one, only one tab can look hovered, and a short guard releases a tab whose `leaveEvent` was skipped.
 * Reduced the gap between the VOIDLOCK logo and the first tab.

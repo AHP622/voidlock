@@ -111,6 +111,9 @@ TABS = {
 }
 
 NEWS = {
+    "1.14.68": (
+        ["Updates now show a download progress bar with the percentage, then ask whether to install now or later. If you choose later, VOIDLOCK reminds you every 6 hours."],
+        ["به‌روزرسانی‌ها حالا نوار پیشرفت و درصد دانلود نشان می‌دهند و بعد می‌پرسند همین حالا نصب شود یا بعداً. اگر «بعداً» را بزنید، هر ۶ ساعت یادآوری می‌شود."]),
     "1.14.67": (
         ["Sidebar tabs no longer stay highlighted after a fast mouse sweep, the gap under the logo is smaller, and the collapse arrow now follows the language."],
         ["تب‌های سایدبار بعد از حرکت سریع ماوس دیگر روشن نمی‌مانند، فاصله‌ی زیر لوگو کمتر شد و فلش جمع‌کردن سایدبار با زبان فارسی هماهنگ شد."]),
