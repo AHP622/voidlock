@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.61
+* Redesigned the Android interface with a calmer study-focused layout, clearer timer hierarchy, simpler cards and navigation, and coordinated light and dark themes.
+* Updated Android system bars to match the new default light palette.
+
 ## 1.14.6
 * Fixed: study calendar (`Heatmap`, `voidlock/mascot.py`): in right-to-left layout the hit-test mirrored the column inside the grid's own width,
   but the grid is drawn from the widget's right edge. In a card wider than the grid the highlighted day and its tooltip were hundreds of

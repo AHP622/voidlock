@@ -111,6 +111,9 @@ TABS = {
 }
 
 NEWS = {
+    "1.14.61": (
+        ["Android: a complete visual refresh with a calmer study-focused layout, clearer timer, simpler cards and navigation, and coordinated themes."],
+        ["اندروید: بازطراحی کامل رابط با چیدمانی آرام‌تر برای مطالعه، تایمر خواناتر، کارت‌ها و ناوبری ساده‌تر و تم‌های هماهنگ."]),
     "1.14.6": (
         ["Fixed: in the study calendar the highlighted day and its tooltip were far away from the mouse (hundreds of pixels to the right "
          "in the wide card). The day under the pointer is now the one that lights up."],
