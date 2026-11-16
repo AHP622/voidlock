@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.14.66
+* Fixed Persian Settings descriptions and Help text rendering left-aligned: the window is already right-to-left, and an explicit `AlignRight` is mirrored by Qt in RTL, so it ended up on the left. Labels now use the default (direction-aware) alignment, and the Help search box no longer overrides it.
+
 ## 1.14.65
 * Restored the existing Settings and Help layout alignment while keeping Persian descriptions right-aligned.
 

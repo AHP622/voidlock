@@ -111,6 +111,9 @@ TABS = {
 }
 
 NEWS = {
+    "1.14.66": (
+        ["Fixed Persian text in Settings and Help appearing left-aligned; descriptions and help text are right-aligned again."],
+        ["متن فارسی در تنظیمات و راهنما که چپ‌چین نمایش داده می‌شد درست شد؛ توضیحات و متن راهنما دوباره راست‌چین هستند."]),
     "1.14.65": (
         ["Restored the Settings and Help layout alignment; Persian descriptions remain right-aligned."],
         ["چیدمان قبلی تنظیمات و راهنما بازگردانده شد و توضیحات فارسی همچنان راست‌چین هستند."]),
