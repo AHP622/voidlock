@@ -747,8 +747,25 @@ def test_report():
     ok("&lt;b&gt;" in h and "<b>رضایی" not in h, "names are escaped (no HTML injection)")
     ok("۱۰ ساعت" in h or "۱۱ ساعت" in h, "Persian digits and units")
     ok("@media print" in h and "@page" in h and "thead{display:table-header-group}" in h, "printable: print CSS, repeated table headers")
-    for heading in ("خلاصه", "جمع هر درس", "جدول روزانه", "جدول جلسه‌های تمرکز"):
+    for heading in ("خلاصه", "جمع هر درس", "جدول روزانه"):
         ok(heading in h, f"section '{heading}' is present")
+    ok("جدول جلسه‌های تمرکز" not in h and "جدول جلسه‌های تمرکز" not in report.render_csv(R) and "جدول جلسه‌های تمرکز" not in report.render_pdf_html(R),
+       "the focus sessions table is no longer in any report (HTML, CSV, PDF)")
+    # daily plans: only in the HTML, hidden until the button is pressed, done / not done, picker only for a longer period
+    ok('id="plans"' in h and 'style="display:none"' in h and "برنامه‌ی روزانه" in h and "<select" not in h and "انجام شد" not in h.split('id="plans"')[1].split("خلاصه")[0],
+       "no plans recorded: the HTML has the button and an empty hidden panel")
+    t1 = sl.add_todo(today - timedelta(days=1), "حل <b>تست</b> & مرور"); t2 = sl.add_todo(today - timedelta(days=1), "دومی"); sl.toggle_todo(t1["id"])
+    sl.add_todo(today - timedelta(days=4), "قدیمی"); sl.add_todo(today - timedelta(days=60), "بیرون از بازه")
+    Rp = report.collect(st, sl, a, b, "", "fa", goal_min=60)
+    hp, cp, pp = report.render_html(Rp), report.render_csv(Rp), report.render_pdf_html(Rp)
+    ok(hp.count('<li class="') == 3 and hp.count('<li class="done"') == 1 and hp.count('<li class="open"') == 2, "plans inside the period are listed with their state (the one outside is not)")
+    ok("&lt;b&gt;تست&lt;/b&gt; &amp; مرور" in hp and "<b>تست</b>" not in hp, "plan texts are escaped")
+    ok("<select" in hp and 'value="all"' in hp and f'value="{(today - timedelta(days=1)).isoformat()}"' in hp and "۱ از ۲ انجام شد" in hp, "a period of several days has a day picker with 'all days'")
+    ok("قدیمی" not in cp and "قدیمی" not in pp and 'id="plans"' not in pp, "plans are only in the HTML report, not in CSV or PDF")
+    Rd = report.collect(st, sl, today - timedelta(days=1), today - timedelta(days=1), "", "en")
+    hd = report.render_html(Rd)
+    ok("<select" not in hd and hd.count('<li class="') == 2 and "1 of 2 done (50%)" in hd and "Daily plans" in hd, "a one-day report shows that day's plans without a picker")
+    ok('id="plans"' not in report.render_html(Rp, interactive=False), "the non-interactive HTML has no plans button")
     c = report.render_csv(R)
     ok(c.splitlines()[0].startswith("گزارش مطالعه") and "ریاضی" in c and "هندسه" in c, "CSV has the sections and Persian text")
     import csv as _csv, io as _io
