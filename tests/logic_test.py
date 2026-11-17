@@ -1563,5 +1563,7 @@ if __name__ == "__main__":
                 ok(False, f"{name} crashed: {e!r}")
     print()
     print(f"{len(FAILS)} failure(s)" if FAILS else "ALL PASSED")
+    for m in FAILS:                                   # repeated here so the END of a long CI log says which check failed
+        print("  FAILED:", m)
     sys.exit(1 if FAILS else 0)
 
