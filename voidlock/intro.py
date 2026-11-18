@@ -111,6 +111,9 @@ TABS = {
 }
 
 NEWS = {
+    "1.14.70": (
+        ["One-tap weekly report: a button on the phone sends the last 7 days to the share sheet, and on the computer it saves the report and shows its folder. The window now shows the Windows 11 Snap Layouts on the maximize button, a taskbar click minimizes it, and buttons no longer stay lit after the mouse passes quickly."],
+        ["گزارش هفتگی با یک لمس: روی گوشی ۷ روز گذشته مستقیم به منوی اشتراک‌گذاری می‌رود و روی کامپیوتر گزارش ذخیره و پوشه‌اش باز می‌شود. روی دکمه‌ی بزرگ‌کردن پنجره حالا چیدمان‌های Snap ویندوز ۱۱ نشان داده می‌شود، کلیک روی آیکون تسک‌بار برنامه را مینیمایز می‌کند و دکمه‌ها بعد از عبور سریع ماوس روشن نمی‌مانند."]),
     "1.14.69": (
         ["The HTML report has a new \"Daily plans\" button: it shows the student's daily to-do lists for the report period, marked done or not done. For a longer period you can pick one day or all days. The sessions table was removed from reports."],
         ["گزارش HTML دکمه‌ی تازه‌ی «برنامه‌ی روزانه» دارد: برنامه‌های روزانه‌ی دانش‌آموز در بازه‌ی گزارش را با وضعیت انجام‌شده یا انجام‌نشده نشان می‌دهد. برای بازه‌ی چندروزه می‌شود یک روز یا همه‌ی روزها را انتخاب کرد. جدول جلسه‌های تمرکز هم از گزارش‌ها حذف شد."]),

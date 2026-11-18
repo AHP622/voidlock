@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 from datetime import date, datetime, timedelta
 
-from PySide6.QtCore import QPoint, QPointF, QRectF, QSize, Qt, QTimer
+from PySide6.QtCore import QEvent, QPoint, QPointF, QRectF, QSize, Qt, QTimer
 from PySide6.QtGui import QCursor, QFont, QKeySequence, QLinearGradient, QPainter, QPen, QRadialGradient, QShortcut
 from PySide6.QtWidgets import (QAbstractButton, QApplication, QFrame, QHBoxLayout, QLineEdit, QMainWindow, QStackedWidget,
                                QVBoxLayout, QWidget)
@@ -31,7 +31,7 @@ from .study import Points, StudyLog
 from .store import Store, fmt_clock, read_json, write_json
 from .theme import Motion, T, font, qc, system_reduced_motion
 from .viz import LockIcon
-from .widgets import AA, AC, AnimWidget, Button, Pill, Stepper, Ticker, Toggle, label, reveal, tween
+from .widgets import AA, AC, AnimWidget, Button, HoverTracker, Pill, Stepper, Ticker, Toggle, label, reveal, tween
 
 NAV = [("overview", "Overview", "overview"), ("study", "Study Timer", "stopwatch"),
        ("apps", "Application Control", "apps"), ("sessions", "Study Sessions", "sessions"),
@@ -40,9 +40,7 @@ NAV = [("overview", "Overview", "overview"), ("study", "Study Timer", "stopwatch
        ("help", "Help", "book")]
 
 
-class NavButton(QAbstractButton):
-    _lit = None                                        # the tab that currently looks hovered
-
+class NavButton(HoverTracker, QAbstractButton):
     def __init__(self, text, icon, tip):
         super().__init__()
         self.setText(text)
@@ -57,24 +55,8 @@ class NavButton(QAbstractButton):
         self._hover = 0.0
         self._kb = False
         self._compact = False
-        self._anims = {}
-        self._guard = QTimer(self)
-        self._guard.setInterval(120)
-        self._guard.timeout.connect(self._check_pointer)
         self.setFont(font(14, QFont.Weight.DemiBold))
         self.toggled.connect(lambda c: self._run("on", self._on, 1.0 if c else 0.0, 260, self._so))
-
-    def _run(self, key, a, b, ms, cb):
-        """Start a value animation and stop the previous one with the same key. Without this, moving the mouse quickly
-        over the tabs leaves several animations running at once; a stale 'fade in' that finishes after the 'fade out'
-        puts the highlight back and the tab stays lit."""
-        old = self._anims.pop(key, None)
-        if old is not None:
-            try:
-                old.stop()
-            except RuntimeError:                       # already finished and deleted by Qt
-                pass
-        self._anims[key] = tween(self, a, b, ms, cb)
 
     def focusInEvent(self, e):
         self._kb = e.reason() in (Qt.FocusReason.TabFocusReason, Qt.FocusReason.BacktabFocusReason)
@@ -95,36 +77,14 @@ class NavButton(QAbstractButton):
         self.update()
 
     def enterEvent(self, e):
-        # Only one tab may look hovered. A fast mouse can skip a leaveEvent (between two tabs, or out of the frameless
-        # window), which left the old tab lit; so entering a tab always releases the previous one, and a short guard
-        # timer releases a tab whose pointer is no longer inside it.
-        prev = NavButton._lit
-        if prev is not None and prev is not self:
-            try:
-                prev._release()
-            except RuntimeError:                       # that button no longer exists
-                pass
-        NavButton._lit = self
-        self._run("hover", self._hover, 1.0, 120, self._sh)
-        self._guard.start()
+        self.hover_in(120)
         super().enterEvent(e)
 
     def leaveEvent(self, e):
-        self._release()
+        self.hover_out(180)
         super().leaveEvent(e)
 
-    def _release(self):
-        self._guard.stop()
-        if NavButton._lit is self:
-            NavButton._lit = None
-        if self._hover > 0.0 or "hover" in self._anims:
-            self._run("hover", self._hover, 0.0, 180, self._sh)
-
-    def _check_pointer(self):
-        if not self.isVisible() or not self.rect().contains(self.mapFromGlobal(QCursor.pos())):
-            self._release()
-
-    def _sh(self, v):
+    def _set_hover(self, v):
         self._hover = float(v)
         self.update()
 
@@ -422,7 +382,10 @@ class MainWindow(QMainWindow):
     def __init__(self, store: Store, guard: GuardClient):
         super().__init__()
         self.setWindowTitle("VOIDLOCK")
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
+        # (Qt adds no default hints to a frameless window, so ask for them: they become the WS_MINIMIZEBOX / WS_MAXIMIZEBOX /
+        # WS_SYSMENU bits that Windows needs to minimize on a taskbar click and to offer the Snap Layouts flyout.)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window | Qt.WindowType.WindowMinimizeButtonHint
+                            | Qt.WindowType.WindowMaximizeButtonHint | Qt.WindowType.WindowSystemMenuHint)
         self.resize(1280, 800)
         self.setMinimumSize(1040, 680)
         self.store, self.guard = store, guard
@@ -539,6 +502,34 @@ class MainWindow(QMainWindow):
             self.showMaximized()
             self.topbar.b_max.set_icon("restore")
 
+    def showEvent(self, e):
+        super().showEvent(e)
+        self._ensure_window_style()
+
+    def changeEvent(self, e):
+        super().changeEvent(e)
+        if e.type() == QEvent.Type.WindowStateChange and hasattr(self, "topbar"):
+            self.topbar.b_max.set_icon("restore" if self.isMaximized() else "max")
+
+    def _ensure_window_style(self):
+        """Belt and braces for the window flags above: make sure the three style bits are really set (Windows only)."""
+        if sys.platform != "win32":
+            return
+        try:
+            import ctypes.wintypes as wt
+            u32 = ctypes.windll.user32
+            get, put = u32.GetWindowLongPtrW, u32.SetWindowLongPtrW
+            get.restype, get.argtypes = ctypes.c_ssize_t, [wt.HWND, ctypes.c_int]
+            put.restype, put.argtypes = ctypes.c_ssize_t, [wt.HWND, ctypes.c_int, ctypes.c_ssize_t]
+            hwnd = wt.HWND(int(self.winId()))
+            style = get(hwnd, -16)                                              # GWL_STYLE
+            want = style | 0x00020000 | 0x00010000 | 0x00080000                 # MINIMIZEBOX | MAXIMIZEBOX | SYSMENU
+            if want != style:
+                put(hwnd, -16, want)
+                u32.SetWindowPos(hwnd, None, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0004 | 0x0010 | 0x0020)  # no size/move/z/activate, frame changed
+        except Exception:
+            pass
+
     def resizeEvent(self, e):
         super().resizeEvent(e)
         self._apply_sidebar_mode()
@@ -557,32 +548,72 @@ class MainWindow(QMainWindow):
                                                "expanded": "Sidebar: expanded (click for automatic)"}[mode])
 
     def nativeEvent(self, eventType, message):
-        """Edge resizing for the frameless window on Windows (WM_NCHITTEST)."""
+        """Windows only. (1) The maximize button answers WM_NCHITTEST with HTMAXBUTTON, which is what makes Windows 11 show
+        the Snap Layouts flyout when the mouse rests on it (other programs get that for free from their caption bar).
+        Windows then owns the mouse over that button, so its hover / press / click are forwarded to the Qt button here.
+        (2) Edge resizing for the frameless window."""
         if sys.platform == "win32" and eventType == b"windows_generic_MSG":
             try:
                 import ctypes.wintypes as wt
                 msg = wt.MSG.from_address(int(message))
-                if msg.message == 0x0084 and not self.isMaximized():
-                    x = ctypes.c_short(msg.lParam & 0xFFFF).value
-                    y = ctypes.c_short((msg.lParam >> 16) & 0xFFFF).value
-                    dpr = self.devicePixelRatioF()
-                    pt = self.mapFromGlobal(QPoint(int(x / dpr), int(y / dpr)))
-                    m, w, h = 7, self.width(), self.height()
-                    left, right, top, bot = pt.x() < m, pt.x() > w - m, pt.y() < m, pt.y() > h - m
-                    code = None
-                    if top and left: code = 13
-                    elif top and right: code = 14
-                    elif bot and left: code = 16
-                    elif bot and right: code = 17
-                    elif left: code = 10
-                    elif right: code = 11
-                    elif top: code = 12
-                    elif bot: code = 15
-                    if code:
-                        return True, code
+                m = msg.message
+                if m in (0x0084, 0x00A0, 0x00A1, 0x00A2, 0x02A2):               # NCHITTEST, NCMOUSEMOVE, NCLBUTTONDOWN / UP, NCMOUSELEAVE
+                    r = self._chrome_message(msg, m)
+                    if r is not None:
+                        return r
             except Exception:
                 pass
         return super().nativeEvent(eventType, message)
+
+    def _over_max_button(self, x, y):
+        b = getattr(self.topbar, "b_max", None) if hasattr(self, "topbar") else None
+        if b is None or not b.isVisible():
+            return False
+        dpr = self.devicePixelRatioF()
+        return b.rect().contains(b.mapFromGlobal(QPoint(int(x / dpr), int(y / dpr))))
+
+    def _chrome_message(self, msg, m):
+        HTMAXBUTTON = 9
+        b_max = self.topbar.b_max
+        if m == 0x0084:                                                          # WM_NCHITTEST
+            x = ctypes.c_short(msg.lParam & 0xFFFF).value
+            y = ctypes.c_short((msg.lParam >> 16) & 0xFFFF).value
+            if self._over_max_button(x, y):
+                return True, HTMAXBUTTON
+            if self.isMaximized():
+                return None
+            dpr = self.devicePixelRatioF()
+            pt = self.mapFromGlobal(QPoint(int(x / dpr), int(y / dpr)))
+            mg, w, h = 7, self.width(), self.height()
+            left, right, top, bot = pt.x() < mg, pt.x() > w - mg, pt.y() < mg, pt.y() > h - mg
+            code = None
+            if top and left: code = 13
+            elif top and right: code = 14
+            elif bot and left: code = 16
+            elif bot and right: code = 17
+            elif left: code = 10
+            elif right: code = 11
+            elif top: code = 12
+            elif bot: code = 15
+            return (True, code) if code else None
+        on_button = msg.wParam == HTMAXBUTTON
+        if m == 0x02A2 or (m == 0x00A0 and not on_button):                       # WM_NCMOUSELEAVE / moved off the button
+            b_max.nc_hover(False)
+            return None
+        if m == 0x00A0:                                                          # WM_NCMOUSEMOVE over the button
+            b_max.nc_hover(True)
+            return None
+        if m == 0x00A1 and on_button:                                            # WM_NCLBUTTONDOWN: we handle the click ourselves
+            self._max_pressed = True
+            b_max.nc_press(True)
+            return True, 0
+        if m == 0x00A2 and getattr(self, "_max_pressed", False):                 # WM_NCLBUTTONUP (maybe after leaving the button)
+            self._max_pressed = False
+            b_max.nc_press(False)
+            if on_button:
+                self.toggle_max()
+            return True, 0
+        return None
 
     # ------------------------------------------------------------ tray
     def _setup_tray(self):

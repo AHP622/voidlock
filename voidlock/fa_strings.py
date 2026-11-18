@@ -542,10 +542,13 @@ FA.update({
     "%": "٪", "Note (optional)": "یادداشت (اختیاری)", "Remove this result": "حذف این نتیجه",
     "Check the numbers: percent from -33 to 100, taraz up to 20000, rank 1 or more.": "اعداد را بررسی کنید: درصد از ۳۳- تا ۱۰۰، تراز تا ۲۰۰۰۰، رتبه از ۱ به بالا.",
     "Results saved.": "نتایج ذخیره شد.", "Result removed.": "نتیجه حذف شد.", "Nothing to save.": "چیزی برای ذخیره نیست.",
-    "Study time, charts, exam results and progress, the weekly timetable and the focus sessions - as an HTML page, a PDF or a CSV file.":
-        "زمان مطالعه، نمودارها، نتایج و روند آزمون‌ها، برنامه‌ی هفتگی و جلسه‌های تمرکز - به‌صورت صفحه‌ی HTML، فایل PDF یا CSV.",
-    "For your advisor or parents: study time, time per subject, charts, exam results and progress, the weekly timetable and the focus sessions.":
-        "برای مشاور یا والدین: زمان مطالعه، زمان هر درس، نمودارها، نتایج و روند آزمون‌ها، برنامه‌ی هفتگی و جلسه‌های تمرکز.",
+    "Study time, charts, exam results and progress, the weekly timetable and the daily plans - as an HTML page, a PDF or a CSV file.":
+        "زمان مطالعه، نمودارها، نتایج و روند آزمون‌ها، برنامه‌ی هفتگی و برنامه‌های روزانه - به‌صورت صفحه‌ی HTML، فایل PDF یا CSV.",
+    "For your advisor or parents: study time, time per subject, charts, exam results and progress, the weekly timetable and the daily plans (in the HTML page).":
+        "برای مشاور یا والدین: زمان مطالعه، زمان هر درس، نمودارها، نتایج و روند آزمون‌ها، برنامه‌ی هفتگی و برنامه‌های روزانه (در صفحه‌ی HTML).",
+    "Weekly report": "گزارش هفتگی", "Last 7 days as a web page, saved and shown in its folder - ready to send.":
+        "۷ روز گذشته به‌صورت صفحه‌ی وب؛ ذخیره می‌شود و پوشه‌اش باز می‌شود تا بتوانید بفرستید.",
+    "Weekly report saved. Send it from the folder that just opened.": "گزارش هفتگی ذخیره شد. از پوشه‌ای که باز شد بفرستیدش.",
     "Include exam results and progress": "شامل نتایج آزمون‌ها و روند پیشرفت", "Include the weekly timetable (classes and study)": "شامل برنامه‌ی هفتگی (کلاس و مطالعه)",
 })
 

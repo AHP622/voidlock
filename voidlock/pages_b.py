@@ -14,7 +14,7 @@ from . import lansync
 from .guard import emergency_recover
 from .pages_a import Page
 from .store import completed_count, fmt_hm, last_days, streak_days, today_focus_sec, uid, week_order
-from .report_ui import export_report
+from .report_ui import export_report, quick_weekly_report
 from .theme import THEME_NAMES, THEME_ORDER
 from .theme import Motion, T
 from .mascot import BlockPopup, Heatmap
@@ -766,14 +766,17 @@ class AnalyticsPage(Page):
         col = QVBoxLayout()
         col.setSpacing(2)
         col.addWidget(label("Report for your advisor or parents", 14, QFont.Weight.DemiBold))
-        col.addWidget(label("Study time, charts, exam results and progress, the weekly timetable and the focus sessions - as an HTML page, a PDF or a CSV file.",
+        col.addWidget(label("Study time, charts, exam results and progress, the weekly timetable and the daily plans - as an HTML page, a PDF or a CSV file.",
                             12, color=T.text3, wrap=True))
         er.addLayout(col, 1)
+        self.b_report_week = Button("Weekly report", "ghost", "bolt", "Last 7 days as a web page, saved and shown in its folder - ready to send.", height=40)
+        er.addWidget(self.b_report_week)
         self.b_report = Button("Export report…", "primary", "download", height=40)
         er.addWidget(self.b_report)
         self.export_card.lay.addLayout(er)
         self.body.addWidget(self.export_card)
         self.b_report.clicked.connect(lambda: export_report(self.ctx))
+        self.b_report_week.clicked.connect(lambda: quick_weekly_report(self.ctx))
         self.stats_row = QHBoxLayout()
         self.stats_row.setSpacing(14)
         self.s_today = StatCard("clock", T.cyan, "Study today")

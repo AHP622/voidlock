@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.14.70
+* One-tap weekly report. Phone: a "Send weekly report" button on the Report card shares the last 7 days (HTML, with the Daily plans button) straight to the share sheet. Computer: a "Weekly report" button next to "Export report" saves the last 7 days in Documents\VoidLock reports and shows the file in its folder.
+* Windows: the maximize button now shows the Windows 11 Snap Layouts flyout (it answers WM_NCHITTEST with HTMAXBUTTON, and its hover / press / click are forwarded). The frameless window now asks for the minimize / maximize / system-menu hints, so a click on its taskbar icon minimizes it like other programs. The maximize icon follows the real window state.
+* Fixed buttons (window controls, the buttons everywhere, the sidebar tabs) staying lit after the mouse moved quickly over them: one shared hover logic cancels stale animations, lets only one widget look hovered and releases a widget whose pointer is gone.
+* The report dialogs no longer mention the removed focus-sessions table; they mention the daily plans.
+* New `release.cmd` (+ `tools/release_check.py`): checks the version is the same everywhere, runs the tests, commits, pushes, tags and verifies that GitHub received the same commit.
+
 ## 1.14.69
 * HTML reports (computer and phone) have a "Daily plans" button. It opens the student's daily to-do lists for the report period, each task marked done or not done with a done/total count and percentage. A one-day report shows that day; a longer period has a day picker with "All days". CSV and PDF reports are unchanged.
 * Reports (Windows and Android; HTML, CSV and PDF) no longer contain the "Focus sessions" table. The summary tiles with the number and time of focus sessions stay.

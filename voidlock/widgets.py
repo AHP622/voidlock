@@ -3,7 +3,7 @@ import time
 
 from PySide6.QtCore import (QAbstractAnimation, QEasingCurve, QObject, QPointF, QPropertyAnimation,
                             QRectF, QSize, Qt, QTimer, QVariantAnimation, Signal)
-from PySide6.QtGui import (QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen)
+from PySide6.QtGui import (QColor, QCursor, QFont, QLinearGradient, QPainter, QPainterPath, QPen)
 from PySide6.QtWidgets import (QAbstractButton, QScrollArea, QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLabel,
                                QSizePolicy, QVBoxLayout, QWidget)
 
@@ -219,7 +219,58 @@ def set_label_color(lb, color):
 
 
 # ------------------------------------------------------------------ buttons
-class Button(QAbstractButton):
+class HoverTracker:
+    """Hover animation that cannot get stuck (mixed into buttons). Two things used to leave buttons lit after the mouse
+    had passed quickly over them:
+      * every enter / leave started a NEW animation without stopping the old one, so a stale one could write the
+        wrong value last: now a new animation cancels the previous one with the same key;
+      * a fast mouse can skip a leaveEvent altogether (between neighbours, or out of the frameless window): now entering
+        a widget releases the previous one, and a short guard timer releases a widget whose pointer is no longer inside.
+    The widget needs `_hover` (0..1) and `_set_hover(v)`."""
+    _lit = None                                        # the widget that currently looks hovered
+
+    def _run(self, key, a, b, ms, cb, easing=QEasingCurve.Type.OutCubic, overshoot=None):
+        anims = self.__dict__.setdefault("_anims", {})
+        old = anims.pop(key, None)
+        if old is not None:
+            try:
+                old.stop()
+            except RuntimeError:                       # already finished and deleted by Qt
+                pass
+        anims[key] = tween(self, a, b, ms, cb, easing, overshoot=overshoot)
+
+    def hover_in(self, ms=140):
+        prev = HoverTracker._lit
+        if prev is not None and prev is not self:
+            try:
+                prev.hover_out()
+            except RuntimeError:                       # that widget no longer exists
+                pass
+        HoverTracker._lit = self
+        self._run("hover", self._hover, 1.0, ms, self._set_hover)
+        guard = self.__dict__.get("_guard")
+        if guard is None:
+            guard = QTimer(self)
+            guard.setInterval(120)
+            guard.timeout.connect(self._guard_check)
+            self._guard = guard
+        guard.start()
+
+    def hover_out(self, ms=200):
+        guard = self.__dict__.get("_guard")
+        if guard is not None:
+            guard.stop()
+        if HoverTracker._lit is self:
+            HoverTracker._lit = None
+        if self._hover > 0.0 or "hover" in self.__dict__.get("_anims", {}):
+            self._run("hover", self._hover, 0.0, ms, self._set_hover)
+
+    def _guard_check(self):
+        if not self.isVisible() or not self.rect().contains(self.mapFromGlobal(QCursor.pos())):
+            self.hover_out()
+
+
+class Button(HoverTracker, QAbstractButton):
     """variant: primary | ghost | danger | violet | soft | icon"""
 
     def __init__(self, text="", variant="ghost", icon=None, tip=None, parent=None, height=40,
@@ -259,12 +310,20 @@ class Button(QAbstractButton):
         return QSize(max(w, 44), self._h)
 
     def enterEvent(self, e):
-        tween(self, self._hover, 1.0, 140, self._set_hover)
+        self.hover_in(140)
         super().enterEvent(e)
 
     def leaveEvent(self, e):
-        tween(self, self._hover, 0.0, 200, self._set_hover)
+        self.hover_out(200)
         super().leaveEvent(e)
+
+    def nc_hover(self, on):
+        """Hover / press driven from outside Qt: the maximize button is answered by Windows (WM_NCHITTEST) so that the
+        Snap Layouts flyout appears, and then Qt no longer sees the mouse over it."""
+        self.hover_in(140) if on else self.hover_out(200)
+
+    def nc_press(self, on):
+        self._down() if on else self._up()
 
     def _set_hover(self, v):
         self._hover = float(v)
@@ -275,10 +334,10 @@ class Button(QAbstractButton):
         self.update()
 
     def _down(self):
-        tween(self, self._scale, 0.94, 80, self._set_scale)
+        self._run("scale", self._scale, 0.94, 80, self._set_scale)
 
     def _up(self):  # spring back
-        tween(self, self._scale, 1.0, 380, self._set_scale, QEasingCurve.Type.OutBack, overshoot=3.2)
+        self._run("scale", self._scale, 1.0, 380, self._set_scale, QEasingCurve.Type.OutBack, 3.2)
 
     def focusInEvent(self, e):
         self._kb = e.reason() in (Qt.FocusReason.TabFocusReason, Qt.FocusReason.BacktabFocusReason,

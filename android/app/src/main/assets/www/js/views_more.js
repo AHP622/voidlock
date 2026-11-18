@@ -165,8 +165,21 @@
     s.el.querySelector('.actions').style.display = 'block';
   }
   Views.reportSheet = reportSheet;
+  // one tap: the last 7 days as a web page straight into the share sheet (Telegram, WhatsApp, e-mail...)
+  function shareWeeklyReport(App) {
+    var db = App.db, today = Core.dkey(), from = Core.dkey(Core.addDays(new Date(), -6));
+    var any = db.entries.some(function (e) { return e.date >= from && e.date <= today; }) || db.sessions.some(function (r) { var d = Core.dkey(new Date(r.start * 1000)); return d >= from && d <= today; }) ||
+      db.exams.some(function (e) { return e.date >= from && e.date <= today; }) || db.todos.some(function (x) { return x.date >= from && x.date <= today; });
+    if (!any) return UI.toast(t('report_empty'), 'warn');
+    var r = Report.build(db, from, today, { name: db.settings.report_name || '', interactive: true });
+    Native.shareFile(r.base + '.html', 'text/html', r.html);
+  }
+  Views.shareWeeklyReport = shareWeeklyReport;
   function reportCard(App) {
-    return card(t('report'), [h('div', { class: 'small dim', style: { marginBottom: '10px' } }, t('report_hint')), h('button', { class: 'btn block', onclick: function () { reportSheet(App); } }, UI.ic('file'), t('report_make'))]);
+    return card(t('report'), [h('div', { class: 'small dim', style: { marginBottom: '10px' } }, t('report_hint')),
+      h('button', { class: 'btn primary block', style: { marginBottom: '8px' }, onclick: function () { shareWeeklyReport(App); } }, UI.ic('share'), t('report_week')),
+      h('div', { class: 'small dim', style: { marginBottom: '10px' } }, t('report_week_hint')),
+      h('button', { class: 'btn block', onclick: function () { reportSheet(App); } }, UI.ic('file'), t('report_make'))]);
   }
 
   function subjectsCard(App) {

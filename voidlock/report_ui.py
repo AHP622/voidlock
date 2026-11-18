@@ -1,5 +1,7 @@
 """The 'Export study report' dialog (for an advisor or parents): period, language, format -> HTML / PDF / CSV file."""
-from datetime import date
+import subprocess
+import sys
+from datetime import date, timedelta
 from pathlib import Path
 
 from PySide6.QtCore import QUrl, Qt, Signal
@@ -126,10 +128,52 @@ def default_path(v):
     return base / f"VoidLock-report-{span}.{v['fmt']}"
 
 
+def reports_folder():
+    docs = Path.home() / "Documents"
+    return (docs if docs.exists() else Path.home()) / "VoidLock reports"
+
+
+def reveal_in_folder(path):
+    """Opens the folder with the file selected (Windows); elsewhere just the folder."""
+    path = Path(path)
+    try:
+        if sys.platform == "win32":
+            subprocess.Popen(["explorer", f"/select,{path}"])
+            return
+    except OSError:
+        pass
+    QDesktopServices.openUrl(QUrl.fromLocalFile(str(path.parent)))
+
+
+def weekly_values(ctx, today=None):
+    """The one-click weekly report: the last 7 days ending today, as an HTML page, in the app's language."""
+    today = today or date.today()
+    return {"name": ctx.store.settings.get("report_name", ""), "lang": "fa" if i18n.is_fa() else "en", "start": today - timedelta(days=6),
+            "end": today, "fmt": "html", "kind": "week", "exams": True, "schedule": True}
+
+
+def quick_weekly_report(ctx, folder=None, reveal=True):
+    """One click, no questions: builds the weekly report, saves it in Documents\\VoidLock reports and shows it there, ready to be sent
+    to the advisor (drag it into a chat or an e-mail). Returns the path, or None when it could not be saved."""
+    v = weekly_values(ctx)
+    folder = Path(folder) if folder else reports_folder()
+    path = folder / f"VoidLock-weekly-{v['end'].isoformat()}.html"
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        write_report(build_report(ctx, v), "html", path)
+    except Exception as e:
+        ctx.toast(i18n.tr(f"Could not save the report: {e}"), "error")
+        return None
+    ctx.toast("Weekly report saved. Send it from the folder that just opened.", "success")
+    if reveal:
+        reveal_in_folder(path)
+    return path
+
+
 def export_report(ctx):
     form = ReportForm(ctx)
     m = ctx.new_modal().build("Export study report",
-                              "For your advisor or parents: study time, time per subject, charts, exam results and progress, the weekly timetable and the focus sessions.",
+                              "For your advisor or parents: study time, time per subject, charts, exam results and progress, the weekly timetable and the daily plans (in the HTML page).",
                               form, "Choose file…", icon="download", width=540, validator=form.valid)
     form.changed.connect(m.revalidate)
     if not m.exec_modal():
