@@ -111,6 +111,9 @@ TABS = {
 }
 
 NEWS = {
+    "1.14.71": (
+        ["On the phone you can now send a report for ANY period: quick buttons (today, 7, 14, 30, 90 days, all) fill the From and To dates, which you can also change freely. The sync server can no longer share its port with another program on Windows."],
+        ["روی گوشی حالا می‌توانید گزارش را برای هر بازه‌ی دلخواه بفرستید: دکمه‌های سریع (امروز، ۷، ۱۴، ۳۰، ۹۰ روز و همه) تاریخ «از» و «تا» را پر می‌کنند و می‌توانید هر تاریخی را هم خودتان بگذارید. سرور همگام‌سازی هم روی ویندوز دیگر پورتش را با برنامه‌ی دیگری شریک نمی‌شود."]),
     "1.14.70": (
         ["One-tap weekly report: a button on the phone sends the last 7 days to the share sheet, and on the computer it saves the report and shows its folder. The window now shows the Windows 11 Snap Layouts on the maximize button, a taskbar click minimizes it, and buttons no longer stay lit after the mouse passes quickly."],
         ["گزارش هفتگی با یک لمس: روی گوشی ۷ روز گذشته مستقیم به منوی اشتراک‌گذاری می‌رود و روی کامپیوتر گزارش ذخیره و پوشه‌اش باز می‌شود. روی دکمه‌ی بزرگ‌کردن پنجره حالا چیدمان‌های Snap ویندوز ۱۱ نشان داده می‌شود، کلیک روی آیکون تسک‌بار برنامه را مینیمایز می‌کند و دکمه‌ها بعد از عبور سریع ماوس روشن نمی‌مانند."]),

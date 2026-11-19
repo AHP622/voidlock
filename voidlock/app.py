@@ -511,6 +511,22 @@ class MainWindow(QMainWindow):
         if e.type() == QEvent.Type.WindowStateChange and hasattr(self, "topbar"):
             self.topbar.b_max.set_icon("restore" if self.isMaximized() else "max")
 
+    def _chrome_log(self, key, text):
+        """A small diagnostic file (chrome.log in the data folder) about how Windows treats this window: each kind of event
+        is written once. It tells whether the maximize button is really answered as HTMAXBUTTON and whether Windows reacts."""
+        seen = self.__dict__.setdefault("_chrome_seen", set())
+        if key in seen:
+            return
+        seen.add(key)
+        try:
+            path = self.store.home / "chrome.log"
+            if path.exists() and path.stat().st_size > 64000:
+                path.write_text("", encoding="utf-8")
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {text}\n")
+        except OSError:
+            pass
+
     def _ensure_window_style(self):
         """Belt and braces for the window flags above: make sure the three style bits are really set (Windows only)."""
         if sys.platform != "win32":
@@ -527,8 +543,13 @@ class MainWindow(QMainWindow):
             if want != style:
                 put(hwnd, -16, want)
                 u32.SetWindowPos(hwnd, None, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0004 | 0x0010 | 0x0020)  # no size/move/z/activate, frame changed
-        except Exception:
-            pass
+            now = get(hwnd, -16)
+            ver = getattr(sys, "getwindowsversion", lambda: None)()
+            self._chrome_log("style", f"v{__version__} Windows build {getattr(ver, 'build', '?')}; style before={style:#010x} after={now:#010x} "
+                                      f"(minimize box {bool(now & 0x20000)}, maximize box {bool(now & 0x10000)}, sysmenu {bool(now & 0x80000)}, "
+                                      f"thickframe {bool(now & 0x40000)}, caption {bool(now & 0xC00000 == 0xC00000)}); pixel ratio {self.devicePixelRatioF()}")
+        except Exception as e:
+            self._chrome_log("style-error", f"could not set the window style: {e!r}")
 
     def resizeEvent(self, e):
         super().resizeEvent(e)
@@ -561,8 +582,9 @@ class MainWindow(QMainWindow):
                     r = self._chrome_message(msg, m)
                     if r is not None:
                         return r
-            except Exception:
-                pass
+            except Exception as e:
+                import traceback
+                self._chrome_log("native-" + type(e).__name__, "error in nativeEvent: " + traceback.format_exc().replace("\n", " | "))
         return super().nativeEvent(eventType, message)
 
     def _over_max_button(self, x, y):
@@ -579,6 +601,9 @@ class MainWindow(QMainWindow):
             x = ctypes.c_short(msg.lParam & 0xFFFF).value
             y = ctypes.c_short((msg.lParam >> 16) & 0xFFFF).value
             if self._over_max_button(x, y):
+                g = b_max.mapToGlobal(QPoint(0, 0))
+                self._chrome_log("hit", f"the pointer ({x},{y}) is over the maximize button -> answered HTMAXBUTTON; button at "
+                                        f"({g.x()},{g.y()}) size {b_max.width()}x{b_max.height()}, pixel ratio {self.devicePixelRatioF()}")
                 return True, HTMAXBUTTON
             if self.isMaximized():
                 return None
@@ -601,9 +626,11 @@ class MainWindow(QMainWindow):
             b_max.nc_hover(False)
             return None
         if m == 0x00A0:                                                          # WM_NCMOUSEMOVE over the button
+            self._chrome_log("ncmove", "Windows reports the pointer on the maximize button (WM_NCMOUSEMOVE with HTMAXBUTTON)")
             b_max.nc_hover(True)
             return None
         if m == 0x00A1 and on_button:                                            # WM_NCLBUTTONDOWN: we handle the click ourselves
+            self._chrome_log("ncdown", "click on the maximize button reached the program (WM_NCLBUTTONDOWN)")
             self._max_pressed = True
             b_max.nc_press(True)
             return True, 0

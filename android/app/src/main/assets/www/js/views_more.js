@@ -130,37 +130,45 @@
     return card(t('sync_card'), kids);
   }
 
+  // is there anything to report between two days? (study time, focus sessions, exams, daily plans)
+  function hasData(db, from, to) {
+    return db.entries.some(function (e) { return e.date >= from && e.date <= to; }) ||
+      db.sessions.some(function (r) { var d = Core.dkey(new Date(r.start * 1000)); return d >= from && d <= to; }) ||
+      db.exams.some(function (e) { return e.date >= from && e.date <= to; }) || db.todos.some(function (x) { return x.date >= from && x.date <= to; });
+  }
+  // choose ANY period (quick buttons fill the two date fields, which can then be changed freely), then send it
   function reportSheet(App) {
-    var db = App.db, range = 14, today = Core.dkey();
-    var fromF = UI.dateField(Core.dkey(Core.addDays(new Date(), -13))), toF = UI.dateField(today);
-    var custom = h('div', { class: 'hide' }, UI.field(t('r_from'), fromF.el), UI.field(t('r_to'), toF.el));
+    var db = App.db, today = Core.dkey(), preset = '7';
+    var fromF = UI.dateField(Core.dkey(Core.addDays(new Date(), -6)), function () { mark(null); }), toF = UI.dateField(today, function () { mark(null); });
     var nameIn = h('input', { type: 'text', maxlength: 40, placeholder: t('r_name'), value: db.settings.report_name || '' });
-    var segBox = h('div');
-    var firstDay = db.entries.concat(db.sessions.map(function (r) { return { date: Core.dkey(new Date(r.start * 1000)) }; })).map(function (e) { return e.date; }).sort()[0] || today;
-    function draw() {
-      segBox.innerHTML = '';
-      segBox.appendChild(seg([[7, t('r_7')], [14, t('r_14')], [30, t('r_30')], [90, t('r_90')], ['all', t('r_all')], ['custom', t('r_custom')]], range, function (v) { range = v; custom.classList.toggle('hide', v !== 'custom'); draw(); }));
+    var chipBox = h('div', { class: 'chips' });
+    var firstDay = db.entries.concat(db.sessions.map(function (r) { return { date: Core.dkey(new Date(r.start * 1000)) }; })).concat(db.todos).map(function (e) { return e.date; }).sort()[0] || today;
+    var PRESETS = [['1', t('r_today')], ['7', t('r_7')], ['14', t('r_14')], ['30', t('r_30')], ['90', t('r_90')], ['all', t('r_all')]];
+    function mark(v) {
+      preset = v;
+      chipBox.innerHTML = '';
+      PRESETS.forEach(function (p) {
+        chipBox.appendChild(h('button', { class: p[0] === preset ? 'on' : '', onclick: function () {
+          fromF.set(p[0] === 'all' ? firstDay : Core.dkey(Core.addDays(new Date(), -(+p[0] - 1)))); toF.set(today); mark(p[0]);
+        } }, p[1]));
+      });
     }
-    draw();
-    function period() {
-      if (range === 'custom') { var f = fromF.get(), e = toF.get(); return f <= e ? [f, e] : [e, f]; }
-      if (range === 'all') return [firstDay, today];
-      return [Core.dkey(Core.addDays(new Date(), -(range - 1))), today];
-    }
+    mark('7');
+    function period() { var f = fromF.get(), e = toF.get(); return f <= e ? [f, e] : [e, f]; }
     function make(kind) {
       var p = period(), nm = nameIn.value.trim();
       if (nm !== (db.settings.report_name || '')) { db.settings.report_name = nm; App.save(); }
+      if (!hasData(db, p[0], p[1])) return UI.toast(t('report_empty'), 'warn');
       var r = Report.build(db, p[0], p[1], { name: nm, interactive: kind !== 'pdf' });
-      var any = db.entries.some(function (e) { return e.date >= p[0] && e.date <= p[1]; }) || db.sessions.length || db.exams.some(function (e) { return e.date >= p[0] && e.date <= p[1]; });
-      if (!any) return UI.toast(t('report_empty'), 'warn');
       if (kind === 'html') Native.shareFile(r.base + '.html', 'text/html', r.html);
       else if (kind === 'csv') Native.shareFile(r.base + '.csv', 'text/csv', r.csv);
       else Native.printHtml(r.title, r.html);
     }
-    var s = UI.sheet({ title: t('report_title'), message: t('report_hint'), body: [segBox, custom, UI.field(t('r_name'), nameIn)],
+    var s = UI.sheet({ title: t('report_title'), message: t('report_hint'),
+      body: [h('div', { class: 'small dim', style: { marginBottom: '6px' } }, t('r_range')), chipBox, UI.field(t('r_from'), fromF.el), UI.field(t('r_to'), toF.el), UI.field(t('r_name'), nameIn)],
       actions: [h('div', { class: 'col', style: { width: '100%', gap: '8px' } },
-        h('button', { class: 'btn primary block', onclick: function () { make('pdf'); } }, UI.ic('file'), t('fmt_pdf')),
-        h('button', { class: 'btn block', onclick: function () { make('html'); } }, UI.ic('globe'), t('fmt_html')),
+        h('button', { class: 'btn primary block', onclick: function () { make('html'); } }, UI.ic('share'), t('fmt_html')),
+        h('button', { class: 'btn block', onclick: function () { make('pdf'); } }, UI.ic('file'), t('fmt_pdf')),
         h('button', { class: 'btn block', onclick: function () { make('csv'); } }, UI.ic('stats'), t('fmt_csv')))] });
     s.el.querySelector('.actions').style.display = 'block';
   }
@@ -168,17 +176,15 @@
   // one tap: the last 7 days as a web page straight into the share sheet (Telegram, WhatsApp, e-mail...)
   function shareWeeklyReport(App) {
     var db = App.db, today = Core.dkey(), from = Core.dkey(Core.addDays(new Date(), -6));
-    var any = db.entries.some(function (e) { return e.date >= from && e.date <= today; }) || db.sessions.some(function (r) { var d = Core.dkey(new Date(r.start * 1000)); return d >= from && d <= today; }) ||
-      db.exams.some(function (e) { return e.date >= from && e.date <= today; }) || db.todos.some(function (x) { return x.date >= from && x.date <= today; });
-    if (!any) return UI.toast(t('report_empty'), 'warn');
+    if (!hasData(db, from, today)) return UI.toast(t('report_empty'), 'warn');
     var r = Report.build(db, from, today, { name: db.settings.report_name || '', interactive: true });
     Native.shareFile(r.base + '.html', 'text/html', r.html);
   }
   Views.shareWeeklyReport = shareWeeklyReport;
   function reportCard(App) {
     return card(t('report'), [h('div', { class: 'small dim', style: { marginBottom: '10px' } }, t('report_hint')),
-      h('button', { class: 'btn primary block', style: { marginBottom: '8px' }, onclick: function () { shareWeeklyReport(App); } }, UI.ic('share'), t('report_week')),
-      h('div', { class: 'small dim', style: { marginBottom: '10px' } }, t('report_week_hint')),
+      h('button', { class: 'btn primary block', style: { marginBottom: '6px' }, onclick: function () { shareWeeklyReport(App); } }, UI.ic('share'), t('report_week')),
+      h('div', { class: 'small dim', style: { marginBottom: '12px' } }, t('report_week_hint')),
       h('button', { class: 'btn block', onclick: function () { reportSheet(App); } }, UI.ic('file'), t('report_make'))]);
   }
 

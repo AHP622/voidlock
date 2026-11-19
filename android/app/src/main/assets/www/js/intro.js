@@ -30,6 +30,16 @@
     },
     order: ['today', 'stats', 'exams', 'tasks', 'more'],
     news: {
+      '1.14.71': {
+        fa: ['حالا می‌توانید گزارش را برای هر بازه‌ی دلخواه بفرستید: دکمه‌های سریع (امروز، ۷، ۱۴، ۳۰، ۹۰ روز و همه) تاریخ «از» و «تا» را پر می‌کنند و هر تاریخی را هم می‌توانید خودتان بگذارید.',
+             'دکمه‌ی «ارسال گزارش هفتگی» گزارش ۷ روز گذشته را با یک لمس به منوی اشتراک‌گذاری می‌فرستد.',
+             'گزارش وب (HTML) دکمه‌ی «برنامه‌ی روزانه» دارد: برنامه‌های روزانه‌ی همان بازه را با وضعیت انجام‌شده یا انجام‌نشده نشان می‌دهد؛ برای بازه‌ی چندروزه می‌شود یک روز یا همه‌ی روزها را انتخاب کرد.',
+             'جدول جلسه‌های تمرکز از گزارش‌ها برداشته شد.'],
+        en: ['You can now send a report for ANY period: quick buttons (today, 7, 14, 30, 90 days, all) fill the From and To dates, and you can set any dates yourself.',
+             'The \u201cSend weekly report\u201d button shares the last 7 days with one tap.',
+             'The web (HTML) report has a \u201cDaily plans\u201d button: it shows that period\u2019s daily to-do lists, each marked done or not done; for a longer period you can pick one day or all days.',
+             'The focus sessions table was removed from reports.']
+      },
       '1.14.6': {
         fa: ['فقط رفع یک باگ کامپیوتر (تقویم مطالعه). در گوشی تغییری نیست.'],
         en: ['Just a computer-side fix (the study calendar). No changes on the phone.']

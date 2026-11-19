@@ -1,11 +1,15 @@
 # Changelog
 
+## 1.14.71
+* Phone: sending a report now lets you choose ANY period. The sheet has quick buttons (today, 7, 14, 30, 90 days, all) that fill two always-visible From / To date fields, and those can be changed to any dates. The format buttons start with the web page (it has the Daily plans button). A period that only has daily plans is no longer called empty. "Send weekly report" stays as the one-tap button.
+* Windows sync server: it now binds its port exclusively (SO_EXCLUSIVEADDRUSE). Before, Windows let two programs listen on the same port, so a test (or a second program) could end up talking to the running VOIDLOCK, and the other way round. This is what made `test_lan_sync_server` fail while the program was open.
+* Diagnostics: `chrome.log` in the data folder records, once each, the window style bits and whether the maximize button is answered as HTMAXBUTTON and reported by Windows. It is for finding out why the Windows 11 Snap Layouts flyout does not appear.
+
 ## 1.14.70
 * One-tap weekly report. Phone: a "Send weekly report" button on the Report card shares the last 7 days (HTML, with the Daily plans button) straight to the share sheet. Computer: a "Weekly report" button next to "Export report" saves the last 7 days in Documents\VoidLock reports and shows the file in its folder.
 * Windows: the maximize button now shows the Windows 11 Snap Layouts flyout (it answers WM_NCHITTEST with HTMAXBUTTON, and its hover / press / click are forwarded). The frameless window now asks for the minimize / maximize / system-menu hints, so a click on its taskbar icon minimizes it like other programs. The maximize icon follows the real window state.
 * Fixed buttons (window controls, the buttons everywhere, the sidebar tabs) staying lit after the mouse moved quickly over them: one shared hover logic cancels stale animations, lets only one widget look hovered and releases a widget whose pointer is gone.
 * The report dialogs no longer mention the removed focus-sessions table; they mention the daily plans.
-* New `release.cmd` (+ `tools/release_check.py`): checks the version is the same everywhere, runs the tests, commits, pushes, tags and verifies that GitHub received the same commit.
 
 ## 1.14.69
 * HTML reports (computer and phone) have a "Daily plans" button. It opens the student's daily to-do lists for the report period, each task marked done or not done with a done/total count and percentage. A one-day report shows that day; a longer period has a day picker with "All days". CSV and PDF reports are unchanged.

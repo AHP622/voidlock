@@ -1,3 +1,0 @@
-# the Windows batch script must keep CRLF line endings, or `goto :label` can break
-*.cmd text eol=crlf
-*.bat text eol=crlf

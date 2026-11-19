@@ -30,6 +30,7 @@ import json
 import re
 import secrets
 import socket
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -160,6 +161,19 @@ def local_addresses():
     return out
 
 
+class _Server(ThreadingHTTPServer):
+    """On Windows, SO_REUSEADDR (which http.server turns on) lets two programs listen on the SAME port, and then a request may be
+    answered by either of them. That is how a test run while VOIDLOCK was open talked to the running app instead of its own
+    server. Windows gets an exclusive bind: a taken port is reported as taken and the next port is tried."""
+    allow_reuse_address = sys.platform != "win32"
+    daemon_threads = True
+
+    def server_bind(self):
+        if sys.platform == "win32" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+
 class LanServer:
     def __init__(self, backend, ports=PORTS):
         self.backend, self.ports = backend, ports
@@ -182,7 +196,7 @@ class LanServer:
             try:
                 server = self
                 handler = type("Handler", (_Handler,), {"srv": server})
-                httpd = ThreadingHTTPServer(("0.0.0.0", port), handler)
+                httpd = _Server(("0.0.0.0", port), handler)
                 httpd.daemon_threads = True
                 self.httpd, self.port = httpd, port
                 break
