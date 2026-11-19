@@ -140,7 +140,7 @@
       summary: { total: total2, active_days: active.length, period_days: days.length, avg_active: active.length ? Math.floor(total2 / active.length) : 0, avg_cal: days.length ? Math.floor(total2 / days.length) : 0,
                  best: best, tests: days.reduce(function (a, x) { return a + x.tests; }, 0), words: days.reduce(function (a, x) { return a + x.words; }, 0), streak: streak, goal_days: goalDays,
                  sessions: sessions.length, sessions_sec: sess },
-      plans: plansData(db, fromDk, toDk), version: opts.version || VERSION(), week_start: isFinite(ws) ? ws : 5, schedule: scheduleData(db),
+      plans: plansData(db, fromDk, effEnd), version: opts.version || VERSION(), week_start: isFinite(ws) ? ws : 5, schedule: scheduleData(db),
       results: resultsData(db, toDk, lang, H), H: H
     };
   }
@@ -291,7 +291,7 @@
     return out.join('');
   }
 
-  // the day-by-day to-do lists inside the whole period asked for (future days included); only days that have tasks
+  // the day-by-day to-do lists from the first to the LAST DAY OF THE REPORT (the chosen end day, never later than today); only days that have tasks
   function plansData(db, fromDk, toDk) {
     var by = {}, keys = [];
     db.todos.forEach(function (t) {

@@ -21,6 +21,23 @@ jobs:
         run: python tests/logic_test.py
         env:
           PYTHONUTF8: "1"
+      # The window / button / update-flow tests run the real program on the Windows runner (offscreen, with fake network and fake
+      # install). They are informational for now: a failure shows up as a warning but does not stop the release. When they have been
+      # green for a release or two, delete the "continue-on-error" line and they become a gate like the step above.
+      - name: UI checks on Windows (hover, window buttons, update flow)
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $failed = @()
+          foreach ($t in 'tests/hover_test.py', 'tests/chrome_test.py', 'tests/update_flow_test.py') {
+            Write-Host "=== $t"
+            python $t
+            if ($LASTEXITCODE -ne 0) { $failed += $t }
+          }
+          if ($failed.Count -gt 0) { Write-Error ("These UI checks failed: " + ($failed -join ', ')); exit 1 }
+        env:
+          PYTHONUTF8: "1"
+          QT_QPA_PLATFORM: offscreen
       - name: Tag must match the app version (otherwise the app would update in a loop)
         shell: pwsh
         run: |

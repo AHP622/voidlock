@@ -282,7 +282,7 @@ def collect(store, study, start, end, name="", lang="fa", goal_min=None, now=Non
             "streak": streak, "goal_days": sum(1 for x in days if goal and x["sec"] >= goal),
             "sessions": len(sessions), "sessions_sec": sum(s["focus_sec"] for s in sessions),
         },
-        "plans": plans_data(sl, start, end),
+        "plans": plans_data(sl, start, eff_end),
         "version": __version__, "week_start": int(store.settings.get("week_start", 5)),
         "schedule": schedule_data(store, lang) if include_schedule else None,
         "results": results_data(study, end, lang) if include_exams else None,
@@ -290,8 +290,8 @@ def collect(store, study, start, end, name="", lang="fa", goal_min=None, now=Non
 
 
 def plans_data(study, start, end):
-    """The day-by-day to-do lists (the PLAN box of the Study Timer) that fall inside the whole period asked for (future days
-    included, they simply show as not done). Only days that have tasks are listed."""
+    """The day-by-day to-do lists (the PLAN box of the Study Timer) from the first to the LAST DAY OF THE REPORT (the chosen end day,
+    but never later than today, like everything else in the report). Only days that have tasks are listed."""
     a, b = start.isoformat(), end.isoformat()
     by = {}
     for t in study.d.get("todos", []):

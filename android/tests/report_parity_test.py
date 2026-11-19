@@ -156,6 +156,7 @@ def compare(lang, frm_off, to_off, name):
 if __name__ == "__main__":
     for lang in ("en", "fa"):
         compare(lang, 13, 0, "Sara")
+        compare(lang, 3, -2, "Future")     # the chosen last day is in the future: tomorrow's plan must not appear
         compare(lang, 1, 1, "OneDay")      # a single day: that day's plan is shown without a picker
         compare(lang, 3, 3, "")            # a single day without any plan
         compare(lang, 39, 0, "")

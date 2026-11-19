@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.14.72
+* The Daily plans in the HTML report (computer and phone) now stop at the last day of the report: the end day you chose, but never later than today, like the rest of the report. Plans of future days are no longer listed as "not done".
+
 ## 1.14.71
 * Phone: sending a report now lets you choose ANY period. The sheet has quick buttons (today, 7, 14, 30, 90 days, all) that fill two always-visible From / To date fields, and those can be changed to any dates. The format buttons start with the web page (it has the Daily plans button). A period that only has daily plans is no longer called empty. "Send weekly report" stays as the one-tap button.
 * Windows sync server: it now binds its port exclusively (SO_EXCLUSIVEADDRUSE). Before, Windows let two programs listen on the same port, so a test (or a second program) could end up talking to the running VOIDLOCK, and the other way round. This is what made `test_lan_sync_server` fail while the program was open.

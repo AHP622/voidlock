@@ -8,6 +8,7 @@ dist/
 /release.cmd
 /tools/
 /.gitattributes
+/PROMPT_FOR_NEW_CHAT.md
 
 # Android
 android/.gradle/

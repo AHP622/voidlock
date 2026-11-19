@@ -111,6 +111,9 @@ TABS = {
 }
 
 NEWS = {
+    "1.14.72": (
+        ["The Daily plans in the HTML report now stop at the last day of the report (the end day you chose, never later than today), so future plans no longer show as not done."],
+        ["برنامه‌های روزانه در گزارش HTML حالا تا آخرین روز گزارش نشان داده می‌شوند (روز پایانی که انتخاب کرده‌اید و حداکثر امروز)؛ برنامه‌ی روزهای آینده دیگر به‌عنوان «انجام نشد» دیده نمی‌شود."]),
     "1.14.71": (
         ["On the phone you can now send a report for ANY period: quick buttons (today, 7, 14, 30, 90 days, all) fill the From and To dates, which you can also change freely. The sync server can no longer share its port with another program on Windows."],
         ["روی گوشی حالا می‌توانید گزارش را برای هر بازه‌ی دلخواه بفرستید: دکمه‌های سریع (امروز، ۷، ۱۴، ۳۰، ۹۰ روز و همه) تاریخ «از» و «تا» را پر می‌کنند و می‌توانید هر تاریخی را هم خودتان بگذارید. سرور همگام‌سازی هم روی ویندوز دیگر پورتش را با برنامه‌ی دیگری شریک نمی‌شود."]),
