@@ -153,7 +153,10 @@ def week_order(start):
 
 
 def uid():
-    return uuid.uuid4().hex[:10]
+    """A 10-character id that always contains a letter. An all-digit id looks like a number to JavaScript, which lists such keys first
+    and in numeric order: after a sync that put a task (or subject) in the wrong place on the phone, and made the report test flaky."""
+    h = uuid.uuid4().hex[:10]
+    return "a" + h[1:] if h.isdigit() else h
 
 
 THEME_KEYS = ("void", "candy", "ocean", "forest", "sunset", "midnight", "graphite", "paper", "mint")   # = theme.THEMES

@@ -16,7 +16,7 @@
 
   // ------------------------------------------------------------------ summaries of an import
   function planLines(plan) {
-    var names = { entries: 'k_entries', subjects: 'k_subjects_n', exams: 'k_exams_n', exam_subjects: 'k_exam_subjects_n', todos: 'k_todos_n', sessions: 'k_sessions_n', classes: 'k_classes_n' }, lines = [];
+    var names = { entries: 'k_entries', subjects: 'k_subjects_n', exams: 'k_exams_n', exam_subjects: 'k_exam_subjects_n', todos: 'k_todos_n', day_notes: 'k_day_notes_n', sessions: 'k_sessions_n', classes: 'k_classes_n' }, lines = [];
     [['new_here', 'added'], ['changed', 'updated'], ['removed_here', 'removed']].forEach(function (p) {
       var items = Object.keys(names).filter(function (k) { return plan.stats[k][p[1]]; }).map(function (k) { return I18n.num(plan.stats[k][p[1]]) + ' ' + t(names[k]); });
       var c = plan.stats.tests[p[1]] + plan.stats.words[p[1]]; if (c) items.push(I18n.num(c) + ' ' + t('k_counts'));

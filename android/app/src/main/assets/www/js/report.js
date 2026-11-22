@@ -291,22 +291,28 @@
     return out.join('');
   }
 
-  // the day-by-day to-do lists from the first to the LAST DAY OF THE REPORT (the chosen end day, never later than today); only days that have tasks
+  // the day-by-day to-do lists and the note of each day, from the first to the LAST DAY OF THE REPORT (the chosen end day, never later
+  // than today); only days that have tasks or a note
   function plansData(db, fromDk, toDk) {
-    var by = {}, keys = [];
+    var by = {}, notes = {}, keys = [];
+    function add(k) { if (keys.indexOf(k) < 0) keys.push(k); }
     db.todos.forEach(function (t) {
       var k = String(t.date || '');
-      if (k >= fromDk && k <= toDk && String(t.text || '').trim()) { if (!by[k]) { by[k] = []; keys.push(k); } by[k].push({ text: String(t.text), done: !!t.done }); }
+      if (k >= fromDk && k <= toDk && String(t.text || '').trim()) { if (!by[k]) by[k] = []; add(k); by[k].push({ text: String(t.text), done: !!t.done }); }
+    });
+    (db.day_notes || []).forEach(function (n) {
+      var k = String((n && n.date) || ''), tx = String((n && n.text) || '').trim();
+      if (k >= fromDk && k <= toDk && tx) { notes[k] = tx; add(k); }
     });
     keys.sort();
-    return { days: keys.map(function (k) { var di = dinfo(k); di.tasks = by[k]; return di; }) };
+    return { days: keys.map(function (k) { var di = dinfo(k); di.tasks = by[k] || []; di.note = notes[k] || ''; return di; }) };
   }
 
   // the advisor's view of the daily plans: hidden until the button at the top is pressed (same markup as the computer's report)
   function plansHtml(R) {
     var H = R.H, t = H.STR, days = R.plans.days, oneDay = R.start.dk === R.end.dk;
-    function fill(d, n) { return t.plans_done_of.replace('{d}', d).replace('{n}', n); }
-    function line(d, n) { return H.dg(fill(d, n)) + ' (' + H.dg((n ? Math.floor(d * 100 / n) : 0) + '%') + ')'; }
+    function fill(d, n) { return H.dg(t.plans_done_of.replace('{d}', d).replace('{n}', n)); }
+    function line(d, n) { return n ? fill(d, n) + ' (' + H.dg(Math.floor(d * 100 / n) + '%') + ')' : ''; }
     function counts(x) { var d = 0; x.tasks.forEach(function (k) { if (k.done) d++; }); return [d, x.tasks.length]; }
     var out = ['<div class="card" id="plans" style="display:none">', '<h2>' + esc(t.plans_title) + '</h2>'];
     if (!days.length) { out.push('<div class="empty">' + esc(t.plans_none) + '</div></div>\n'); return out.join(''); }
@@ -314,16 +320,18 @@
     days.forEach(function (x) { var c = counts(x); td += c[0]; tn += c[1]; });
     if (oneDay) out.push('<div class="pbar"><span class="psum">' + esc(line(td, tn)) + '</span></div>');
     else {
-      var opts = ['<option value="all" data-sum="' + esc(line(td, tn)) + '">' + esc(t.plans_all) + ' - ' + esc(line(td, tn)) + '</option>'];
-      days.forEach(function (x) { var c = counts(x); opts.push('<option value="' + x.dk + '" data-sum="' + esc(line(c[0], c[1])) + '">' + esc(H.fmtDate(x, true)) + ' - ' + esc(line(c[0], c[1])) + '</option>'); });
+      var option = function (value, label, sm) { return '<option value="' + value + '" data-sum="' + esc(sm) + '">' + esc(label + (sm ? ' - ' + sm : '')) + '</option>'; };
+      var opts = [option('all', t.plans_all, line(td, tn))];
+      days.forEach(function (x) { var c = counts(x); opts.push(option(x.dk, H.fmtDate(x, true), line(c[0], c[1]))); });
       out.push('<div class="pbar noprint"><label>' + esc(t.plans_pick) + ': <select onchange="' + t.plans_js_pick + '">' + opts.join('') + '</select></label><span class="psum">' + esc(line(td, tn)) + '</span></div>');
     }
     days.forEach(function (x) {
       var c = counts(x);
+      var note = x.note ? '<div class="pnote"><b>' + esc(t.plans_note) + '</b> ' + esc(x.note) + '</div>' : '';
       var items = x.tasks.map(function (k) {
         return '<li class="' + (k.done ? 'done' : 'open') + '"><i class="ck">' + (k.done ? '&#10003;' : '') + '</i><span class="tx">' + esc(k.text) + '</span><em>' + esc(k.done ? t.plans_done : t.plans_open) + '</em></li>';
       }).join('');
-      out.push('<div class="pday" data-d="' + x.dk + '"><div class="ph"><b>' + esc(H.fmtDate(x, true)) + '</b><span>' + esc(H.dg(fill(c[0], c[1]))) + '</span></div><ul class="pl">' + items + '</ul></div>');
+      out.push('<div class="pday" data-d="' + x.dk + '"><div class="ph"><b>' + esc(H.fmtDate(x, true)) + '</b><span>' + esc(c[1] ? fill(c[0], c[1]) : '') + '</span></div>' + note + (items ? '<ul class="pl">' + items + '</ul>' : '') + '</div>');
     });
     out.push('</div>\n');
     return out.join('');

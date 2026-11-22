@@ -424,6 +424,11 @@ FA.update({
     "{x} is starting now": "{x} همین حالا شروع می‌شود",
     "SESSION STARTING": "شروع جلسه", "{x} · {num} min starts now.": "{x} · {num} دقیقه همین حالا شروع می‌شود.",
     "{x} · {num} min was due {num2} minutes ago. Start it now?": "{x} · {num} دقیقه، {num2} دقیقه پیش موعدش بود. الان شروع شود؟",
+    # day notes (shown with the plan in the HTML report)
+    "NOTES FOR THIS DAY": "توضیحات این روز",
+    "e.g. focus on chemistry today, solve the tests timed (shown in the advisor's report)":
+        "مثلاً: امروز تمرکز روی شیمی، تست‌ها زمان‌دار حل بشه (در گزارش مشاور نشان داده می‌شود)",
+    "day notes": "توضیحات روز",
     # updates: download progress and "install now or later?"
     "Download automatically": "دانلود خودکار",
     "Downloads and verifies (SHA-256) new versions in the background. When one is ready, VOIDLOCK asks whether to install it now or later, and reminds you every 6 hours.":

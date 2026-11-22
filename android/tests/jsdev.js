@@ -21,6 +21,7 @@ if (cmd === 'init') {
     case 'add_todo': Core.addTodo(db, d, op.text); break;
     case 'remove_todo': { const t = db.todos.find((x) => x.text === op.text); if (t) Core.removeTodo(db, t.id); break; }
     case 'toggle_todo': { const t = db.todos.find((x) => x.text === op.text); if (t) Core.toggleTodo(db, t.id); break; }
+    case 'day_note': Core.setDayNote(db, d, op.text); break;
     case 'add_exam': Core.addExam(db, op.name, d); break;
     case 'remove_exam': { const e = db.exams.find((x) => x.name === op.name); if (e) Core.removeExam(db, e.id); break; }
     case 'add_exam_subject': Core.addExamSubject(db, op.name, op.color); break;

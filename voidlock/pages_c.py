@@ -2,9 +2,9 @@
 import time
 from datetime import date, datetime, timedelta
 
-from PySide6.QtCore import QPointF, QRectF, Qt, Signal
+from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QBrush, QColor, QConicalGradient, QFont, QLinearGradient, QPainter, QPainterPath, QPen
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit, QVBoxLayout, QWidget
 
 from . import i18n, messages, study as studymod
 from .icons import paint_icon
@@ -723,6 +723,21 @@ class StudyPage(Page):
         self.todo_box = QVBoxLayout()
         self.todo_box.setSpacing(0)
         pc.lay.addLayout(self.todo_box)
+        # the note of this day: shown with the plan in the HTML report. Saved a moment after typing stops (and when the day changes).
+        self.note_cap = label("NOTES FOR THIS DAY", 11, QFont.Weight.Bold, T.text3, spacing=2.4)
+        pc.lay.addSpacing(10)
+        pc.lay.addWidget(self.note_cap)
+        self.note_in = QPlainTextEdit()
+        self.note_in.setPlaceholderText(i18n.tr("e.g. focus on chemistry today, solve the tests timed (shown in the advisor's report)"))
+        self.note_in.setFixedHeight(76)
+        self.note_in.setTabChangesFocus(True)
+        pc.lay.addWidget(self.note_in)
+        self._note_day, self._note_loading, self._note_dirty = None, False, False
+        self._note_timer = QTimer(self)
+        self._note_timer.setSingleShot(True)
+        self._note_timer.setInterval(700)
+        self._note_timer.timeout.connect(self.save_note)
+        self.note_in.textChanged.connect(self._note_edited)
         pc.lay.addStretch(1)
         row.addWidget(pc, 2)
 
@@ -931,6 +946,33 @@ class StudyPage(Page):
         self._sig = None
         self.refresh()
 
+    def _note_edited(self):
+        if not self._note_loading:
+            self._note_dirty = True
+            self._note_timer.start()
+
+    def save_note(self):
+        """Writes the box into the note of the day it was typed for (also when the shown day has changed since)."""
+        if not self._note_dirty or self._note_day is None:
+            return
+        self._note_dirty = False
+        self._note_timer.stop()
+        self.sl.set_day_note(self._note_day, self.note_in.toPlainText())
+        self.ctx.after_study_change()
+
+    def _show_note(self, pday):
+        """Loads the note of `pday` into the box. Never overwrites what is being typed."""
+        if pday != self._note_day:
+            self.save_note()                              # what was typed for the day we are leaving
+            self._note_day = pday
+        elif self.note_in.hasFocus() or self._note_dirty:
+            return
+        text = self.sl.day_note(pday)
+        if text != self.note_in.toPlainText():
+            self._note_loading = True
+            self.note_in.setPlainText(text)
+            self._note_loading = False
+
     def add_todo(self):
         t = self.todo_in.text().strip()
         if t:
@@ -1024,6 +1066,7 @@ class StudyPage(Page):
         self.plan_title.setText("TODAY'S PLAN" if pday == today else
                                 i18n.tr("PLAN") + " · " + i18n.fmt_when(datetime(pday.year, pday.month, pday.day), with_time=False))
         self.b_ptoday.setVisible(pday != today)
+        self._show_note(pday)
         self.plan_l.setText(f"{sum(1 for t in todos if t['done'])}/{len(todos)} done" if todos else "")
         # daily log header
         self.date_l.setText(i18n.fmt_when(datetime(self.sel.year, self.sel.month, self.sel.day), with_time=False)

@@ -31,7 +31,7 @@ FORMAT = "voidlock-sync"
 VERSION = 2
 EXT = ".voidsync"
 MAX_BYTES = 60 * 1024 * 1024
-LIST_KINDS = ("subjects", "entries", "exams", "exam_subjects", "todos", "sessions", "classes")
+LIST_KINDS = ("subjects", "entries", "exams", "exam_subjects", "todos", "day_notes", "sessions", "classes")
 LEAF_KINDS = ("tests", "words")                     # one record per day and subject: id "date|subject_id", value {"n": count}
 KINDS = LIST_KINDS + LEAF_KINDS + ("gone",)
 LOCAL_ONLY = {"exams": ("notified",), "classes": ("rem_done", "start_done")}               # per-device state that must not count as a change
@@ -73,6 +73,9 @@ def _valid(kind, r):
             return isinstance(r.get("name"), str) and isinstance(r.get("date"), str) and len(r["date"]) == 10
         if kind == "todos":
             return isinstance(r.get("text"), str)
+        if kind == "day_notes":
+            return isinstance(r.get("text"), str) and r["text"].strip() != "" and isinstance(r.get("date"), str) and len(r["date"]) == 10 \
+                and r.get("id") == "dn-" + r["date"]
         if kind == "sessions":
             float(r["start"])
             return True
@@ -89,7 +92,7 @@ def _records(store):
     """{kind: {id: record}} of this device, as plain canonical data."""
     st = store.study if isinstance(store.study, dict) else {}
     out = {k: {} for k in KINDS}
-    for kind in ("subjects", "entries", "exams", "exam_subjects", "todos"):
+    for kind in ("subjects", "entries", "exams", "exam_subjects", "todos", "day_notes"):
         for x in st.get(kind) or []:
             if isinstance(x, dict) and isinstance(x.get("id"), str) and x["id"]:
                 out[kind][x["id"]] = _strip(kind, copy.deepcopy(x))
@@ -499,6 +502,7 @@ def apply(store, merged, remap=None, sl=None):
     st["subjects"] = keep_order("subjects")
     st["exam_subjects"] = keep_order("exam_subjects")
     st["todos"] = keep_order("todos")
+    st["day_notes"] = copy.deepcopy(_sorted_by(recs["day_notes"].values(), "date"))
     st["entries"] = copy.deepcopy(_sorted_by(recs["entries"].values(), "date", "t", "id"))
     today = date.today().isoformat()
     exams = []

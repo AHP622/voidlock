@@ -61,6 +61,11 @@ def make_data():
             t = sl.add_todo(today - timedelta(days=off), txt)
             if (off + k) % 2 == 0:
                 sl.toggle_todo(t["id"])
+    # day notes: with tasks, tricky text (markup, quotes, a line break), a day with ONLY a note, and a future one
+    sl.set_day_note(today - timedelta(days=1), "Focus on chemistry <b>today</b>\nsolve the tests timed & \"carefully\"")
+    sl.set_day_note(today - timedelta(days=5), "الگوی امروز: مرور غلط‌ها")
+    sl.set_day_note(today - timedelta(days=7), "only a note, no tasks that day")
+    sl.set_day_note(today + timedelta(days=1), "tomorrow's note must not appear")
     st.classes = S.clean_classes([{"id": f"k{i}", "name": n, "day": d, "time": tm, "minutes": mn, "remind": 15, "place": pl, "enabled": en}
                                   for i, (n, d, tm, mn, pl, en) in enumerate([("Calculus", 0, "17:00", 90, "Room 3", True), ("Physics", 0, "09:30", 60, "", True),
                                                                               ("Chem", 2, "16:15", 120, "Online", True), ("Bio", 5, "08:00", 45, "Hall B", True),

@@ -111,6 +111,9 @@ TABS = {
 }
 
 NEWS = {
+    "1.14.73": (
+        ["Every day of the plan now has a \"Notes for this day\" box (on the computer and on the phone). The note syncs between them and appears with that day's plan in the HTML report, above the tasks."],
+        ["هر روز برنامه حالا یک کادر «توضیحات این روز» دارد (روی کامپیوتر و گوشی). توضیحات بین دو دستگاه همگام می‌شود و در گزارش HTML همراه برنامه‌ی همان روز، بالای کارها دیده می‌شود."]),
     "1.14.72": (
         ["The Daily plans in the HTML report now stop at the last day of the report (the end day you chose, never later than today), so future plans no longer show as not done."],
         ["برنامه‌های روزانه در گزارش HTML حالا تا آخرین روز گزارش نشان داده می‌شوند (روز پایانی که انتخاب کرده‌اید و حداکثر امروز)؛ برنامه‌ی روزهای آینده دیگر به‌عنوان «انجام نشد» دیده نمی‌شود."]),

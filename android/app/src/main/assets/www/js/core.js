@@ -4,7 +4,7 @@
 (function (root) {
   'use strict';
   var FORMAT = 'voidlock-sync', VERSION = 2;
-  var LIST_KINDS = ['subjects', 'entries', 'exams', 'exam_subjects', 'todos', 'sessions', 'classes'];
+  var LIST_KINDS = ['subjects', 'entries', 'exams', 'exam_subjects', 'todos', 'day_notes', 'sessions', 'classes'];
   var LEAF_KINDS = ['tests', 'words'];
   var KINDS = LIST_KINDS.concat(LEAF_KINDS, ['gone']);
   var LOCAL_ONLY = { exams: ['notified'], classes: ['rem_done', 'start_done'] };
@@ -21,7 +21,8 @@
       var a = new Uint8Array(5); root.crypto.getRandomValues(a);
       for (var i = 0; i < a.length; i++) s += ('0' + a[i].toString(16)).slice(-2);
     } else { for (var j = 0; j < 10; j++) s += Math.floor(Math.random() * 16).toString(16); }
-    return s;
+    // always contains a letter: an all-digit key is an "array index" to JavaScript and would be listed first, in numeric order
+    return /^\d+$/.test(s) ? 'a' + s.slice(1) : s;
   }
   function pad(n) { return (n < 10 ? '0' : '') + n; }
   function dkey(d) { d = d || new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
@@ -74,7 +75,7 @@
   // ---------------------------------------------------------------- the database
   function newDb() {
     return {
-      v: 1, subjects: [], entries: [], tests: {}, words: {}, gone: {}, exams: [], exam_subjects: [], todos: [], sessions: [], classes: [],
+      v: 1, subjects: [], entries: [], tests: {}, words: {}, gone: {}, exams: [], exam_subjects: [], todos: [], day_notes: [], sessions: [], classes: [],
       active: null,
       settings: { lang: 'fa', goal_min: 600, goal_min_default_v: 2 },
       sync: { device_id: uid(), device_name: '', dg: {}, mt: {}, tomb: {}, peers: {}, laptop: null }
@@ -82,7 +83,7 @@
   }
   function ensure(db) {
     db = isObj(db) ? db : newDb();
-    ['subjects', 'entries', 'exams', 'exam_subjects', 'todos', 'sessions', 'classes'].forEach(function (k) { if (!Array.isArray(db[k])) db[k] = []; });
+    ['subjects', 'entries', 'exams', 'exam_subjects', 'todos', 'day_notes', 'sessions', 'classes'].forEach(function (k) { if (!Array.isArray(db[k])) db[k] = []; });
     ['tests', 'words', 'gone'].forEach(function (k) { if (!isObj(db[k])) db[k] = {}; });
     if (!isObj(db.settings)) db.settings = {};
     if (!db.settings.lang) db.settings.lang = 'fa';
@@ -214,6 +215,18 @@
   function addTodo(db, date, text) { var t = { id: uid(), date: dkey(date), text: String(text).trim(), done: false }; if (t.text) db.todos.push(t); return t; }
   function toggleTodo(db, id) { db.todos.forEach(function (t) { if (t.id === id) t.done = !t.done; }); }
   function removeTodo(db, id) { db.todos = db.todos.filter(function (t) { return t.id !== id; }); }
+  // the note of a day (shown with the day's plan in the HTML report): one per day, its id depends only on the date so the phone and the
+  // computer agree on it; an empty text removes it
+  var DAY_NOTE_MAX = 600;
+  function dayNote(db, date) { var k = typeof date === 'string' ? date : dkey(date), n = db.day_notes.filter(function (x) { return isObj(x) && x.date === k; })[0]; return n ? String(n.text || '') : ''; }
+  function setDayNote(db, date, text) {
+    var k = typeof date === 'string' ? date : dkey(date), tx = String(text == null ? '' : text).trim().slice(0, DAY_NOTE_MAX);
+    var cur = db.day_notes.filter(function (x) { return isObj(x) && x.date === k; })[0];
+    if (!tx) { if (cur) db.day_notes = db.day_notes.filter(function (x) { return x !== cur; }); return false; }
+    if (cur) { if (cur.text === tx) return false; cur.text = tx; return true; }
+    db.day_notes.push({ id: 'dn-' + k, date: k, text: tx });
+    return true;
+  }
 
   // ---------------------------------------------------------------- exams
   var PCT_RANGE = [-33.4, 100.0], TARAZ_MAX = 20000, RANK_MAX = 5000000;
@@ -311,7 +324,7 @@
   function sessionId(r) { return String(r.id || '') || 's' + Math.floor(Number(r.start || 0) * 1000); }
   function records(db) {
     var out = {}; KINDS.forEach(function (k) { out[k] = {}; });
-    ['subjects', 'entries', 'exams', 'exam_subjects', 'todos'].forEach(function (kind) {
+    ['subjects', 'entries', 'exams', 'exam_subjects', 'todos', 'day_notes'].forEach(function (kind) {
       db[kind].forEach(function (x) { if (isObj(x) && typeof x.id === 'string' && x.id) out[kind][x.id] = strip(kind, clone(x)); });
     });
     db.sessions.forEach(function (r) { if (isObj(r) && isFinite(Number(r.start))) { var id = sessionId(r); var c = clone(r); c.id = id; out.sessions[id] = c; } });
@@ -471,6 +484,7 @@
       if (kind === 'entries') return isFinite(parseInt(r.sec, 10)) && typeof r.date === 'string' && r.date.length === 10;
       if (kind === 'exams') return typeof r.name === 'string' && typeof r.date === 'string' && r.date.length === 10;
       if (kind === 'todos') return typeof r.text === 'string';
+      if (kind === 'day_notes') return typeof r.text === 'string' && r.text.trim() !== '' && typeof r.date === 'string' && r.date.length === 10 && r.id === 'dn-' + r.date;
       if (kind === 'sessions') return isFinite(Number(r.start));
       if (kind === 'classes') return !!cleanClass(r);
       if (kind === 'tests' || kind === 'words') return Number.isInteger(r.n) && r.n > 0;
@@ -536,6 +550,7 @@
       return clone(first.concat(rest));
     }
     db.subjects = keepOrder('subjects'); db.exam_subjects = keepOrder('exam_subjects'); db.todos = keepOrder('todos');
+    db.day_notes = clone(sortBy(Object.keys(recs.day_notes).map(function (i) { return recs.day_notes[i]; }), ['date']));
     db.entries = clone(sortBy(Object.keys(recs.entries).map(function (i) { return recs.entries[i]; }), ['date', 't', 'id']));
     db.exams = clone(sortBy(Object.keys(recs.exams).map(function (i) { return recs.exams[i]; }), ['date', 'time', 'id']));
     LEAF_KINDS.forEach(function (kind) {
@@ -572,7 +587,7 @@
     subject: subject, addSubject: addSubject, editSubject: editSubject, removeSubject: removeSubject, subjectOrGhost: subjectOrGhost,
     addEntry: addEntry, addManual: addManual, removeEntry: removeEntry, startTimer: startTimer, stopTimer: stopTimer, elapsed: elapsed,
     daySec: daySec, daySubjectTimes: daySubjectTimes, counter: counter, setCounter: setCounter,
-    cleanClass: cleanClass, classes: classes, addClass: addClass, updateClass: updateClass, removeClass: removeClass, addTodo: addTodo, toggleTodo: toggleTodo, removeTodo: removeTodo,
+    cleanClass: cleanClass, classes: classes, addClass: addClass, updateClass: updateClass, removeClass: removeClass, addTodo: addTodo, toggleTodo: toggleTodo, removeTodo: removeTodo, dayNote: dayNote, setDayNote: setDayNote,
     exams: exams, addExam: addExam, updateExam: updateExam, removeExam: removeExam, examSubject: examSubject, addExamSubject: addExamSubject,
     editExamSubject: editExamSubject, removeExamSubject: removeExamSubject, setExamResult: setExamResult, clearExamResult: clearExamResult,
     examProgress: examProgress, nextExam: nextExam,

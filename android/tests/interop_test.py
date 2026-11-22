@@ -68,6 +68,7 @@ class Py:
             x = next((x for x in sl.d["todos"] if x["text"] == o["text"]), None); x and sl.remove_todo(x["id"])
         elif t == "toggle_todo":
             x = next((x for x in sl.d["todos"] if x["text"] == o["text"]), None); x and sl.toggle_todo(x["id"])
+        elif t == "day_note": sl.set_day_note(d, o["text"])
         elif t == "add_exam": sl.add_exam(o["name"], d)
         elif t == "remove_exam":
             x = next((x for x in sl.d["exams"] if x["name"] == o["name"]), None); x and sl.remove_exam(x["id"])
@@ -115,6 +116,7 @@ def rand_op(rnd, step, names, ex_names):
     if r < 0.38: return {"t": "add_todo", "text": f"todo {step}", "date": day}
     if r < 0.43: return {"t": "remove_todo", "text": f"todo {rnd.randint(0, step)}"}
     if r < 0.48: return {"t": "toggle_todo", "text": f"todo {rnd.randint(0, step)}"}
+    if r < 0.51: return {"t": "day_note", "date": day, "text": rnd.choice(["", "", "note \u0627\u0645\u0631\u0648\u0632 <b>x</b>", f"plan {step}\nline two", "same text"])}
     if r < 0.54: return {"t": "add_subject", "name": rnd.choice(names + ["Geo", "Bio"]), "color": rnd.choice([None, "#14B8A6", "#9333EA"])}
     if r < 0.57: return {"t": "remove_subject", "name": rnd.choice(names)}
     if r < 0.63: return {"t": "add_exam", "name": f"exam {step}", "date": (today + timedelta(days=rnd.randint(-15, 50))).isoformat()}

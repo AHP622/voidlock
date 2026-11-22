@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.73
+* Notes for each day. The plan of every day (Study Timer on the computer, Plan on the phone) has a "Notes for this day" box. The note is saved automatically, syncs between the computer and the phone (a new kind of synced data: an older app simply ignores it and nothing is deleted), and is shown in the HTML report's "Daily plans" panel under the date and above that day's tasks. A day that has only a note is listed too and can be picked. Notes follow the same last-day rule as the plans (never later than today). CSV and PDF reports are unchanged.
+* Fixed a rare mix-up of the order of tasks (or subjects) on the phone after a sync: an id made only of digits looks like a number to JavaScript, which lists such items first. New ids always contain a letter, on both the computer and the phone.
+
 ## 1.14.72
 * The Daily plans in the HTML report (computer and phone) now stop at the last day of the report: the end day you chose, but never later than today, like the rest of the report. Plans of future days are no longer listed as "not done".
 

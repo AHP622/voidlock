@@ -141,12 +141,12 @@ QToolTip {{
     padding: 6px 9px; border-radius: 6px; font-size: 12px;
 }}
 QLabel {{ background: transparent; }}
-QLineEdit {{
+QLineEdit, QPlainTextEdit {{
     background: {T.panel2}; border: 1px solid {T.border}; border-radius: 10px;
     padding: 9px 12px; color: {T.text}; selection-background-color: {T.cyan_dim};
 }}
-QLineEdit:hover {{ border-color: {T.border_hi}; }}
-QLineEdit:focus {{ border: 1px solid {T.cyan}; background: {T.panel}; }}
+QLineEdit:hover, QPlainTextEdit:hover {{ border-color: {T.border_hi}; }}
+QLineEdit:focus, QPlainTextEdit:focus {{ border: 1px solid {T.cyan}; background: {T.panel}; }}
 QScrollArea {{ background: transparent; border: none; }}
 QScrollArea > QWidget > QWidget {{ background: transparent; }}
 QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; }}

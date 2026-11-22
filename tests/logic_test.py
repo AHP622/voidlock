@@ -1554,6 +1554,85 @@ def test_jalali_str_works_in_both_languages():
     ok(i18n.jalali_str(1406, 4, 10) == i18n.digits("10 تیر 1406"), "jalali_str still formats in Persian")
 
 
+def test_day_notes():
+    """The note of a day: stored per day, synced like the other lists, shown with the plan in the HTML report."""
+    from voidlock import sync, report
+    a, sla = _dev("na")
+    b, slb = _dev("nb")
+    d = date.today() - timedelta(days=1)
+    ok(sla.day_note(d) == "", "a day without a note has an empty note")
+    sla.set_day_note(d, "  Focus on chemistry\nsolve the tests timed  ")
+    ok(sla.day_note(d) == "Focus on chemistry\nsolve the tests timed", "a note is kept (trimmed, line breaks kept)")
+    ok(sla.d["day_notes"][0]["id"] == f"dn-{d.isoformat()}", "its id depends only on the date (both devices must agree on it)")
+    sla.set_day_note(d, "x" * 5000)
+    ok(len(sla.day_note(d)) == 600, "a note is cut at 600 characters")
+    sla.set_day_note(d, "Chemistry day")
+    sla.set_day_note(d - timedelta(days=3), "only a note, no tasks")
+    ok(len(sla.d["day_notes"]) == 2, "one note per day")
+    # --- sync
+    _both(a, b, sla, slb)
+    ok(slb.day_note(d) == "Chemistry day" and len(slb.d["day_notes"]) == 2, "a note travels to the other device")
+    time.sleep(0.02)
+    slb.set_day_note(d, "Chemistry day - edited on the phone")
+    _both(a, b, sla, slb)
+    ok(sla.day_note(d) == "Chemistry day - edited on the phone", "an edit travels back")
+    slb.set_day_note(d - timedelta(days=3), "")
+    _both(a, b, sla, slb)
+    ok(len(sla.d["day_notes"]) == 1 and len(slb.d["day_notes"]) == 1, "clearing a note deletes it on the other device too")
+    ok(_canon(a) == _canon(b), "the two devices agree")
+    # both write a note for the same day: the same winner on both devices, never two notes
+    sla.set_day_note(d, "laptop")
+    time.sleep(0.02)
+    slb.set_day_note(d, "phone")
+    _both(a, b, sla, slb)
+    ok(sla.day_note(d) == slb.day_note(d) and len(sla.d["day_notes"]) == 1, "two notes for one day end as one note, the same on both")
+    # a record with a wrong id or an empty text is refused, a package without notes (an older app) removes nothing
+    bad = {"id": "dn-x", "date": d.isoformat(), "text": "hi"}
+    ok(not sync._valid("day_notes", bad) and not sync._valid("day_notes", {**bad, "id": "dn-" + d.isoformat(), "text": "  "}), "a damaged note record is refused")
+    pkg = sync.make_package(b)
+    for k in ("day_notes",):
+        pkg["data"].pop(k, None)
+    plan = sync.prepare(a, json.dumps(pkg))
+    sync.commit(a, plan, sl=sla)
+    ok(sla.day_note(d) != "", "a package from an older app (no notes at all) does not delete the notes here")
+    # --- the report
+    Rn = report.collect(a, sla, d - timedelta(days=5), d + timedelta(days=1), "", "en", goal_min=60)
+    days = {x["date"]: x for x in Rn["plans"]["days"]}
+    ok(d in days and days[d]["note"] == sla.day_note(d), "the report data carries the note of a day")
+    sla.add_todo(d, "a <b>task</b>")
+    sla.set_day_note(d - timedelta(days=2), "note only <i>day</i>")
+    Rn = report.collect(a, sla, d - timedelta(days=5), d + timedelta(days=1), "", "en", goal_min=60)
+    h = report.render_html(Rn)
+    ok('class="pnote"' in h and "Notes for this day:" in h and "&lt;i&gt;day&lt;/i&gt;" in h and "<i>day</i>" not in h, "the HTML shows the note, escaped")
+    i1, i2 = h.index(f'data-d="{(d - timedelta(days=2)).isoformat()}"'), h.index(f'data-d="{d.isoformat()}"')
+    day_block = h[i2:]
+    ok(day_block.index('class="pnote"') < day_block.index('class="pl"'), "the note stands between the date and the tasks")
+    ok(h[i1:i2].count("<li") == 0 and "note only" in h[i1:i2], "a day with only a note is listed, without tasks")
+    ok("<select" in h and f'value="{(d - timedelta(days=2)).isoformat()}"' in h, "such a day can be picked")
+    ok("pnote" not in report.render_csv(Rn) and "note only" not in report.render_pdf_html(Rn), "notes are only in the HTML report")
+    Rf = report.collect(a, sla, d - timedelta(days=5), date.today() + timedelta(days=4), "", "en", goal_min=60)
+    sla.set_day_note(date.today() + timedelta(days=2), "future note")
+    Rf = report.collect(a, sla, d - timedelta(days=5), date.today() + timedelta(days=4), "", "en", goal_min=60)
+    ok("future note" not in report.render_html(Rf), "a note of a day after the report's last day (today at most) is not shown")
+
+
+def test_ids_are_never_all_digits():
+    """JavaScript lists all-digit object keys first and in numeric order, so an all-digit id could put a synced task or subject in the
+    wrong place on the phone (it made the report comparison fail now and then)."""
+    import uuid
+    real = uuid.uuid4
+
+    class Fake:
+        hex = "1234567890abcdef1234567890abcdef"
+
+    uuid.uuid4 = lambda: Fake()
+    try:
+        ok(S.uid() == "a234567890" and len(S.uid()) == 10, "an all-digit id gets a leading letter")
+    finally:
+        uuid.uuid4 = real
+    ok(all(not S.uid().isdigit() and len(S.uid()) == 10 for _ in range(3000)), "ids are 10 characters and never all digits")
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
