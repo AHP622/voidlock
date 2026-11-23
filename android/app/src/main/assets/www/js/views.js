@@ -179,11 +179,6 @@
     function add() { var v = inp.value.trim(); if (!v) return; Core.addTodo(db, Core.parseDkey(day), v); App.changed(); }
     inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') add(); });
     host.appendChild(card(null, h('div', { class: 'row' }, h('div', { class: 'grow' }, inp), h('button', { class: 'btn primary', 'aria-label': t('add'), onclick: add }, UI.ic('plus')))));
-    // the note of this day (shown with the plan in the HTML report). Saved when you leave the box, not on every key, so typing is never interrupted.
-    var noteBox = h('textarea', { rows: 2, maxlength: 600, placeholder: t('day_note_ph'), 'aria-label': t('day_note') });
-    noteBox.value = Core.dayNote(db, day);
-    noteBox.addEventListener('change', function () { Core.setDayNote(db, day, noteBox.value); App.save(); });
-    host.appendChild(card(t('day_note'), noteBox));
     var todays = db.todos.filter(function (x) { return x.date === day; });
     if (todays.length) {
       var nd = todays.filter(function (x) { return x.done; }).length, pc = Math.round(nd / todays.length * 100);

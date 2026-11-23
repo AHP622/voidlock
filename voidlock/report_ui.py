@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QUrl, Qt, Signal
 from PySide6.QtGui import QDesktopServices, QFont
-from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLineEdit, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLineEdit, QPlainTextEdit, QVBoxLayout, QWidget
 
 from . import i18n, report
 from .theme import T
@@ -60,7 +60,16 @@ class ReportForm(QWidget):
             r.addWidget(tg)
             lay.addLayout(r)
             setattr(self, attr, tg)
+        # what the student wants the advisor to know about the study plan: shown with the plan in the web page (HTML) only
+        self.note_l = label("NOTES FOR THE ADVISOR (shown with the study plan in the web page)", 10, QFont.Weight.Bold, T.text3, spacing=2, wrap=True)
+        self.note = QPlainTextEdit()
+        self.note.setPlaceholderText(i18n.tr("e.g. this week: focus on chemistry and calculus, tests solved timed, two days lost to illness"))
+        self.note.setFixedHeight(84)
+        self.note.setTabChangesFocus(True)
+        lay.addWidget(self.note_l)
+        lay.addWidget(self.note)
         self.period.currentChanged.connect(self._sync)
+        self.fmt.currentChanged.connect(self._sync)
         self.lang.currentChanged.connect(self._sync)
         for w in (self.anchor, self.d_from, self.d_to):
             w.changed.connect(self._sync)
@@ -90,6 +99,8 @@ class ReportForm(QWidget):
         lang = self.report_lang()
         text = report.fmt_date(a, lang, weekday=(a == b)) if a == b else f"{report.fmt_date(a, lang)}  -  {report.fmt_date(b, lang)}"
         self.range_l.setText(text)
+        for w in (self.note_l, self.note):
+            w.setVisible(FORMATS[self.fmt.current()] == "html")          # the explanation only exists in the web page
         self.changed.emit()
 
     def valid(self):
@@ -98,14 +109,15 @@ class ReportForm(QWidget):
     def values(self):
         a, b = self.range()
         return {"name": self.name.text().strip(), "lang": self.report_lang(), "start": a, "end": b, "fmt": FORMATS[self.fmt.current()],
-                "kind": self.kind(), "exams": self.inc_exams.isChecked(), "schedule": self.inc_sched.isChecked()}
+                "kind": self.kind(), "exams": self.inc_exams.isChecked(), "schedule": self.inc_sched.isChecked(),
+                "note": self.note.toPlainText().strip() if FORMATS[self.fmt.current()] == "html" else ""}
 
 
 def build_report(ctx, v):
     """The report data for the chosen values (also used by tests)."""
     return report.collect(ctx.store, ctx.study, v["start"], v["end"], v["name"], v["lang"],
                           goal_min=int(ctx.store.settings.get("daily_goal_min", 120)),
-                          include_schedule=v.get("schedule", True), include_exams=v.get("exams", True))
+                          include_schedule=v.get("schedule", True), include_exams=v.get("exams", True), plan_note=v.get("note", ""))
 
 
 def write_report(R, fmt, path):

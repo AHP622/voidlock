@@ -24,7 +24,7 @@ STR = {
         "daily": "جدول روزانه", "monthly": "جدول ماهانه", "date": "تاریخ", "weekday": "روز", "month": "ماه", "days": "روزها",
         "plans_btn": "برنامه‌ی روزانه", "plans_title": "برنامه‌ی روزانه‌ی دانش‌آموز", "plans_pick": "روز", "plans_all": "همه‌ی روزها",
         "plans_done_of": "{d} از {n} انجام شد", "plans_done": "انجام شد", "plans_open": "انجام نشد",
-        "plans_none": "برای این بازه برنامه‌ای ثبت نشده است.", "plans_note": "توضیحات این روز:",
+        "plans_none": "برای این بازه برنامه‌ای ثبت نشده است.", "plans_note": "توضیحات:",
         "plans_js_open": "var p=document.getElementById('plans');p.style.display=p.style.display==='block'?'none':'block';if(p.style.display==='block'){p.scrollIntoView({behavior:'smooth'})}",
         "plans_js_pick": "var v=this.value,P=document.getElementById('plans');Array.prototype.forEach.call(P.querySelectorAll('.pday'),function(e){e.style.display=(v==='all'||e.getAttribute('data-d')===v)?'block':'none'});P.querySelector('.psum').textContent=this.options[this.selectedIndex].getAttribute('data-sum')",
         "sessions_title": "جدول جلسه‌های تمرکز", "when": "زمان شروع", "planned": "برنامه‌ریزی‌شده", "focused": "تمرکز واقعی",
@@ -57,7 +57,7 @@ STR = {
         "daily": "Daily table", "monthly": "Monthly table", "date": "Date", "weekday": "Day", "month": "Month", "days": "Days",
         "plans_btn": "Daily plans", "plans_title": "Daily plans", "plans_pick": "Day", "plans_all": "All days",
         "plans_done_of": "{d} of {n} done", "plans_done": "Done", "plans_open": "Not done",
-        "plans_none": "No plans were recorded for this period.", "plans_note": "Notes for this day:",
+        "plans_none": "No plans were recorded for this period.", "plans_note": "Notes:",
         "plans_js_open": "var p=document.getElementById('plans');p.style.display=p.style.display==='block'?'none':'block';if(p.style.display==='block'){p.scrollIntoView({behavior:'smooth'})}",
         "plans_js_pick": "var v=this.value,P=document.getElementById('plans');Array.prototype.forEach.call(P.querySelectorAll('.pday'),function(e){e.style.display=(v==='all'||e.getAttribute('data-d')===v)?'block':'none'});P.querySelector('.psum').textContent=this.options[this.selectedIndex].getAttribute('data-sum')",
         "sessions_title": "Focus sessions", "when": "Started", "planned": "Planned", "focused": "Focused",
@@ -188,7 +188,7 @@ def first_recorded_day(study, store):
 
 
 # ------------------------------------------------------------------ data
-def collect(store, study, start, end, name="", lang="fa", goal_min=None, now=None, include_schedule=True, include_exams=True):
+def collect(store, study, start, end, name="", lang="fa", goal_min=None, now=None, include_schedule=True, include_exams=True, plan_note=""):
     """Everything a report shows, as plain data."""
     today = (now or datetime.now()).date()
     eff_end = min(end, today)
@@ -282,27 +282,26 @@ def collect(store, study, start, end, name="", lang="fa", goal_min=None, now=Non
             "streak": streak, "goal_days": sum(1 for x in days if goal and x["sec"] >= goal),
             "sessions": len(sessions), "sessions_sec": sum(s["focus_sec"] for s in sessions),
         },
-        "plans": plans_data(sl, start, eff_end),
+        "plans": plans_data(sl, start, eff_end), "plan_note": str(plan_note or "").strip()[:PLAN_NOTE_MAX],
         "version": __version__, "week_start": int(store.settings.get("week_start", 5)),
         "schedule": schedule_data(store, lang) if include_schedule else None,
         "results": results_data(study, end, lang) if include_exams else None,
     }
 
 
+PLAN_NOTE_MAX = 1500                   # the text the student writes for the advisor when the report is made
+
+
 def plans_data(study, start, end):
-    """The day-by-day to-do lists (the PLAN box of the Study Timer) and the note of each day, from the first to the LAST DAY OF THE REPORT (the chosen end day,
-    but never later than today, like everything else in the report). Only days that have tasks or a note are listed."""
+    """The day-by-day to-do lists (the PLAN box of the Study Timer) from the first to the LAST DAY OF THE REPORT (the chosen end day,
+    but never later than today, like everything else in the report). Only days that have tasks are listed."""
     a, b = start.isoformat(), end.isoformat()
-    by, notes = {}, {}
+    by = {}
     for t in study.d.get("todos", []):
         k = str(t.get("date", ""))
         if a <= k <= b and str(t.get("text", "")).strip():
             by.setdefault(k, []).append({"text": str(t["text"]), "done": bool(t.get("done"))})
-    for n in study.d.get("day_notes", []):
-        k = str(n.get("date", "")) if isinstance(n, dict) else ""
-        if a <= k <= b and str(n.get("text", "")).strip():
-            notes[k] = str(n["text"]).strip()
-    return {"days": [{"date": date.fromisoformat(k), "tasks": by.get(k, []), "note": notes.get(k, "")} for k in sorted(set(by) | set(notes))]}
+    return {"days": [{"date": date.fromisoformat(k), "tasks": by[k]} for k in sorted(by)]}
 
 
 def schedule_data(store, lang):
@@ -505,7 +504,7 @@ button.noprint{font:inherit;background:#0e7490;color:#fff;border:0;border-radius
 .pday{margin:0 0 12px;border:1px solid #e3e9f3;border-radius:12px;overflow:hidden}
 .ph{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#f1f5fb;padding:8px 12px;font-size:13px}
 .ph span{color:#475569}
-.pnote{padding:8px 12px;font-size:13px;line-height:1.7;color:#4a3b00;background:#fff8e1;border-bottom:1px solid #f3e5ab;white-space:pre-wrap;overflow-wrap:anywhere}
+.pnote{padding:10px 14px;margin:0 0 12px;font-size:13.5px;line-height:1.8;color:#4a3b00;background:#fff8e1;border:1px solid #f3e5ab;border-radius:12px;white-space:pre-wrap;overflow-wrap:anywhere}
 .pl{list-style:none;margin:0;padding:4px 12px}
 .pl li{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #eef2f8}
 .pl li:last-child{border-bottom:0}
@@ -666,9 +665,9 @@ def _schedule_html(R):
 
 
 def _plans_html(R):
-    """The advisor's view of the daily plans: hidden until the button at the top is pressed. One day in the report: that day's
-    list. A longer period: a day picker with 'all days'. Each task shows whether it was done; the note of the day (if the student
-    wrote one) stands between the date and the tasks."""
+    """The advisor's view of the daily plans: hidden until the button at the top is pressed. First the explanation the student typed
+    when making the report (if any), then the days: one day in the report = that day's list, a longer period = a day picker with
+    'all days'. Each task shows whether it was done."""
     lang, t = R["lang"], STR[R["lang"]]
     days = R["plans"]["days"]
     one_day = R["start"] == R["end"]
@@ -677,12 +676,14 @@ def _plans_html(R):
         return _digits(t["plans_done_of"].format(d=d, n=n), lang)
 
     def line(d, n):
-        return fill(d, n) + " (" + _digits(f"{(d * 100 // n) if n else 0}%", lang) + ")" if n else ""
+        return fill(d, n) + " (" + _digits(f"{(d * 100 // n) if n else 0}%", lang) + ")"
 
     def counts(day):
         return sum(1 for x in day["tasks"] if x["done"]), len(day["tasks"])
 
     out = ['<div class="card" id="plans" style="display:none">', f'<h2>{esc(t["plans_title"])}</h2>']
+    if R.get("plan_note"):
+        out.append(f'<div class="pnote"><b>{esc(t["plans_note"])}</b> {esc(R["plan_note"])}</div>')
     if not days:
         out.append(f'<div class="empty">{esc(t["plans_none"])}</div></div>\n')
         return "".join(out)
@@ -691,21 +692,18 @@ def _plans_html(R):
     if one_day:
         out.append(f'<div class="pbar"><span class="psum">{esc(line(td, tn))}</span></div>')
     else:
-        def option(value, label, sm):
-            return f'<option value="{value}" data-sum="{esc(sm)}">{esc(label + (" - " + sm if sm else ""))}</option>'
-        opts = [option("all", t["plans_all"], line(td, tn))]
+        opts = [f'<option value="all" data-sum="{esc(line(td, tn))}">{esc(t["plans_all"])} - {esc(line(td, tn))}</option>']
         for x in days:
             d, n = counts(x)
-            opts.append(option(x["date"].isoformat(), fmt_date(x["date"], lang, weekday=True), line(d, n)))
+            opts.append(f'<option value="{x["date"].isoformat()}" data-sum="{esc(line(d, n))}">{esc(fmt_date(x["date"], lang, weekday=True))} - {esc(line(d, n))}</option>')
         out.append(f'<div class="pbar noprint"><label>{esc(t["plans_pick"])}: <select onchange="{t["plans_js_pick"]}">' + "".join(opts) + '</select></label>'
                    f'<span class="psum">{esc(line(td, tn))}</span></div>')
     for x in days:
         d, n = counts(x)
-        note = f'<div class="pnote"><b>{esc(t["plans_note"])}</b> {esc(x["note"])}</div>' if x.get("note") else ""
         items = "".join(f'<li class="{"done" if k["done"] else "open"}"><i class="ck">{"&#10003;" if k["done"] else ""}</i><span class="tx">{esc(k["text"])}</span>'
                         f'<em>{esc(t["plans_done"] if k["done"] else t["plans_open"])}</em></li>' for k in x["tasks"])
         out.append(f'<div class="pday" data-d="{x["date"].isoformat()}"><div class="ph"><b>{esc(fmt_date(x["date"], lang, weekday=True))}</b>'
-                   f'<span>{esc(fill(d, n) if n else "")}</span></div>{note}' + (f'<ul class="pl">{items}</ul>' if items else "") + "</div>")
+                   f'<span>{esc(fill(d, n))}</span></div><ul class="pl">{items}</ul></div>')
     out.append("</div>\n")
     return "".join(out)
 

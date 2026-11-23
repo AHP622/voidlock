@@ -61,11 +61,6 @@ def make_data():
             t = sl.add_todo(today - timedelta(days=off), txt)
             if (off + k) % 2 == 0:
                 sl.toggle_todo(t["id"])
-    # day notes: with tasks, tricky text (markup, quotes, a line break), a day with ONLY a note, and a future one
-    sl.set_day_note(today - timedelta(days=1), "Focus on chemistry <b>today</b>\nsolve the tests timed & \"carefully\"")
-    sl.set_day_note(today - timedelta(days=5), "الگوی امروز: مرور غلط‌ها")
-    sl.set_day_note(today - timedelta(days=7), "only a note, no tasks that day")
-    sl.set_day_note(today + timedelta(days=1), "tomorrow's note must not appear")
     st.classes = S.clean_classes([{"id": f"k{i}", "name": n, "day": d, "time": tm, "minutes": mn, "remind": 15, "place": pl, "enabled": en}
                                   for i, (n, d, tm, mn, pl, en) in enumerate([("Calculus", 0, "17:00", 90, "Room 3", True), ("Physics", 0, "09:30", 60, "", True),
                                                                               ("Chem", 2, "16:15", 120, "Online", True), ("Bio", 5, "08:00", 45, "Hall B", True),
@@ -80,7 +75,7 @@ def make_data():
     return st, sl
 
 
-def js_report(pkg_path, lang, frm, to, name, goal_min):
+def js_report(pkg_path, lang, frm, to, name, goal_min, note=""):
     code = f"""
 const path = require('path'), fs = require('fs');
 const W = {json.dumps(str(ROOT / 'android/app/src/main/assets/www/js'))};
@@ -89,7 +84,7 @@ const Report = require(path.join(W, 'report.js'));
 const db = Core.ensure(Core.newDb()); db.subjects = [];
 const plan = Core.prepare(db, fs.readFileSync({json.dumps(str(pkg_path))}, 'utf8')); Core.commit(db, plan);
 db.settings.goal_min = {goal_min};
-const r = Report.build(db, {json.dumps(frm)}, {json.dumps(to)}, {{ lang: {json.dumps(lang)}, name: {json.dumps(name)}, version: {json.dumps(report.__version__)}, interactive: true }});
+const r = Report.build(db, {json.dumps(frm)}, {json.dumps(to)}, {{ lang: {json.dumps(lang)}, name: {json.dumps(name)}, version: {json.dumps(report.__version__)}, interactive: true, note: {json.dumps(note)} }});
 process.stdout.write(JSON.stringify({{ html: r.html, csv: r.csv }}));
 """
     p = subprocess.run(["node", "-e", code], capture_output=True, text=True, encoding="utf-8", timeout=60)
@@ -112,15 +107,15 @@ def svg_numbers(h):
     return [float(x) for x in NUM.findall(" ".join(re.findall(r'<svg.*?</svg>', h, flags=re.S)))]
 
 
-def compare(lang, frm_off, to_off, name):
+def compare(lang, frm_off, to_off, name, note=""):
     st, sl = make_data()
     today = date.today()
     frm, to = today - timedelta(days=frm_off), today - timedelta(days=to_off)
     pkg = Path(tempfile.mkdtemp()) / "x.voidsync"
     pkg.write_text(json.dumps(sync.make_package(st)), encoding="utf-8")
-    R = report.collect(st, sl, frm, to, name=name, lang=lang, goal_min=150)
+    R = report.collect(st, sl, frm, to, name=name, lang=lang, goal_min=150, plan_note=note)
     py_html, py_csv = report.render_html(R), report.render_csv(R)
-    js = js_report(pkg, lang, frm.isoformat(), to.isoformat(), name, 150)
+    js = js_report(pkg, lang, frm.isoformat(), to.isoformat(), name, 150, note)
     tag = f"[{lang} {frm_off}d..{to_off}d]"
     # text of the page: strip the svg pictures, compare the rest exactly
     strip = lambda h: re.sub(r"<svg.*?</svg>", "<svg/>", norm_html(h), flags=re.S)
@@ -160,10 +155,10 @@ def compare(lang, frm_off, to_off, name):
 
 if __name__ == "__main__":
     for lang in ("en", "fa"):
-        compare(lang, 13, 0, "Sara")
+        compare(lang, 13, 0, "Sara", "Focus on chemistry <b>today</b>\nsolve the tests timed & \"carefully\" \u0627\u0645\u0631\u0648\u0632")
         compare(lang, 3, -2, "Future")     # the chosen last day is in the future: tomorrow's plan must not appear
         compare(lang, 1, 1, "OneDay")      # a single day: that day's plan is shown without a picker
-        compare(lang, 3, 3, "")            # a single day without any plan
+        compare(lang, 3, 3, "", "note on a day without plans")   # a single day without any plan: the note alone
         compare(lang, 39, 0, "")
         compare(lang, 100, 3, "Ali")       # longer than 62 days: monthly table
     print("\n%d failed" % len(FAILS) if FAILS else "\nall passed")

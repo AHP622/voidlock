@@ -1,2 +1,2 @@
 """VOIDLOCK - study focus & application control."""
-__version__ = "1.14.73"
+__version__ = "1.14.74"

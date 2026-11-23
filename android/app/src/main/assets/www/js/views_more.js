@@ -16,7 +16,7 @@
 
   // ------------------------------------------------------------------ summaries of an import
   function planLines(plan) {
-    var names = { entries: 'k_entries', subjects: 'k_subjects_n', exams: 'k_exams_n', exam_subjects: 'k_exam_subjects_n', todos: 'k_todos_n', day_notes: 'k_day_notes_n', sessions: 'k_sessions_n', classes: 'k_classes_n' }, lines = [];
+    var names = { entries: 'k_entries', subjects: 'k_subjects_n', exams: 'k_exams_n', exam_subjects: 'k_exam_subjects_n', todos: 'k_todos_n', sessions: 'k_sessions_n', classes: 'k_classes_n' }, lines = [];
     [['new_here', 'added'], ['changed', 'updated'], ['removed_here', 'removed']].forEach(function (p) {
       var items = Object.keys(names).filter(function (k) { return plan.stats[k][p[1]]; }).map(function (k) { return I18n.num(plan.stats[k][p[1]]) + ' ' + t(names[k]); });
       var c = plan.stats.tests[p[1]] + plan.stats.words[p[1]]; if (c) items.push(I18n.num(c) + ' ' + t('k_counts'));
@@ -141,6 +141,7 @@
     var db = App.db, today = Core.dkey(), preset = '7';
     var fromF = UI.dateField(Core.dkey(Core.addDays(new Date(), -6)), function () { mark(null); }), toF = UI.dateField(today, function () { mark(null); });
     var nameIn = h('input', { type: 'text', maxlength: 40, placeholder: t('r_name'), value: db.settings.report_name || '' });
+    var noteIn = h('textarea', { rows: 3, maxlength: 1500, placeholder: t('r_note_ph'), 'aria-label': t('r_note') });   // for the advisor: shown with the plan in the web page only
     var chipBox = h('div', { class: 'chips' });
     var firstDay = db.entries.concat(db.sessions.map(function (r) { return { date: Core.dkey(new Date(r.start * 1000)) }; })).concat(db.todos).map(function (e) { return e.date; }).sort()[0] || today;
     var PRESETS = [['1', t('r_today')], ['7', t('r_7')], ['14', t('r_14')], ['30', t('r_30')], ['90', t('r_90')], ['all', t('r_all')]];
@@ -159,13 +160,13 @@
       var p = period(), nm = nameIn.value.trim();
       if (nm !== (db.settings.report_name || '')) { db.settings.report_name = nm; App.save(); }
       if (!hasData(db, p[0], p[1])) return UI.toast(t('report_empty'), 'warn');
-      var r = Report.build(db, p[0], p[1], { name: nm, interactive: kind !== 'pdf' });
+      var r = Report.build(db, p[0], p[1], { name: nm, interactive: kind !== 'pdf', note: kind === 'html' ? noteIn.value : '' });
       if (kind === 'html') Native.shareFile(r.base + '.html', 'text/html', r.html);
       else if (kind === 'csv') Native.shareFile(r.base + '.csv', 'text/csv', r.csv);
       else Native.printHtml(r.title, r.html);
     }
     var s = UI.sheet({ title: t('report_title'), message: t('report_hint'),
-      body: [h('div', { class: 'small dim', style: { marginBottom: '6px' } }, t('r_range')), chipBox, UI.field(t('r_from'), fromF.el), UI.field(t('r_to'), toF.el), UI.field(t('r_name'), nameIn)],
+      body: [h('div', { class: 'small dim', style: { marginBottom: '6px' } }, t('r_range')), chipBox, UI.field(t('r_from'), fromF.el), UI.field(t('r_to'), toF.el), UI.field(t('r_name'), nameIn), UI.field(t('r_note'), noteIn)],
       actions: [h('div', { class: 'col', style: { width: '100%', gap: '8px' } },
         h('button', { class: 'btn primary block', onclick: function () { make('html'); } }, UI.ic('share'), t('fmt_html')),
         h('button', { class: 'btn block', onclick: function () { make('pdf'); } }, UI.ic('file'), t('fmt_pdf')),

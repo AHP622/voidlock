@@ -111,6 +111,9 @@ TABS = {
 }
 
 NEWS = {
+    "1.14.74": (
+        ["The explanation for the advisor is now typed when you make the report: a \"Notes for the advisor\" box in the report window (HTML format). It is shown at the top of the Daily plans panel. The per-day notes box of the last version is gone."],
+        ["توضیحات برای مشاور حالا موقع ساختن گزارش نوشته می‌شود: کادر «توضیحات برای مشاور» در پنجره‌ی گزارش (فرمت HTML). بالای بخش برنامه‌های روزانه نشان داده می‌شود. کادر توضیحات هر روز در صفحه‌ی برنامه که در نسخه‌ی قبل بود برداشته شد."]),
     "1.14.73": (
         ["Every day of the plan now has a \"Notes for this day\" box (on the computer and on the phone). The note syncs between them and appears with that day's plan in the HTML report, above the tasks."],
         ["هر روز برنامه حالا یک کادر «توضیحات این روز» دارد (روی کامپیوتر و گوشی). توضیحات بین دو دستگاه همگام می‌شود و در گزارش HTML همراه برنامه‌ی همان روز، بالای کارها دیده می‌شود."]),

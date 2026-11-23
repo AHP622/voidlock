@@ -30,6 +30,18 @@
     },
     order: ['today', 'stats', 'exams', 'tasks', 'more'],
     news: {
+      '1.14.74': {
+        fa: ['موقع ارسال گزارش HTML می‌توانید در کادر «توضیحات برای مشاور» هر توضیحی درباره‌ی برنامه‌ی مطالعه بنویسید؛ بالای بخش «برنامه‌ی روزانه» گزارش نشان داده می‌شود. (کادر توضیحات هر روز در صفحه‌ی برنامه برداشته شد.)',
+             'حالا می‌توانید گزارش را برای هر بازه‌ی دلخواه بفرستید: دکمه‌های سریع (امروز، ۷، ۱۴، ۳۰، ۹۰ روز و همه) تاریخ «از» و «تا» را پر می‌کنند و هر تاریخی را هم می‌توانید خودتان بگذارید.',
+             'دکمه‌ی «ارسال گزارش هفتگی» گزارش ۷ روز گذشته را با یک لمس به منوی اشتراک‌گذاری می‌فرستد.',
+             'گزارش وب (HTML) دکمه‌ی «برنامه‌ی روزانه» دارد: برنامه‌های روزانه را تا آخرین روز گزارش، با وضعیت انجام‌شده یا انجام‌نشده نشان می‌دهد.',
+             'جدول جلسه‌های تمرکز از گزارش‌ها برداشته شد.'],
+        en: ['When you send the HTML report you can type anything about the study plan in the \u201cNotes for the advisor\u201d box; it is shown at the top of the report\u2019s Daily plans section. (The per-day notes box on the plan screen was removed.)',
+             'You can now send a report for ANY period: quick buttons (today, 7, 14, 30, 90 days, all) fill the From and To dates, and you can set any dates yourself.',
+             'The \u201cSend weekly report\u201d button shares the last 7 days with one tap.',
+             'The web (HTML) report has a \u201cDaily plans\u201d button: it shows the daily tasks up to the last day of the report, each marked done or not done.',
+             'The focus sessions table was removed from reports.']
+      },
       '1.14.73': {
         fa: ['هر روز برنامه حالا کادر «توضیحات این روز» دارد. مثلاً می‌نویسید «امروز تمرکز روی شیمی، تست‌ها زمان‌دار حل بشه». توضیحات با کامپیوتر همگام می‌شود و در گزارش HTML همراه برنامه‌ی همان روز دیده می‌شود.',
              'حالا می‌توانید گزارش را برای هر بازه‌ی دلخواه بفرستید: دکمه‌های سریع (امروز، ۷، ۱۴، ۳۰، ۹۰ روز و همه) تاریخ «از» و «تا» را پر می‌کنند و هر تاریخی را هم می‌توانید خودتان بگذارید.',

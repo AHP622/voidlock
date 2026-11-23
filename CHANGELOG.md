@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.74
+* The explanation for the advisor is typed when the report is made, not in the plan screen. The report window on the computer (HTML format) and the report sheet on the phone have a "Notes for the advisor" box; the text is shown at the top of the "Daily plans" panel of the HTML report, above the days (also when the period has no plans). CSV and PDF are unchanged.
+* The per-day "Notes for this day" box that 1.14.73 added to the plan screen (computer and phone) is removed, together with its synced data type. Notes typed there are no longer used.
+
 ## 1.14.73
 * Notes for each day. The plan of every day (Study Timer on the computer, Plan on the phone) has a "Notes for this day" box. The note is saved automatically, syncs between the computer and the phone (a new kind of synced data: an older app simply ignores it and nothing is deleted), and is shown in the HTML report's "Daily plans" panel under the date and above that day's tasks. A day that has only a note is listed too and can be picked. Notes follow the same last-day rule as the plans (never later than today). CSV and PDF reports are unchanged.
 * Fixed a rare mix-up of the order of tasks (or subjects) on the phone after a sync: an id made only of digits looks like a number to JavaScript, which lists such items first. New ids always contain a letter, on both the computer and the phone.

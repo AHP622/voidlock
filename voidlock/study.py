@@ -59,9 +59,6 @@ def dkey(d):
 
 
 # ============================================================ study log
-DAY_NOTE_MAX = 600
-
-
 class StudyLog:
     """subjects, entries, tests, todos and the running stopwatch, stored in store.study."""
 
@@ -87,7 +84,6 @@ class StudyLog:
         if not isinstance(st.get("exam_subjects"), list):
             st["exam_subjects"] = self._migrate_exam_subjects(st)       # 1.8.11: exams have their own subjects
         st.setdefault("todos", [])        # {id,date,text,done}
-        st.setdefault("day_notes", [])    # {id: "dn-<date>", date, text}: what the student (or the advisor's plan) says about that day
         st.setdefault("active", None)     # {subject, started, last_seen}
         if fresh and not st["subjects"]:
             st["subjects"] = [{"id": uid(), "name": n, "color": c} for n, c in DEFAULT_SUBJECTS]
@@ -631,33 +627,6 @@ class StudyLog:
 
     def remove_todo(self, tid):
         self.d["todos"] = [t for t in self.d["todos"] if t["id"] != tid]
-        self.save()
-
-    # ---- the note of a day (shown with the day's plan in the HTML report)
-    def day_note(self, d):
-        k = dkey(d)
-        for n in self.d["day_notes"]:
-            if isinstance(n, dict) and n.get("date") == k:
-                return str(n.get("text", ""))
-        return ""
-
-    def set_day_note(self, d, text):
-        """One note per day. The id depends only on the date, so the computer and the phone agree on it. An empty text removes it."""
-        k = dkey(d)
-        text = str(text or "").strip()[:DAY_NOTE_MAX]
-        notes = self.d["day_notes"]
-        cur = next((n for n in notes if isinstance(n, dict) and n.get("date") == k), None)
-        if not text:
-            if cur is not None:
-                self.d["day_notes"] = [n for n in notes if n is not cur]
-                self.save()
-            return
-        if cur is not None:
-            if cur.get("text") == text:
-                return
-            cur["text"] = text
-        else:
-            notes.append({"id": f"dn-{k}", "date": k, "text": text})
         self.save()
 
     # ---- long-range stats
