@@ -87,5 +87,17 @@ ok('id="plans"' in h and "weekly plan" in h and "Daily plans" in h, "it has the 
 v = report_ui.weekly_values(win, today=date(2026, 11, 18))
 ok(v["start"] == date(2026, 11, 12) and v["end"] == date(2026, 11, 18) and v["fmt"] == "html", "the period is the 7 days ending today")
 ok(report_ui.quick_weekly_report(win, folder=Path(home) / "x" / "\0bad", reveal=False) is None, "a folder that cannot be made gives an error toast and None")
+# the Rewards page: the points label must show the number after the count-up, also when an unused ticket exists (a bug showed the text
+# of a button object there: "<voidlock.widgets.Button(0x...) at 0x...>")
+win.goto("rewards"); pump(300)
+rp = win.pages["rewards"]
+P = win.points
+P.add(400, "clean", "test")
+t, err = P.claim(P.d["rewards"][0]["id"])
+ok(t is not None and len(P.unused()) == 1, "a reward is claimed and its ticket is unused")
+rp._sig = None
+rp.refresh(); pump(1300)
+txt = rp.bal.text().strip()
+ok(txt.isdigit() and int(txt) == P.balance, f"after the count-up the points label shows the balance ({P.balance}), not an object's text: {txt[:40]!r}")
 print("\nFAILED:" if FAILS else "\nALL PASSED", FAILS or "")
 sys.stdout.flush(); os._exit(1 if FAILS else 0)

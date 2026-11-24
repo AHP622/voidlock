@@ -4,8 +4,8 @@ plugins {
 }
 
 // The release workflow passes the version (same number as the Windows app) and the signing key through environment variables.
-val vName = System.getenv("VOIDLOCK_VERSION_NAME") ?: "1.14.74"
-val vCode = (System.getenv("VOIDLOCK_VERSION_CODE") ?: "1014074").toInt()
+val vName = System.getenv("VOIDLOCK_VERSION_NAME") ?: "1.14.75"
+val vCode = (System.getenv("VOIDLOCK_VERSION_CODE") ?: "1014075").toInt()
 val keystorePath: String? = System.getenv("VOIDLOCK_KEYSTORE")
 
 android {

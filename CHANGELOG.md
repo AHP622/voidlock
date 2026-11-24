@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.75
+* Fixed the Rewards page: after claiming a reward (while an unused ticket exists) the big points number turned into the text of a button object ("<voidlock.widgets.Button(0x...) at 0x...>") when the count-up animation finished. The final number is now captured properly.
+* Phone: the "What's new" sheet shows only the notes of the new version; the entries of 1.14.71 to 1.14.74 no longer repeat each other's changes.
+
 ## 1.14.74
 * The explanation for the advisor is typed when the report is made, not in the plan screen. The report window on the computer (HTML format) and the report sheet on the phone have a "Notes for the advisor" box; the text is shown at the top of the "Daily plans" panel of the HTML report, above the days (also when the period has no plans). CSV and PDF are unchanged.
 * The per-day "Notes for this day" box that 1.14.73 added to the plan screen (computer and phone) is removed, together with its synced data type. Notes typed there are no longer used.

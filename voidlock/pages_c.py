@@ -1153,9 +1153,11 @@ class RewardsPage(Page):
         s = st.settings
         bal = P.balance
         if bal != self._shown:
-            a, b = self._shown, bal
-            tween(self, a, b, 700, lambda v: self._set_bal(str(int(round(v)))), done=lambda: self._set_bal(str(b)))
-            self._shown = b
+            a, target = self._shown, bal
+            # (the final number is passed in as a default argument: a plain `b` here was reused further down as the "Use now" button, so when
+            # the count-up finished, the label showed the text of that button object instead of the points)
+            tween(self, a, target, 700, lambda v: self._set_bal(str(int(round(v)))), done=lambda n=target: self._set_bal(str(n)))
+            self._shown = target
         today_rec = play_day(st, date.today())
         played = int(today_rec["total"] // 60)
         tol = int(s.get("play_tolerance_min", 5))

@@ -111,6 +111,9 @@ TABS = {
 }
 
 NEWS = {
+    "1.14.75": (
+        ["Fixed the Rewards page: after claiming a reward, the big points number could turn into a strange text like \"<...Button(0x...) at 0x...>\"."],
+        ["صفحه‌ی جایزه‌ها درست شد: بعد از دریافت جایزه، عدد بزرگ امتیاز ممکن بود به یک متن عجیب مثل «<...Button(0x...) at 0x...>» تبدیل شود."]),
     "1.14.74": (
         ["The explanation for the advisor is now typed when you make the report: a \"Notes for the advisor\" box in the report window (HTML format). It is shown at the top of the Daily plans panel. The per-day notes box of the last version is gone."],
         ["توضیحات برای مشاور حالا موقع ساختن گزارش نوشته می‌شود: کادر «توضیحات برای مشاور» در پنجره‌ی گزارش (فرمت HTML). بالای بخش برنامه‌های روزانه نشان داده می‌شود. کادر توضیحات هر روز در صفحه‌ی برنامه که در نسخه‌ی قبل بود برداشته شد."]),

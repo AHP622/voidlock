@@ -31,48 +31,22 @@
     order: ['today', 'stats', 'exams', 'tasks', 'more'],
     news: {
       '1.14.74': {
-        fa: ['موقع ارسال گزارش HTML می‌توانید در کادر «توضیحات برای مشاور» هر توضیحی درباره‌ی برنامه‌ی مطالعه بنویسید؛ بالای بخش «برنامه‌ی روزانه» گزارش نشان داده می‌شود. (کادر توضیحات هر روز در صفحه‌ی برنامه برداشته شد.)',
-             'حالا می‌توانید گزارش را برای هر بازه‌ی دلخواه بفرستید: دکمه‌های سریع (امروز، ۷، ۱۴، ۳۰، ۹۰ روز و همه) تاریخ «از» و «تا» را پر می‌کنند و هر تاریخی را هم می‌توانید خودتان بگذارید.',
-             'دکمه‌ی «ارسال گزارش هفتگی» گزارش ۷ روز گذشته را با یک لمس به منوی اشتراک‌گذاری می‌فرستد.',
-             'گزارش وب (HTML) دکمه‌ی «برنامه‌ی روزانه» دارد: برنامه‌های روزانه را تا آخرین روز گزارش، با وضعیت انجام‌شده یا انجام‌نشده نشان می‌دهد.',
-             'جدول جلسه‌های تمرکز از گزارش‌ها برداشته شد.'],
-        en: ['When you send the HTML report you can type anything about the study plan in the \u201cNotes for the advisor\u201d box; it is shown at the top of the report\u2019s Daily plans section. (The per-day notes box on the plan screen was removed.)',
-             'You can now send a report for ANY period: quick buttons (today, 7, 14, 30, 90 days, all) fill the From and To dates, and you can set any dates yourself.',
-             'The \u201cSend weekly report\u201d button shares the last 7 days with one tap.',
-             'The web (HTML) report has a \u201cDaily plans\u201d button: it shows the daily tasks up to the last day of the report, each marked done or not done.',
-             'The focus sessions table was removed from reports.']
+        fa: ['موقع ارسال گزارش HTML می‌توانید در کادر «توضیحات برای مشاور» هر توضیحی درباره‌ی برنامه‌ی مطالعه بنویسید؛ بالای بخش «برنامه‌ی روزانه» گزارش نشان داده می‌شود.',
+             'کادر توضیحات هر روز در صفحه‌ی برنامه (که در نسخه‌ی قبل اضافه شده بود) برداشته شد.'],
+        en: ['When you send the HTML report you can type anything about the study plan in the \u201cNotes for the advisor\u201d box; it is shown at the top of the report\u2019s Daily plans section.',
+             'The per-day notes box on the plan screen (added in the previous version) was removed.']
       },
       '1.14.73': {
-        fa: ['هر روز برنامه حالا کادر «توضیحات این روز» دارد. مثلاً می‌نویسید «امروز تمرکز روی شیمی، تست‌ها زمان‌دار حل بشه». توضیحات با کامپیوتر همگام می‌شود و در گزارش HTML همراه برنامه‌ی همان روز دیده می‌شود.',
-             'حالا می‌توانید گزارش را برای هر بازه‌ی دلخواه بفرستید: دکمه‌های سریع (امروز، ۷، ۱۴، ۳۰، ۹۰ روز و همه) تاریخ «از» و «تا» را پر می‌کنند و هر تاریخی را هم می‌توانید خودتان بگذارید.',
-             'دکمه‌ی «ارسال گزارش هفتگی» گزارش ۷ روز گذشته را با یک لمس به منوی اشتراک‌گذاری می‌فرستد.',
-             'گزارش وب (HTML) دکمه‌ی «برنامه‌ی روزانه» دارد: برنامه‌ها و توضیحات روزانه را تا آخرین روز گزارش، با وضعیت انجام‌شده یا انجام‌نشده نشان می‌دهد.',
-             'جدول جلسه‌های تمرکز از گزارش‌ها برداشته شد.'],
-        en: ['Every day of the plan now has a \u201cNotes for this day\u201d box, e.g. \u201cfocus on chemistry today, solve the tests timed\u201d. It syncs with the computer and appears with that day\u2019s plan in the HTML report.',
-             'You can now send a report for ANY period: quick buttons (today, 7, 14, 30, 90 days, all) fill the From and To dates, and you can set any dates yourself.',
-             'The \u201cSend weekly report\u201d button shares the last 7 days with one tap.',
-             'The web (HTML) report has a \u201cDaily plans\u201d button: it shows the daily tasks and notes up to the last day of the report, each task marked done or not done.',
-             'The focus sessions table was removed from reports.']
+        fa: ['هر روز برنامه کادر «توضیحات این روز» دارد. توضیحات با کامپیوتر همگام می‌شود و در گزارش HTML همراه برنامه‌ی همان روز دیده می‌شود.'],
+        en: ['Every day of the plan has a \u201cNotes for this day\u201d box. It syncs with the computer and appears with that day\u2019s plan in the HTML report.']
       },
       '1.14.72': {
-        fa: ['حالا می‌توانید گزارش را برای هر بازه‌ی دلخواه بفرستید: دکمه‌های سریع (امروز، ۷، ۱۴، ۳۰، ۹۰ روز و همه) تاریخ «از» و «تا» را پر می‌کنند و هر تاریخی را هم می‌توانید خودتان بگذارید.',
-             'دکمه‌ی «ارسال گزارش هفتگی» گزارش ۷ روز گذشته را با یک لمس به منوی اشتراک‌گذاری می‌فرستد.',
-             'گزارش وب (HTML) دکمه‌ی «برنامه‌ی روزانه» دارد: برنامه‌های روزانه را تا آخرین روز گزارش، با وضعیت انجام‌شده یا انجام‌نشده نشان می‌دهد؛ برای بازه‌ی چندروزه می‌شود یک روز یا همه‌ی روزها را انتخاب کرد.',
-             'جدول جلسه‌های تمرکز از گزارش‌ها برداشته شد.'],
-        en: ['You can now send a report for ANY period: quick buttons (today, 7, 14, 30, 90 days, all) fill the From and To dates, and you can set any dates yourself.',
-             'The \u201cSend weekly report\u201d button shares the last 7 days with one tap.',
-             'The web (HTML) report has a \u201cDaily plans\u201d button: it shows the daily to-do lists up to the last day of the report, each marked done or not done; for a longer period you can pick one day or all days.',
-             'The focus sessions table was removed from reports.']
+        fa: ['برنامه‌های روزانه در گزارش HTML حالا تا آخرین روز گزارش نشان داده می‌شوند (حداکثر امروز)؛ برنامه‌ی روزهای آینده دیگر به‌عنوان «انجام نشد» دیده نمی‌شود.'],
+        en: ['The Daily plans in the HTML report now stop at the last day of the report (today at most); future plans no longer show as not done.']
       },
       '1.14.71': {
-        fa: ['حالا می‌توانید گزارش را برای هر بازه‌ی دلخواه بفرستید: دکمه‌های سریع (امروز، ۷، ۱۴، ۳۰، ۹۰ روز و همه) تاریخ «از» و «تا» را پر می‌کنند و هر تاریخی را هم می‌توانید خودتان بگذارید.',
-             'دکمه‌ی «ارسال گزارش هفتگی» گزارش ۷ روز گذشته را با یک لمس به منوی اشتراک‌گذاری می‌فرستد.',
-             'گزارش وب (HTML) دکمه‌ی «برنامه‌ی روزانه» دارد: برنامه‌های روزانه‌ی همان بازه را با وضعیت انجام‌شده یا انجام‌نشده نشان می‌دهد؛ برای بازه‌ی چندروزه می‌شود یک روز یا همه‌ی روزها را انتخاب کرد.',
-             'جدول جلسه‌های تمرکز از گزارش‌ها برداشته شد.'],
-        en: ['You can now send a report for ANY period: quick buttons (today, 7, 14, 30, 90 days, all) fill the From and To dates, and you can set any dates yourself.',
-             'The \u201cSend weekly report\u201d button shares the last 7 days with one tap.',
-             'The web (HTML) report has a \u201cDaily plans\u201d button: it shows that period\u2019s daily to-do lists, each marked done or not done; for a longer period you can pick one day or all days.',
-             'The focus sessions table was removed from reports.']
+        fa: ['حالا می‌توانید گزارش را برای هر بازه‌ی دلخواه بفرستید: دکمه‌های سریع (امروز، ۷، ۱۴، ۳۰، ۹۰ روز و همه) تاریخ «از» و «تا» را پر می‌کنند و هر تاریخی را هم می‌توانید خودتان بگذارید.'],
+        en: ['You can now send a report for ANY period: quick buttons (today, 7, 14, 30, 90 days, all) fill the From and To dates, and you can set any dates yourself.']
       },
       '1.14.6': {
         fa: ['فقط رفع یک باگ کامپیوتر (تقویم مطالعه). در گوشی تغییری نیست.'],
